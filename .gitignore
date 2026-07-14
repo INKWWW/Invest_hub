@@ -1,0 +1,40 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+secrets/
+
+# Browser authentication state and private source data
+chrome-profile/
+chrome-profile-*/
+browser-profile/
+cookies*
+private-data/
+private-fixtures/
+real-fixtures/
+historical-data/
+
+# Runtime output
+.runtime/
+.cache/
+cache/
+logs/
+*.log
+tmp/
+temp/
+coverage/
+dist/
+build/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
