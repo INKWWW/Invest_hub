@@ -517,8 +517,8 @@ recovery_pages.json 必须包含：
 
 覆盖：
 
-- 二次运行不新增 Canonical 消息；
-- 二次运行将已存在 ID记录为 duplicate；
+- 二次运行使用已保存 checkpoint，不新增 Canonical 消息；
+- 重置 checkpoint 后重放同一页，将已存在 ID记录为 duplicate 且不重复追加；
 - 第二页失败时只提交第一页 checkpoint；
 - 失败后再次运行从旧 checkpoint 继续；
 - 同一运行内重复 ID不推进 checkpoint；
