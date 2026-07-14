@@ -30,6 +30,7 @@ temp/
 coverage/
 dist/
 build/
+.worktrees/
 
 # OS and editor files
 .DS_Store
