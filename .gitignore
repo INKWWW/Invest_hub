@@ -34,6 +34,8 @@ build/
 /spikes/spike_01/private/
 /spikes/spike_01/evidence/
 /docs/spikes/*-real.md
+__pycache__/
+*.py[cod]
 
 # OS and editor files
 .DS_Store
