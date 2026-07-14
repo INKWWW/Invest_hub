@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import argparse
+import json
 import uuid
+from dataclasses import asdict
+from pathlib import Path
 
 from .canonical import normalize_page
 from .checkpoint import JsonCheckpointStore
-from .connectors import Connector, ConnectorError
+from .connectors import (
+    Connector,
+    ConnectorError,
+    OpenCLIConnector,
+    SubprocessOpenCLIInvoker,
+)
 from .evidence import LocalEvidenceStore
 from .model import Checkpoint, RunReport, SourceConfig
 from .validator import validate_page
@@ -137,3 +146,49 @@ def run_incremental(
         status="success",
         errors=tuple(errors),
     )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run the local Spike-01 harness")
+    subparsers = parser.add_subparsers(dest="mode", required=True)
+    real = subparsers.add_parser("real", help="run the read-only OpenCLI track")
+    real.add_argument("--channel-url", required=True)
+    real.add_argument("--source-container-id", required=True)
+    real.add_argument("--profile-path", required=True)
+    real.add_argument("--source-account-id", required=True)
+    real.add_argument("--opencli-bin", required=True)
+    real.add_argument("--contract-path", required=True, type=Path)
+    real.add_argument("--evidence-dir", required=True, type=Path)
+    real.add_argument("--max-messages", required=True, type=int)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.mode != "real":
+        raise RuntimeError(f"unsupported mode: {args.mode}")
+    connector = OpenCLIConnector(
+        SubprocessOpenCLIInvoker(
+            args.contract_path,
+            executable_override=args.opencli_bin,
+        ),
+        source_account_id=args.source_account_id,
+    )
+    report = run_incremental(
+        connector,
+        SourceConfig(
+            source_container_id=args.source_container_id,
+            channel_url=args.channel_url,
+            source_account_id=args.source_account_id,
+            max_messages=args.max_messages,
+            profile_path=args.profile_path,
+        ),
+        LocalEvidenceStore(args.evidence_dir),
+        JsonCheckpointStore(args.evidence_dir / "checkpoints"),
+    )
+    print(json.dumps(asdict(report), ensure_ascii=False, sort_keys=True))
+    return 0 if report.status == "success" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

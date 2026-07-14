@@ -18,6 +18,7 @@ class SourceConfig:
     channel_url: str
     source_account_id: str
     max_messages: int = 1000
+    profile_path: str | None = None
 
 
 @dataclass(frozen=True)

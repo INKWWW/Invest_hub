@@ -73,6 +73,7 @@ class SourceConfig:
     channel_url: str
     source_account_id: str
     max_messages: int = 1000
+    profile_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -672,6 +673,7 @@ runner.py 必须支持：
 ~~~text
 python3 -m spike_01.runner real
   --channel-url 本地频道 URL
+  --source-container-id Discord 频道唯一 ID
   --profile-path 本地专用 Profile 路径
   --source-account-id 脱敏标识
   --opencli-bin 可执行文件
