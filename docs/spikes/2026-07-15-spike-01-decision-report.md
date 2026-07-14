@@ -5,14 +5,14 @@
 - 日期：2026-07-15
 - 执行分支：spike-01-implementation
 - Python：3.12.13
-- 真实网页数据：未读取
-- OpenCLI 状态：本机未发现可执行文件
+- 真实网页数据：已在用户专用 Profile 中只读验证
+- OpenCLI：1.8.6；daemon 与 Browser Bridge extension 1.0.22 已连接
 
 ## 1. 执行范围
 
 本次完成了本地确定性 harness、Canonical Schema、Validator、本地证据存储、checkpoint Emulator、Fake Connector、增量 Runner 和 OpenCLI 命令边界单元测试。
 
-没有连接云端，没有安装生产依赖，没有访问用户 Discord Profile，没有保存 Cookie、Token、频道 URL 或真实消息。
+没有连接项目云端，没有安装生产依赖，没有保存 Cookie、Token、频道 URL 或真实消息正文。真实验证只使用了已绑定的专用 Chrome Profile 和 OpenCLI Browser Bridge。
 
 ## 2. 确定性验证轨
 
@@ -52,38 +52,42 @@
 
 ## 3. 真实网页轨
 
-真实网页轨未执行，原因是当前环境中不存在 opencli 可执行文件：
+真实网页轨已开始并完成了 OpenCLI Browser Bridge 和单页字段验证：
 
-    command -v opencli
-    # no executable found
+- `opencli doctor -v`：daemon、extension 和 connectivity 均通过；
+- 已绑定一个 Discord 专用 Profile，登录态有效，能够访问用户可见的私有投研频道；
+- OpenCLI 网络形状显示 Discord 消息接口返回 10、20 和 30 条 JSON 消息页；
+- 一页 30 条真实消息中，消息 ID、频道 ID、时间、正文、作者 ID/显示名均完整；
+- 同一页实际出现回复/引用字段和附件元数据；
+- Discord 的 `around=<message_id>` 深链接可以通过 OpenCLI 触发历史页加载。
 
-因此以下项目均为未验证：
+尚未完成的项目：
 
-- 专用 Chrome Profile 登录态复用；
-- Discord 频道访问；
-- 1000 条以上真实消息采集；
-- Discord 实际作者 ID、消息 ID、回复、引用和附件输出；
-- Discord 分页或虚拟滚动连续性；
-- 真实网页二次运行幂等。
+- 1000 条以上连续真实消息采集；
+- 真实两轮 runner 执行和 checkpoint 幂等；
+- 将 OpenCLI Browser 的 network/page envelope 映射为本 harness 需要的 RawPage contract。
 
-没有用 Playwright/CDP 或其他采集器替代 OpenCLI。
+通用 `browser scroll` 未能驱动 Discord 当前的虚拟滚动容器；通过 OpenCLI 深链接可以触发 `around` 分页，但这仍不是可直接供 runner 使用的稳定命令契约。没有用 Playwright/CDP 或其他采集器替代 OpenCLI。
 
 ## 4. OpenCLI-first 判定
 
-结论：未验证，不能进入 V0 的 OpenCLI 正式决策。
+结论：部分验证，不能进入 V0 的 OpenCLI 正式决策。
 
-该结论不是 OpenCLI 能力不通过，也不是通过。当前阻断条件是外部环境前置条件缺失：
+已验证的是 OpenCLI Browser Bridge 能复用登录态、访问 Discord、观察真实消息接口并获得硬字段。尚未验证的是“可供 Invest Hub runner 稳定调用的自动化采集契约”。
 
-1. 安装或提供可执行的 OpenCLI；
-2. 锁定具体版本；
-3. 获取 Discord Web 的实际命令和机器可解析输出契约；
-4. 在用户专用 Chrome Profile 中重新执行真实网页轨；
-5. 重新验证 1000 条消息、硬性字段和二次运行。
+当前技术阻断点：
+
+1. `opencli list -f json` 当前未发现 Discord 专用 adapter；
+2. 当前 Browser surface 使用 `browser <session> ...` 和结构化 envelope，不直接输出计划中所需的 `RawPage {page_id, messages, cursor_after}`；
+3. 直接在浏览器地址栏打开 Discord API 会得到 401，说明消息请求依赖网页会话内部的认证上下文，不能用匿名 URL 或裸 HTTP 替代；
+4. 已批准 runner 的 `profile_path + cursor -> RawPage JSON` contract 尚未从真实 OpenCLI 命令中捕获，不能凭空填写；
+5. 因此 1000 条连续采集和两轮 checkpoint 幂等仍未验证。
 
 ## 5. 进入后续阶段的建议
 
 - 可以保留当前确定性 harness 作为后续真实网页验证的基础；
-- 在 OpenCLI 可用前，不应声称 Spike-01 通过；
-- OpenCLI 真实轨通过后，再决定是否需要私有 Adapter；
+- 当前不能声称 Spike-01 通过，但也不能再归类为“OpenCLI 缺失”；
+- 下一步应先为 Spike-01 设计一个仅本地、仅只读的 OpenCLI Browser capture/adapter contract，明确 session、分页、原始 payload 和敏感信息边界；
+- 该 contract 验证后，再执行 1000 条真实消息、两轮 runner 和 checkpoint 幂等；
 - V0 的正式采集接口和数据模型必须吸收真实网页轨结果；
 - 当前不启动 V0 或 V1 的生产实现。

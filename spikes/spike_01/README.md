@@ -27,4 +27,4 @@
 
 ## 当前执行结果
 
-确定性 harness 已通过 21 个测试。当前环境没有 opencli 可执行文件，因此真实 Discord 网页轨未验证；不得将本次结果视为 OpenCLI-first 通过。脱敏决策报告位于 docs/spikes/2026-07-15-spike-01-decision-report.md。
+确定性 harness 已通过 21 个测试。当前 OpenCLI 1.8.6、daemon、Browser Bridge 和 Discord 登录态已验证；已完成真实消息页的硬字段/回复引用/附件元数据检查，但尚未完成 1000 条连续采集和 runner checkpoint 两轮验证。当前不得将本次结果视为 OpenCLI-first 通过。脱敏决策报告位于 docs/spikes/2026-07-15-spike-01-decision-report.md。
