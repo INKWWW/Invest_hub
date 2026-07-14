@@ -24,3 +24,7 @@
 ## 测试
 
     PYTHONPATH=spikes /opt/homebrew/bin/python3.12 -m unittest discover -s spikes/spike_01/tests -v
+
+## 当前执行结果
+
+确定性 harness 已通过 21 个测试。当前环境没有 opencli 可执行文件，因此真实 Discord 网页轨未验证；不得将本次结果视为 OpenCLI-first 通过。脱敏决策报告位于 docs/spikes/2026-07-15-spike-01-decision-report.md。
