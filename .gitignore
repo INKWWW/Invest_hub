@@ -31,6 +31,9 @@ coverage/
 dist/
 build/
 .worktrees/
+/spikes/spike_01/private/
+/spikes/spike_01/evidence/
+/docs/spikes/*-real.md
 
 # OS and editor files
 .DS_Store
