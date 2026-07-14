@@ -62,6 +62,15 @@ class LocalEvidenceStore:
             self.root / "canonical" / "messages.jsonl"
         )
 
+    def message_ids(self) -> frozenset[str]:
+        return frozenset(
+            item_id
+            for item_id in self._read_ids(
+                self.root / "canonical" / "messages.jsonl"
+            )
+            if item_id
+        )
+
     def message_count(self) -> int:
         target = self.root / "canonical" / "messages.jsonl"
         if not target.exists():

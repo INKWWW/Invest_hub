@@ -1,0 +1,112 @@
+{
+  "source_container_id": "channel-public-001",
+  "pages": [
+    {
+      "page_id": "page-001",
+      "cursor_before": null,
+      "cursor_after": "cursor-001",
+      "messages": [
+        {
+          "id": "message-001",
+          "author": {"id": "author-001", "name": "Analyst A"},
+          "channel_id": "channel-public-001",
+          "published_at": "2026-01-01T08:00:00Z",
+          "content": "第一条公开 fixture 消息。",
+          "content_type": "text",
+          "reply_to": null,
+          "quote": null,
+          "attachments": [],
+          "source_url": "https://discord.example/messages/message-001"
+        },
+        {
+          "id": "message-002",
+          "author": {"id": "author-002", "name": "Analyst B"},
+          "channel_id": "channel-public-001",
+          "published_at": "2026-01-01T08:01:00Z",
+          "content": "第二条公开 fixture 消息。",
+          "content_type": "text",
+          "reply_to": null,
+          "quote": null,
+          "attachments": [],
+          "source_url": "https://discord.example/messages/message-002"
+        }
+      ]
+    },
+    {
+      "page_id": "page-002",
+      "cursor_before": "cursor-001",
+      "cursor_after": "cursor-002",
+      "messages": [
+        {
+          "id": "message-003",
+          "author": {"id": "author-001", "name": "Analyst A"},
+          "channel_id": "channel-public-001",
+          "published_at": "2026-01-01T08:02:00Z",
+          "content": "回复前一条消息。",
+          "content_type": "text",
+          "reply_to": {"id": "message-002"},
+          "quote": null,
+          "attachments": [],
+          "source_url": "https://discord.example/messages/message-003"
+        },
+        {
+          "id": "message-004",
+          "author": {"id": "author-003", "name": "Analyst C"},
+          "channel_id": "channel-public-001",
+          "published_at": "2026-01-01T08:03:00Z",
+          "content": "带引用和附件的公开 fixture 消息。",
+          "content_type": "text",
+          "reply_to": null,
+          "quote": {
+            "id": "message-001",
+            "content": "第一条公开 fixture 消息。",
+            "resolved": true
+          },
+          "attachments": [
+            {
+              "name": "report.pdf",
+              "content_type": "application/pdf",
+              "url": "https://discord.example/report.pdf"
+            }
+          ],
+          "source_url": "https://discord.example/messages/message-004"
+        }
+      ]
+    },
+    {
+      "page_id": "page-003",
+      "cursor_before": "cursor-002",
+      "cursor_after": "cursor-003",
+      "messages": [
+        {
+          "id": "message-005",
+          "author": {"id": "author-002", "name": "Analyst B"},
+          "channel_id": "channel-public-001",
+          "published_at": "2026-01-01T08:04:00Z",
+          "content": "引用尚未采集的消息。",
+          "content_type": "text",
+          "reply_to": null,
+          "quote": {
+            "id": "message-not-present",
+            "content": null,
+            "resolved": false
+          },
+          "attachments": [],
+          "source_url": "https://discord.example/messages/message-005"
+        },
+        {
+          "id": "message-006",
+          "author": {"id": "author-004", "name": "Analyst D"},
+          "channel_id": "channel-public-001",
+          "published_at": "2026-01-01T08:05:00Z",
+          "content": "最后一条公开 fixture 消息。",
+          "content_type": "text",
+          "reply_to": null,
+          "quote": null,
+          "attachments": [],
+          "source_url": "https://discord.example/messages/message-006"
+        }
+      ]
+    }
+  ]
+}
