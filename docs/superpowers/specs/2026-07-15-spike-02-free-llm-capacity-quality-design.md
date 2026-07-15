@@ -89,6 +89,8 @@ Fixture
 
 确定性程序负责去重、排序、作者身份标记、回复关系保留、Ticker/价格/URL 提取以及输入范围记录。
 
+传给 Codex 的每条输入行必须包含 message ID、author scope、author ID、message kind、时间、回复关系和正文，确保模型可以完成归因和未解析媒体判断。
+
 Codex CLI Provider 每个 chunk 启动一次非交互进程，使用以下边界：
 
 ```text

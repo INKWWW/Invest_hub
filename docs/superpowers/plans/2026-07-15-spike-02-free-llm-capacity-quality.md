@@ -32,7 +32,7 @@
 - spikes/spike_02/runner.py：使用 Codex Provider 名称，并保留失败 chunk 局部重试。
 - spikes/spike_02/evidence.py：记录进程退出码和诊断是否存在，完整 stderr 只写入本地 raw evidence。
 - spikes/spike_02/cli.py：将 glm 子命令替换为 codex，读取 Codex CLI 配置并传递进程超时。
-- spikes/spike_02/chunking.py：在 Prompt 中增加“不使用工具、只返回 JSON”的确定性约束。
+- spikes/spike_02/chunking.py：传递 author ID 和 message kind，并在 Prompt 中增加“不使用工具、只返回严格 JSON”的确定性约束。
 - spikes/spike_02/README.md：改写为 Codex CLI 登录、运行、超时和安全说明。
 - spikes/spike_02/tests/test_providers.py：删除 GLM HTTP 测试，增加 fake Codex executable 测试。
 - spikes/spike_02/tests/test_cli.py：覆盖 codex 配置和 glm 命令移除。
@@ -302,6 +302,9 @@ def test_chunk_prompt_forbids_tools_and_requires_json():
     chunk = build_chunks(case, max_primary_messages=3)[0]
     self.assertIn("Do not use tools", chunk.prompt_text)
     self.assertIn("JSON", chunk.prompt_text)
+    self.assertIn("source_message_ids", chunk.prompt_text)
+    self.assertIn("author_id", chunk.prompt_text)
+    self.assertIn("unparsed_media", chunk.prompt_text)
 ~~~
 
 - [ ] **Step 2: Run the focused tests and verify failure**
@@ -333,7 +336,7 @@ provider = CodexCLIProvider(
 )
 ~~~
 
-Do not validate a Codex login during argument parsing; a missing binary or failed login must become a Provider failure in the run evidence. Add the no-tools/JSON instruction to the deterministic chunk Prompt builder.
+Do not validate a Codex login during argument parsing; a missing binary or failed login must become a Provider failure in the run evidence. Add the exact top-level fields topics, media_unparsed, and warnings; require each topic to include title, summary, source_message_ids, author_scope, author_id, tickers, operation_tendency, and uncertainty. Include author ID and message kind in every input line, and require media_unparsed=true whenever kind=unparsed_media appears.
 
 - [ ] **Step 4: Rewrite README and run tests**
 

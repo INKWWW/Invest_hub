@@ -117,6 +117,8 @@ def _message_line(scope: str, message: FixtureMessage) -> str:
             scope,
             message.message_id,
             message.author_scope,
+            message.author_id,
+            message.kind,
             message.published_at,
             parent_id,
             content,
@@ -133,6 +135,9 @@ def _render_prompt(lines: tuple[str, ...]) -> str:
         "\"tickers\":[\"ABC\"],\"operation_tendency\":\"string|null\","
         "\"uncertainty\":\"string|null\"}],"
         "\"media_unparsed\":false,\"warnings\":[\"string\"]}.\n"
+        "Use the exact author_id from each input line. Only use author_scope=target "
+        "when the topic is a target user's viewpoint; otherwise use channel. "
+        "If any input line has kind=unparsed_media, set media_unparsed=true and do not infer its contents.\n"
         "请只根据以下消息生成结构化 JSON。不得推测未解析媒体内容。\n"
         + "\n".join(lines)
     )
