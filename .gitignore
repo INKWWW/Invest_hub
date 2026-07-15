@@ -33,6 +33,8 @@ build/
 .worktrees/
 /spikes/spike_01/private/
 /spikes/spike_01/evidence/
+/spikes/spike_02/private/
+/spikes/spike_02/evidence/
 /docs/spikes/*-real.md
 __pycache__/
 *.py[cod]
