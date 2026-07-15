@@ -27,4 +27,6 @@
 
 ## 当前执行结果
 
-确定性 harness 已通过 21 个测试。当前 OpenCLI 1.8.6、daemon、Browser Bridge 和 Discord 登录态已验证；已完成真实消息页的硬字段/回复引用/附件元数据检查，但尚未完成 1000 条连续采集和 runner checkpoint 两轮验证。当前不得将本次结果视为 OpenCLI-first 通过。脱敏决策报告位于 docs/spikes/2026-07-15-spike-01-decision-report.md。
+确定性 harness 已通过 32 个测试。真实网页轨通过 bounded soak，并通过 checkpoint-resume 累计采集 1392 条第一轮唯一 Canonical 消息；第二轮从末尾 checkpoint 继续采集 112 条，duplicate 为 0。真实 evidence 只保存在本地受保护目录，脱敏决策报告位于 docs/spikes/2026-07-15-spike-01-decision-report.md。
+
+本结果支持进入 V0 采集设计，但不等同于 V0/V1 生产实现批准。生产设计必须保留 network freshness、有限重开、90 秒单页硬截止、checkpoint 后置推进、失败恢复和逐页 telemetry。

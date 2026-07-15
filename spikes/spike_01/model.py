@@ -35,6 +35,7 @@ class RawPage:
     cursor_after: str | None
     messages: tuple[RawMessage, ...]
     raw_payload_ref: str
+    telemetry: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
