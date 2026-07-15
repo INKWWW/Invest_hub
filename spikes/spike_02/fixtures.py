@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -119,6 +120,62 @@ def load_fixture(path: Path) -> FixtureCase:
         messages=tuple(messages),
         claims=tuple(claims),
     )
+
+
+def build_synthetic_scale_case(case_id: str, count: int) -> FixtureCase:
+    if count < 500:
+        raise ValueError("synthetic scale fixture requires at least 500 messages")
+    scale: Scale = "medium" if count == 500 else "large"
+    start = datetime(2026, 1, 2, 8, 0, tzinfo=timezone.utc)
+    messages: list[FixtureMessage] = []
+    for index in range(count):
+        message_id = f"{case_id}-message-{index + 1:04d}"
+        parent_id = None
+        if index > 0 and index % 10 == 0:
+            parent_id = messages[index - 1].message_id
+        is_media = index > 0 and index % 25 == 0
+        language = "English" if index % 3 == 0 else "中文"
+        ticker = ("ABC", "XYZ", "LMN")[index % 3]
+        content = (
+            f"[synthetic {index + 1}] {language} topic-{index % 11} "
+            f"ticker {ticker}, message {index + 1}."
+        )
+        if is_media:
+            content = f"[synthetic {index + 1}] [image attachment not parsed]"
+        messages.append(
+            FixtureMessage(
+                message_id=message_id,
+                author_id="target-analyst" if index % 17 == 0 else f"author-{index % 19:02d}",
+                author_scope="target" if index % 17 == 0 else "other",
+                published_at=(start + timedelta(minutes=index)).isoformat().replace("+00:00", "Z"),
+                content=content,
+                kind="unparsed_media" if is_media else "text",
+                parent_id=parent_id,
+            )
+        )
+    return FixtureCase(case_id=case_id, scale=scale, messages=tuple(messages), claims=())
+
+
+def write_fixture(case: FixtureCase, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "case_id": case.case_id,
+        "scale": case.scale,
+        "messages": [
+            {
+                "message_id": message.message_id,
+                "author_id": message.author_id,
+                "author_scope": message.author_scope,
+                "published_at": message.published_at,
+                "content": message.content,
+                "kind": message.kind,
+                "parent_id": message.parent_id,
+            }
+            for message in case.messages
+        ],
+        "claims": [],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _required_string(payload: Mapping[str, Any], field: str) -> str:
