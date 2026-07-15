@@ -117,6 +117,7 @@ class ProviderTests(unittest.TestCase):
             CodexCLIProvider(
                 binary=binary,
                 model="test-model",
+                codex_home=str(self.root / "codex-home"),
                 cwd=str(self.root),
             ).complete(request_for())
         finally:
@@ -127,6 +128,8 @@ class ProviderTests(unittest.TestCase):
         args = json.loads(capture_path.read_text())
         self.assertEqual(args[:2], ["exec", "--sandbox"])
         self.assertIn("read-only", args)
+        self.assertIn("--add-dir", args)
+        self.assertIn(str(self.root / "codex-home"), args)
         self.assertIn("--ephemeral", args)
         self.assertIn("--output-last-message", args)
         self.assertIn("--model", args)

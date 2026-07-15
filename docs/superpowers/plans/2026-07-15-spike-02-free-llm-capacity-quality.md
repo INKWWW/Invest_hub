@@ -12,7 +12,7 @@
 
 - 当前仍处于 Discovery；Spike-02 结果不批准 V0/V1 生产架构。
 - Codex CLI 是唯一真实 Provider；Mock Provider 只用于确定性测试；不保留 GLM Provider 或自动 fallback。
-- 每次真实调用必须使用 codex exec --sandbox read-only --ephemeral --output-last-message <file> -。
+- 每次真实调用必须使用 codex exec --sandbox read-only --add-dir <CODEX_HOME> --ephemeral --output-last-message <file> -。
 - Prompt 通过 stdin 传递，并明确要求不使用工具、不读取项目文件、不执行项目命令、只返回 JSON。
 - SPIKE02_CODEX_BIN 默认为 codex；SPIKE02_CODEX_MODEL 可选，不把登录凭据写入项目。
 - Codex 进程默认超时 120 秒；超时后必须终止子进程；已成功 chunk 不重复执行。
@@ -69,6 +69,7 @@ CodexCLIProvider(
     model: str | None = None,
     timeout_seconds: float = 120.0,
     cwd: str | None = None,
+    codex_home: str | None = None,
 )
 ~~~
 
@@ -150,6 +151,8 @@ command = [
     "exec",
     "--sandbox",
     "read-only",
+    "--add-dir",
+    self.codex_home,
     "--ephemeral",
     "--output-last-message",
     str(output_path),

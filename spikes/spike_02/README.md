@@ -7,6 +7,7 @@
 - 使用 Python 3.11 或更高版本的标准库；不安装生产依赖。
 - `mock` 命令完全离线；`codex` 命令启动本机已登录的 Codex CLI。
 - Codex CLI 每次调用使用非交互 `codex exec`、`--sandbox read-only` 和 `--ephemeral`。
+- 仅通过 `--add-dir` 允许 Codex 写入自己的 `CODEX_HOME` 状态目录；项目 worktree 仍保持 read-only。
 - Prompt 通过 stdin 传递，并要求 Codex 不使用工具、不读取项目文件、不执行项目命令、只返回 JSON。
 - Codex CLI 不得修改 worktree；超时后 harness 会终止 Codex 子进程。
 - 不需要项目级 API Key、Endpoint 或 Cookie 配置。

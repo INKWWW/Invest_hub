@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -81,6 +82,7 @@ class CodexCLIProvider:
         model: str | None = None,
         timeout_seconds: float = 120.0,
         cwd: str | None = None,
+        codex_home: str | None = None,
     ):
         if not binary.strip():
             raise ProviderError("binary must be non-empty")
@@ -92,6 +94,10 @@ class CodexCLIProvider:
         self.model = model
         self.timeout_seconds = timeout_seconds
         self.cwd = cwd
+        self.codex_home = codex_home or os.environ.get(
+            "CODEX_HOME",
+            str(Path.home() / ".codex"),
+        )
 
     def complete(self, request: LLMRequest) -> ProviderResponse:
         started = time.monotonic_ns()
@@ -102,6 +108,8 @@ class CodexCLIProvider:
                 "exec",
                 "--sandbox",
                 "read-only",
+                "--add-dir",
+                self.codex_home,
                 "--ephemeral",
                 "--output-last-message",
                 str(output_path),

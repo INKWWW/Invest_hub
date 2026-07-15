@@ -94,6 +94,7 @@ Codex CLI Provider 每个 chunk 启动一次非交互进程，使用以下边界
 ```text
 codex exec
   --sandbox read-only
+  --add-dir <CODEX_HOME>
   --ephemeral
   --output-last-message <temporary-file>
   -
@@ -103,6 +104,7 @@ codex exec
 - 当前 Spike worktree 作为工作目录；
 - Prompt 明确要求不使用工具、不读取项目文件、不执行项目命令、只返回 JSON；
 - `--sandbox read-only` 作为文件修改防护；
+- `--add-dir <CODEX_HOME>` 只允许 Codex 写入自身状态目录，解决 read-only sandbox 下状态库初始化问题；
 - Codex CLI 不得修改 worktree；
 - Codex 最终输出从 `output-last-message` 读取，再交给既有 JSON Parser 和 Schema Validator；
 - `SPIKE02_CODEX_BIN` 可指定 CLI 路径，默认值为 `codex`；
