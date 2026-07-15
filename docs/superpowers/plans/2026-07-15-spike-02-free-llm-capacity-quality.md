@@ -16,6 +16,7 @@
 - Prompt 通过 stdin 传递，并明确要求不使用工具、不读取项目文件、不执行项目命令、只返回 JSON。
 - SPIKE02_CODEX_BIN 默认为 codex；SPIKE02_CODEX_MODEL 可选，不把登录凭据写入项目。
 - Codex 进程默认超时 240 秒；超时后必须终止子进程；已成功 chunk 不重复执行。实测小批次请求约 151 秒完成，120 秒会在最终输出已生成但进程尚未退出时误判为 timeout。
+- Provider 必须为每次 Codex 调用创建独立进程组；stdout/stderr 不得依赖可被后代进程继承的 PIPE。超时后先终止整个进程组，再有限等待并回收诊断，不能在无界的 `communicate()` 排空阶段阻塞。
 - 真实 fixture、Prompt、完整 Codex 输出和历史数据只能写入本地受保护目录，不进入 Git。
 - ProviderResponse.input_tokens 和 output_tokens 在 Codex CLI 未提供时必须为 None，不得估算成精确 token 数。
 - 继续沿用初始质量门槛：首次成功率 >=90%、重试后最终成功率 >=99%、JSON 可解析率 >=98%、核心事实有据率 >=95%、严重错误归因 0、媒体臆测 0。

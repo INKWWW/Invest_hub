@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import tempfile
 import time
@@ -106,6 +107,7 @@ class CodexCLIProvider:
         started = time.monotonic_ns()
         with tempfile.TemporaryDirectory(prefix="invest-hub-codex-") as directory:
             output_path = Path(directory) / "last-message.txt"
+            diagnostic_path = Path(directory) / "diagnostic.txt"
             command = [
                 self.binary,
                 "exec",
@@ -121,40 +123,43 @@ class CodexCLIProvider:
                 command.extend(["--model", self.model])
             command.append("-")
 
-            try:
-                process = subprocess.Popen(
-                    command,
-                    cwd=self.cwd,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-            except OSError as exc:
-                return self._response(
-                    "provider_failed",
-                    started,
-                    "provider_failed",
-                    None,
-                    str(exc),
-                )
+            with diagnostic_path.open("w+", encoding="utf-8") as diagnostic_file:
+                try:
+                    process = subprocess.Popen(
+                        command,
+                        cwd=self.cwd,
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL,
+                        stderr=diagnostic_file,
+                        start_new_session=True,
+                        text=True,
+                    )
+                except OSError as exc:
+                    return self._response(
+                        "provider_failed",
+                        started,
+                        "provider_failed",
+                        None,
+                        str(exc),
+                    )
 
-            try:
-                _, stderr = process.communicate(
-                    input=request.chunk.prompt_text,
-                    timeout=self.timeout_seconds,
-                )
-            except subprocess.TimeoutExpired as exc:
-                process.kill()
-                _, stderr = process.communicate()
-                diagnostic = stderr or _timeout_diagnostic(exc)
-                return self._response(
-                    "timeout",
-                    started,
-                    "timeout",
-                    process.returncode,
-                    diagnostic,
-                )
+                try:
+                    process.communicate(
+                        input=request.chunk.prompt_text,
+                        timeout=self.timeout_seconds,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    _terminate_process_group(process)
+                    diagnostic = _read_diagnostic(diagnostic_file) or _timeout_diagnostic(exc)
+                    return self._response(
+                        "timeout",
+                        started,
+                        "timeout",
+                        process.returncode,
+                        diagnostic,
+                    )
+
+                stderr = _read_diagnostic(diagnostic_file)
 
             if process.returncode != 0:
                 return self._response(
@@ -227,6 +232,29 @@ class CodexCLIProvider:
 
 def _timeout_diagnostic(error: subprocess.TimeoutExpired) -> str:
     return f"process exceeded timeout of {error.timeout} seconds"
+
+
+def _read_diagnostic(file) -> str:
+    file.flush()
+    file.seek(0)
+    return file.read()
+
+
+def _terminate_process_group(process: subprocess.Popen) -> None:
+    if process.stdin is not None:
+        process.stdin.close()
+    try:
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=1.0)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=1.0)
 
 
 def _elapsed_ms(started_ns: int) -> int:

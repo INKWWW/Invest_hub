@@ -3,6 +3,7 @@ import os
 import stat
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -53,6 +54,27 @@ class ProviderTests(unittest.TestCase):
     def write_fake_sleep(self, seconds: float) -> str:
         return self.write_fake_codex(
             f"import time\ntime.sleep({seconds})\n"
+        )
+
+    def write_fake_child_that_holds_pipes(self) -> str:
+        return self.write_fake_codex(
+            """
+            import os
+            import pathlib
+            import subprocess
+            import sys
+            import time
+            child = subprocess.Popen(
+                [
+                    sys.executable,
+                    '-c',
+                    'import time; time.sleep(5)',
+                ],
+                close_fds=False,
+            )
+            pathlib.Path(os.environ['CHILD_PID_PATH']).write_text(str(child.pid))
+            time.sleep(5)
+            """
         )
 
     def write_fake_exit_with_stderr(self) -> str:
@@ -158,6 +180,29 @@ class ProviderTests(unittest.TestCase):
             cwd=str(self.root),
         ).complete(request_for())
         self.assertEqual(response.status, "timeout")
+
+    def test_codex_timeout_does_not_wait_for_descendant_pipe_cleanup(self):
+        child_pid_path = self.root / "child.pid"
+        old = os.environ.get("CHILD_PID_PATH")
+        os.environ["CHILD_PID_PATH"] = str(child_pid_path)
+        started = time.monotonic()
+        try:
+            response = CodexCLIProvider(
+                binary=self.write_fake_child_that_holds_pipes(),
+                timeout_seconds=2.0,
+                cwd=str(self.root),
+            ).complete(request_for())
+        finally:
+            if old is None:
+                os.environ.pop("CHILD_PID_PATH", None)
+            else:
+                os.environ["CHILD_PID_PATH"] = old
+        elapsed = time.monotonic() - started
+        self.assertEqual(response.status, "timeout")
+        self.assertLess(elapsed, 3.0)
+        child_pid = int(child_pid_path.read_text())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(child_pid, 0)
 
     def test_codex_does_not_expose_command_diagnostics_as_content(self):
         response = CodexCLIProvider(
