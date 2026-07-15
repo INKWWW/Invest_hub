@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import json
-import socket
+import subprocess
+import tempfile
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from pathlib import Path
+from typing import Protocol
 
 from .model import LLMRequest, ProviderResponse
 
 
 class ProviderError(RuntimeError):
-    """Raised only for invalid Provider configuration, not remote failures."""
+    """Raised only for invalid Provider configuration."""
 
 
 class LLMProvider(Protocol):
@@ -73,125 +73,150 @@ class MockProvider:
         )
 
 
-class GLMProvider:
+class CodexCLIProvider:
     def __init__(
         self,
         *,
-        endpoint: str,
-        api_key: str,
-        model: str,
-        opener: Callable[..., Any] = urlopen,
-        timeout_seconds: float = 30.0,
+        binary: str = "codex",
+        model: str | None = None,
+        timeout_seconds: float = 120.0,
+        cwd: str | None = None,
     ):
-        if not endpoint.strip():
-            raise ProviderError("endpoint must be non-empty")
-        if not api_key.strip():
-            raise ProviderError("api_key must be non-empty")
-        if not model.strip():
-            raise ProviderError("model must be non-empty")
-        self.endpoint = endpoint
-        self.api_key = api_key
+        if not binary.strip():
+            raise ProviderError("binary must be non-empty")
+        if model is not None and not model.strip():
+            raise ProviderError("model must be non-empty when provided")
+        if timeout_seconds <= 0:
+            raise ProviderError("timeout_seconds must be positive")
+        self.binary = binary
         self.model = model
-        self._opener = opener
         self.timeout_seconds = timeout_seconds
+        self.cwd = cwd
 
     def complete(self, request: LLMRequest) -> ProviderResponse:
-        body = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": request.chunk.prompt_text}],
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-        }
-        http_request = Request(
-            self.endpoint,
-            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-            method="POST",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-        )
         started = time.monotonic_ns()
-        try:
-            with self._opener(http_request, timeout=self.timeout_seconds) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            return self._http_error(exc, _elapsed_ms(started))
-        except (TimeoutError, socket.timeout):
-            return self._response("timeout", _elapsed_ms(started), "timeout")
-        except (URLError, OSError):
-            return self._response(
-                "provider_unavailable",
-                _elapsed_ms(started),
-                "provider_unavailable",
-            )
-        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
-            return self._response(
-                "invalid_provider_response",
-                _elapsed_ms(started),
-                "invalid_provider_response",
-            )
+        with tempfile.TemporaryDirectory(prefix="invest-hub-codex-") as directory:
+            output_path = Path(directory) / "last-message.txt"
+            command = [
+                self.binary,
+                "exec",
+                "--sandbox",
+                "read-only",
+                "--ephemeral",
+                "--output-last-message",
+                str(output_path),
+            ]
+            if self.model:
+                command.extend(["--model", self.model])
+            command.append("-")
 
-        try:
-            choice = payload["choices"][0]
-            message = choice["message"]
-            content = message["content"]
-            finish_reason = choice.get("finish_reason")
-            usage = payload.get("usage") or {}
-            input_tokens = _optional_int(usage.get("prompt_tokens"))
-            output_tokens = _optional_int(usage.get("completion_tokens"))
-        except (KeyError, IndexError, TypeError):
-            return self._response(
-                "invalid_provider_response",
-                _elapsed_ms(started),
-                "invalid_provider_response",
-            )
-        if not isinstance(content, str):
-            return self._response(
-                "invalid_provider_response",
-                _elapsed_ms(started),
-                "invalid_provider_response",
-            )
-        status = "truncated" if finish_reason == "length" else "success"
-        return ProviderResponse(
-            status=status,
-            content=content,
-            latency_ms=_elapsed_ms(started),
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            finish_reason=finish_reason,
-            error_code="output_truncated" if status == "truncated" else None,
-        )
+            try:
+                process = subprocess.Popen(
+                    command,
+                    cwd=self.cwd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+            except OSError as exc:
+                return self._response(
+                    "provider_failed",
+                    started,
+                    "provider_failed",
+                    None,
+                    str(exc),
+                )
 
-    def _http_error(self, error: HTTPError, latency_ms: int) -> ProviderResponse:
-        if error.code == 429:
-            return self._response("rate_limited", latency_ms, "rate_limited")
-        if error.code == 408:
-            return self._response("timeout", latency_ms, "timeout")
-        if error.code in {500, 502, 503, 504}:
-            return self._response(
-                "provider_unavailable",
-                latency_ms,
-                "provider_unavailable",
+            try:
+                _, stderr = process.communicate(
+                    input=request.chunk.prompt_text,
+                    timeout=self.timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as exc:
+                process.kill()
+                _, stderr = process.communicate()
+                diagnostic = stderr or _timeout_diagnostic(exc)
+                return self._response(
+                    "timeout",
+                    started,
+                    "timeout",
+                    process.returncode,
+                    diagnostic,
+                )
+
+            if process.returncode != 0:
+                return self._response(
+                    "provider_failed",
+                    started,
+                    "provider_failed",
+                    process.returncode,
+                    stderr,
+                )
+
+            try:
+                content = output_path.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                return self._response(
+                    "empty_response",
+                    started,
+                    "empty_response",
+                    process.returncode,
+                    stderr,
+                )
+            except (OSError, UnicodeError) as exc:
+                return self._response(
+                    "invalid_provider_response",
+                    started,
+                    "invalid_provider_response",
+                    process.returncode,
+                    str(exc),
+                )
+
+            if not content.strip():
+                return self._response(
+                    "empty_response",
+                    started,
+                    "empty_response",
+                    process.returncode,
+                    stderr,
+                )
+            return ProviderResponse(
+                status="success",
+                content=content,
+                latency_ms=_elapsed_ms(started),
+                input_tokens=None,
+                output_tokens=None,
+                finish_reason=None,
+                error_code=None,
+                process_exit_code=process.returncode,
+                diagnostic=stderr or None,
             )
-        return self._response("provider_rejected", latency_ms, "provider_rejected")
 
     @staticmethod
-    def _response(status: str, latency_ms: int, error_code: str) -> ProviderResponse:
+    def _response(
+        status: str,
+        started_ns: int,
+        error_code: str,
+        process_exit_code: int | None,
+        diagnostic: str | None,
+    ) -> ProviderResponse:
         return ProviderResponse(
             status=status,
             content=None,
-            latency_ms=latency_ms,
+            latency_ms=_elapsed_ms(started_ns),
             input_tokens=None,
             output_tokens=None,
             finish_reason=None,
             error_code=error_code,
+            process_exit_code=process_exit_code,
+            diagnostic=diagnostic,
         )
+
+
+def _timeout_diagnostic(error: subprocess.TimeoutExpired) -> str:
+    return f"process exceeded timeout of {error.timeout} seconds"
 
 
 def _elapsed_ms(started_ns: int) -> int:
     return max(0, (time.monotonic_ns() - started_ns) // 1_000_000)
-
-
-def _optional_int(value: object) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) else None

@@ -1,10 +1,13 @@
 import json
+import os
+import stat
+import tempfile
+import textwrap
 import unittest
-from http.client import RemoteDisconnected
-from urllib.error import HTTPError
+from pathlib import Path
 
 from spike_02.model import Chunk, LLMRequest
-from spike_02.providers import GLMProvider, MockOutcome, MockProvider
+from spike_02.providers import CodexCLIProvider, MockOutcome, MockProvider
 
 
 VALID_JSON = '{"topics":[],"media_unparsed":false,"warnings":[]}'
@@ -24,22 +27,39 @@ def request_for(chunk_id="case-0000"):
     return LLMRequest("run-001", chunk, attempt=1, prompt_version="test-v1")
 
 
-class FakeResponse:
-    def __init__(self, payload, *, status=200):
-        self.payload = json.dumps(payload).encode("utf-8")
-        self.status = status
-
-    def read(self):
-        return self.payload
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, traceback):
-        return False
-
-
 class ProviderTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def write_fake_codex(self, body: str) -> str:
+        path = self.root / f"fake-codex-{len(list(self.root.iterdir()))}.py"
+        path.write_text(
+            "#!/usr/bin/env python3\n" + textwrap.dedent(body),
+            encoding="utf-8",
+        )
+        path.chmod(path.stat().st_mode | stat.S_IXUSR)
+        return str(path)
+
+    def write_fake_exit(self, code: int) -> str:
+        return self.write_fake_codex(f"import sys\nsys.exit({code})\n")
+
+    def write_fake_no_output(self) -> str:
+        return self.write_fake_codex("import sys\nsys.stdin.read()\n")
+
+    def write_fake_sleep(self, seconds: float) -> str:
+        return self.write_fake_codex(
+            f"import time\ntime.sleep({seconds})\n"
+        )
+
+    def write_fake_exit_with_stderr(self) -> str:
+        return self.write_fake_codex(
+            "import sys\nsys.stderr.write('secret-prompt')\nsys.exit(7)\n"
+        )
+
     def test_mock_returns_scripted_json_and_counts_calls(self):
         provider = MockProvider({"case-0000": [MockOutcome.success(VALID_JSON)]})
         response = provider.complete(request_for("case-0000"))
@@ -59,62 +79,90 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(provider.complete(request_for("case-0000")).status, "timeout")
         self.assertEqual(provider.complete(request_for("case-0000")).status, "success")
 
-    def test_glm_maps_http_429_to_rate_limited_without_leaking_key(self):
-        def raising_429_opener(request, timeout):
-            raise HTTPError(request.full_url, 429, "rate limited", {}, None)
-
-        provider = GLMProvider(
-            endpoint="https://glm.example.test",
-            api_key="secret",
-            model="glm-test",
-            opener=raising_429_opener,
-        )
-        response = provider.complete(request_for())
-        self.assertEqual(response.status, "rate_limited")
-        self.assertNotIn("secret", str(response))
-
-    def test_glm_reads_openai_compatible_json_response(self):
-        seen = {}
-
-        def opener(request, timeout):
-            seen["timeout"] = timeout
-            seen["body"] = json.loads(request.data.decode("utf-8"))
-            return FakeResponse(
-                {
-                    "choices": [
-                        {
-                            "message": {"content": VALID_JSON},
-                            "finish_reason": "stop",
-                        }
-                    ],
-                    "usage": {"prompt_tokens": 10, "completion_tokens": 4},
-                }
+    def test_codex_success_reads_final_message_and_sends_prompt_on_stdin(self):
+        binary = self.write_fake_codex(
+            """
+            import pathlib
+            import sys
+            payload = sys.stdin.read()
+            if "prompt" not in payload:
+                sys.exit(9)
+            output_path = sys.argv[sys.argv.index("--output-last-message") + 1]
+            pathlib.Path(output_path).write_text(
+                '{"topics":[],"media_unparsed":false,"warnings":[]}'
             )
-
-        response = GLMProvider(
-            endpoint="https://glm.example.test",
-            api_key="secret",
-            model="glm-test",
-            opener=opener,
-            timeout_seconds=7,
-        ).complete(request_for())
+            """
+        )
+        response = CodexCLIProvider(binary=binary, cwd=str(self.root)).complete(request_for())
         self.assertEqual(response.status, "success")
-        self.assertEqual(response.input_tokens, 10)
-        self.assertEqual(response.output_tokens, 4)
-        self.assertEqual(seen["timeout"], 7)
-        self.assertEqual(seen["body"]["model"], "glm-test")
+        self.assertEqual(response.process_exit_code, 0)
+        self.assertIn('"topics"', response.content)
 
-    def test_glm_maps_network_disconnect_to_provider_unavailable(self):
-        def opener(request, timeout):
-            raise RemoteDisconnected("closed")
+    def test_codex_includes_read_only_ephemeral_output_flags(self):
+        capture_path = self.root / "argv.json"
+        binary = self.write_fake_codex(
+            """
+            import json
+            import os
+            import sys
+            pathlib = __import__("pathlib")
+            pathlib.Path(os.environ["CODEX_ARGV_CAPTURE"]).write_text(
+                json.dumps(sys.argv[1:])
+            )
+            """
+        )
+        old = os.environ.get("CODEX_ARGV_CAPTURE")
+        os.environ["CODEX_ARGV_CAPTURE"] = str(capture_path)
+        try:
+            CodexCLIProvider(
+                binary=binary,
+                model="test-model",
+                cwd=str(self.root),
+            ).complete(request_for())
+        finally:
+            if old is None:
+                os.environ.pop("CODEX_ARGV_CAPTURE", None)
+            else:
+                os.environ["CODEX_ARGV_CAPTURE"] = old
+        args = json.loads(capture_path.read_text())
+        self.assertEqual(args[:2], ["exec", "--sandbox"])
+        self.assertIn("read-only", args)
+        self.assertIn("--ephemeral", args)
+        self.assertIn("--output-last-message", args)
+        self.assertIn("--model", args)
+        self.assertIn("-", args)
 
-        response = GLMProvider(
-            endpoint="https://glm.example.test",
-            api_key="secret",
-            model="glm-test",
-            opener=opener,
+    def test_codex_maps_nonzero_exit_to_provider_failed_without_business_output(self):
+        response = CodexCLIProvider(
+            binary=self.write_fake_exit(7),
+            cwd=str(self.root),
         ).complete(request_for())
-        self.assertEqual(response.status, "provider_unavailable")
+        self.assertEqual(response.status, "provider_failed")
+        self.assertEqual(response.process_exit_code, 7)
+        self.assertIsNone(response.content)
+
+    def test_codex_maps_missing_final_message_to_empty_response(self):
+        response = CodexCLIProvider(
+            binary=self.write_fake_no_output(),
+            cwd=str(self.root),
+        ).complete(request_for())
+        self.assertEqual(response.status, "empty_response")
+
+    def test_codex_timeout_terminates_process(self):
+        response = CodexCLIProvider(
+            binary=self.write_fake_sleep(2),
+            timeout_seconds=0.05,
+            cwd=str(self.root),
+        ).complete(request_for())
+        self.assertEqual(response.status, "timeout")
+
+    def test_codex_does_not_expose_command_diagnostics_as_content(self):
+        response = CodexCLIProvider(
+            binary=self.write_fake_exit_with_stderr(),
+            cwd=str(self.root),
+        ).complete(request_for())
+        self.assertIsNone(response.content)
+        self.assertNotIn("secret-prompt", response.content or "")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from typing import Literal
 
 
 Scale = Literal["small", "medium", "large"]
-ProviderName = Literal["mock", "glm"]
+ProviderName = Literal["mock", "codex"]
 MessageKind = Literal["text", "unparsed_media"]
 
 
@@ -73,6 +73,8 @@ class ProviderResponse:
     output_tokens: int | None
     finish_reason: str | None
     error_code: str | None
+    process_exit_code: int | None = None
+    diagnostic: str | None = None
 
 
 @dataclass(frozen=True)
