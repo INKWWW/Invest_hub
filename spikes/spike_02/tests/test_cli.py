@@ -1,9 +1,13 @@
 import os
+import stat
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
+from spike_02.chunking import build_chunks
 from spike_02.cli import main
+from spike_02.fixtures import load_fixture
 
 
 FIXTURE_PATH = "spikes/spike_02/fixtures/public_small.json"
@@ -13,31 +17,45 @@ class CLITests(unittest.TestCase):
     def test_mock_cli_requires_fixture_and_evidence_dir(self):
         self.assertEqual(main(["mock"]), 2)
 
-    def test_glm_cli_requires_runtime_environment(self):
-        old = {
-            name: os.environ.pop(name, None)
-            for name in (
-                "SPIKE02_GLM_API_KEY",
-                "SPIKE02_GLM_ENDPOINT",
-                "SPIKE02_GLM_MODEL",
-            )
-        }
-        try:
-            with tempfile.TemporaryDirectory() as directory:
+    def test_glm_command_is_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(main(["glm", "--evidence-dir", directory]), 2)
+
+    def test_codex_cli_uses_binary_and_optional_model_environment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = self._write_fake_codex(directory)
+            old_binary = os.environ.get("SPIKE02_CODEX_BIN")
+            old_model = os.environ.get("SPIKE02_CODEX_MODEL")
+            os.environ["SPIKE02_CODEX_BIN"] = binary
+            os.environ["SPIKE02_CODEX_MODEL"] = "test-model"
+            try:
                 code = main(
                     [
-                        "glm",
+                        "codex",
                         "--fixture",
                         FIXTURE_PATH,
                         "--evidence-dir",
                         directory,
+                        "--max-attempts",
+                        "1",
                     ]
                 )
-            self.assertEqual(code, 2)
-        finally:
-            for name, value in old.items():
-                if value is not None:
-                    os.environ[name] = value
+            finally:
+                if old_binary is None:
+                    os.environ.pop("SPIKE02_CODEX_BIN", None)
+                else:
+                    os.environ["SPIKE02_CODEX_BIN"] = old_binary
+                if old_model is None:
+                    os.environ.pop("SPIKE02_CODEX_MODEL", None)
+                else:
+                    os.environ["SPIKE02_CODEX_MODEL"] = old_model
+            self.assertEqual(code, 0)
+
+    def test_chunk_prompt_forbids_tools_and_requires_json(self):
+        case = load_fixture(Path(FIXTURE_PATH))
+        chunk = build_chunks(case, max_primary_messages=3)[0]
+        self.assertIn("Do not use tools", chunk.prompt_text)
+        self.assertIn("JSON", chunk.prompt_text)
 
     def test_mock_cli_runs_without_network(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -54,6 +72,25 @@ class CLITests(unittest.TestCase):
             )
             self.assertEqual(code, 0)
             self.assertTrue((Path(directory) / "metrics.json").exists())
+
+    def _write_fake_codex(self, directory: str) -> str:
+        path = Path(directory) / "fake-codex.py"
+        path.write_text(
+            textwrap.dedent(
+                """
+                #!/usr/bin/env python3
+                import pathlib
+                import sys
+                output_path = sys.argv[sys.argv.index("--output-last-message") + 1]
+                pathlib.Path(output_path).write_text(
+                    '{"topics":[],"media_unparsed":false,"warnings":[]}'
+                )
+                """
+            ).lstrip(),
+            encoding="utf-8",
+        )
+        path.chmod(path.stat().st_mode | stat.S_IXUSR)
+        return str(path)
 
 
 if __name__ == "__main__":

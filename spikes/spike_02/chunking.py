@@ -126,6 +126,7 @@ def _message_line(scope: str, message: FixtureMessage) -> str:
 
 def _render_prompt(lines: tuple[str, ...]) -> str:
     return (
+        "Do not use tools, read project files, or execute commands. Return JSON only.\n"
         "请只根据以下消息生成结构化 JSON。不得推测未解析媒体内容。\n"
         + "\n".join(lines)
     )

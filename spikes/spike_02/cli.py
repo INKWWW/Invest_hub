@@ -11,7 +11,7 @@ from .chunking import build_chunks
 from .evaluation import evaluate_review_sheet
 from .evidence import EvidenceStore
 from .fixtures import build_synthetic_scale_case, load_fixture
-from .providers import GLMProvider, MockOutcome, MockProvider
+from .providers import CodexCLIProvider, MockOutcome, MockProvider
 from .runner import RunConfig, run_case
 
 
@@ -39,22 +39,11 @@ def main(argv: list[str] | None = None) -> int:
                 {chunk.chunk_id: [MockOutcome.success(VALID_JSON)] for chunk in chunks}
             )
         else:
-            missing = [
-                name
-                for name in (
-                    "SPIKE02_GLM_API_KEY",
-                    "SPIKE02_GLM_ENDPOINT",
-                    "SPIKE02_GLM_MODEL",
-                )
-                if not os.environ.get(name)
-            ]
-            if missing:
-                print(f"missing runtime environment: {', '.join(missing)}", file=sys.stderr)
-                return 2
-            provider = GLMProvider(
-                endpoint=os.environ["SPIKE02_GLM_ENDPOINT"],
-                api_key=os.environ["SPIKE02_GLM_API_KEY"],
-                model=os.environ["SPIKE02_GLM_MODEL"],
+            provider = CodexCLIProvider(
+                binary=os.environ.get("SPIKE02_CODEX_BIN", "codex"),
+                model=os.environ.get("SPIKE02_CODEX_MODEL") or None,
+                timeout_seconds=args.codex_timeout_seconds,
+                cwd=os.getcwd(),
             )
         report = run_case(case, provider, config, evidence)
         summary = asdict(report)
@@ -74,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the local Spike-02 harness")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("mock", "glm"):
+    for command in ("mock", "codex"):
         subparser = subparsers.add_parser(command)
         subparser.add_argument("--fixture")
         subparser.add_argument("--synthetic-count", type=int)
@@ -82,6 +71,7 @@ def _build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--chunk-size", type=int, default=25)
         subparser.add_argument("--max-attempts", type=int, default=3)
         subparser.add_argument("--prompt-version", default="spike-02-v1")
+        subparser.add_argument("--codex-timeout-seconds", type=float, default=120.0)
     evaluate = subparsers.add_parser("evaluate")
     evaluate.add_argument("--evidence-dir", required=True)
     evaluate.add_argument("--review-file", required=True)
