@@ -16,13 +16,16 @@ from .model import (
     ProviderName,
     RunReport,
 )
-from .providers import GLMProvider, LLMProvider
+from .providers import CodexCLIProvider, LLMProvider
 from .schema import SchemaError, parse_structured_output, validate_structured_output
 
 
 RETRYABLE_STATUSES = frozenset(
     {
         "timeout",
+        "provider_failed",
+        "empty_response",
+        "invalid_provider_response",
         "rate_limited",
         "provider_unavailable",
         "invalid_provider_response",
@@ -94,6 +97,8 @@ def run_case(
                     "content": response.content,
                     "finish_reason": response.finish_reason,
                     "error_code": response.error_code,
+                    "process_exit_code": response.process_exit_code,
+                    "diagnostic": response.diagnostic,
                 },
             )
 
@@ -177,7 +182,9 @@ def run_case(
         if first_response_success:
             first_successes += 1
 
-    provider_name: ProviderName = "glm" if isinstance(provider, GLMProvider) else "mock"
+    provider_name: ProviderName = (
+        "codex" if isinstance(provider, CodexCLIProvider) else "mock"
+    )
     report = RunReport(
         run_id=run_id,
         provider=provider_name,

@@ -32,6 +32,8 @@ class EvidenceStore:
                 "input_tokens": response.input_tokens,
                 "output_tokens": response.output_tokens,
                 "error_code": response.error_code,
+                "process_exit_code": response.process_exit_code,
+                "stderr_present": bool(response.diagnostic),
             },
         )
 

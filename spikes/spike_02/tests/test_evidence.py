@@ -40,6 +40,38 @@ class EvidenceTests(unittest.TestCase):
                 {"secret": "local-only"},
             )
 
+    def test_request_record_contains_exit_code_and_not_diagnostic_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = EvidenceStore(root)
+            chunk = Chunk(
+                chunk_id="case-0000",
+                case_id="case",
+                index=0,
+                primary_message_ids=("public-001",),
+                context_message_ids=(),
+                prompt_text="prompt",
+                input_chars=6,
+                prompt_lines=("primary\tpublic-001",),
+            )
+            request = LLMRequest("run-001", chunk, 1, "test-v1")
+            response = ProviderResponse(
+                status="provider_failed",
+                content=None,
+                latency_ms=10,
+                input_tokens=None,
+                output_tokens=None,
+                finish_reason=None,
+                error_code="provider_failed",
+                process_exit_code=7,
+                diagnostic="stderr text",
+            )
+            evidence.persist_request(request, response)
+            payload = json.loads((root / "requests.jsonl").read_text().splitlines()[0])
+            self.assertEqual(payload["process_exit_code"], 7)
+            self.assertTrue(payload["stderr_present"])
+            self.assertNotIn("stderr text", payload)
+
 
 if __name__ == "__main__":
     unittest.main()
