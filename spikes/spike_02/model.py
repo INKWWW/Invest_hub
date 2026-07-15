@@ -53,6 +53,7 @@ class Chunk:
     context_message_ids: tuple[str, ...]
     prompt_text: str
     input_chars: int
+    prompt_lines: tuple[str, ...]
 
 
 @dataclass(frozen=True)

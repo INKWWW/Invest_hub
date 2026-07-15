@@ -1,0 +1,42 @@
+import unittest
+
+from spike_02.schema import SchemaError, parse_structured_output, validate_structured_output
+
+
+def valid_json(source_message_id="public-001"):
+    return (
+        '{"topics":[{"title":"ABC","summary":"收入增速稳健",'
+        f'"source_message_ids":["{source_message_id}"],'
+        '"author_scope":"target","author_id":"target-user",'
+        '"tickers":["ABC"],"operation_tendency":null,"uncertainty":null}],'
+        '"media_unparsed":false,"warnings":[]}'
+    )
+
+
+class SchemaTests(unittest.TestCase):
+    def test_schema_rejects_unknown_source_message_id(self):
+        with self.assertRaisesRegex(SchemaError, "source_message_ids"):
+            validate_structured_output(
+                parse_structured_output(valid_json("missing")),
+                {"public-001"},
+                {"target-user"},
+            )
+
+    def test_program_repair_only_removes_json_fence(self):
+        output = parse_structured_output("```json\n{}\n```")
+        self.assertEqual(output.topics, ())
+
+    def test_target_topic_requires_known_target_author(self):
+        text = valid_json().replace('"target-user"', '"other-user"')
+        output = parse_structured_output(text)
+        with self.assertRaisesRegex(SchemaError, "author_id"):
+            validate_structured_output(output, {"public-001"}, {"target-user"})
+
+    def test_invalid_json_has_stable_error_code(self):
+        with self.assertRaises(SchemaError) as context:
+            parse_structured_output("not json")
+        self.assertEqual(context.exception.code, "invalid_json")
+
+
+if __name__ == "__main__":
+    unittest.main()
