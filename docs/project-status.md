@@ -1,10 +1,12 @@
 # Project Status
 
+Last updated: 2026-07-16
+
 ## Current phase
 
-**Discovery / Spike-01 已完成，Spike-02 Codex CLI 真实小批次已验证但容量结论未完成**
+**Discovery / Spike-01 已完成，Spike-02 Codex CLI harness 和小批次验证已完成，但容量结论未完成**
 
-项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness 已完成，Codex CLI 已完成一次真实小批次结构化和质量验证，但 500/1000 条真实容量仍未验证。
+项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理和小批次质量验证已完成，但 500/1000 条真实容量仍未验证。
 
 ## Approval status
 
@@ -44,14 +46,15 @@
 - 12 条公开 fixture 的一次真实 Codex CLI 运行：最终成功率 100%、JSON/Schema 率 100%，P50/P95 均为 150,956 ms；
 - 6/6 人工质量 claims grounded 且正确归因，严重归因错误和媒体臆测均为 0；
 - 120 秒窗口出现超时，默认窗口已调整为 240 秒；
-- `chunk-size 500` 和 `chunk-size 250` 的 500 条真实运行首个 chunk 均在 240 秒超时；修复后已能正常回收进程，当前建议降至 `chunk-size 100` 或更小；500/1000 条完整容量尚未验证，结论为 `unverified`；
+- `chunk-size 500` 和 `chunk-size 250` 的 500 条真实运行首个 chunk 均在约 240 秒超时；修复后已能正常回收进程，当前建议降至 `chunk-size 100` 或更小；500/1000 条完整容量尚未验证，结论为 `unverified`；
+- Codex timeout 清理回归测试已加入，完整确定性测试为 35/35；
 - 脱敏决策报告：[Spike-02 决策报告](spikes/2026-07-15-spike-02-decision-report.md)。
 
 小批次成功不等同于容量通过，也不批准 V0/V1 生产实现或自动 fallback。
 
 ## Next gate
 
-下一阶段需要在本地受保护环境完成约 500 条和 1000 条 Codex CLI 真实容量运行，优先测试 chunk size 100 或更小，并完成 P50/P95、失败分类和质量复核，再根据证据更新 Spike-02 结论。
+下一阶段需要在本地受保护环境优先测试 chunk size 100 或更小，再决定是否继续约 500 条和 1000 条 Codex CLI 真实容量运行，并完成 P50/P95、失败分类和质量复核，再根据证据更新 Spike-02 结论。
 
 在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
 
