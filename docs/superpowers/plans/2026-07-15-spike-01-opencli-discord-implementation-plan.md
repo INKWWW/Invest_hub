@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
-**Goal:** 构建一个本地、一次性的 Spike harness，验证 OpenCLI Discord Web 采集能力、最小 Canonical Schema、checkpoint、幂等、恢复和失败隔离，并输出脱敏 Go/No-Go 证据。
+**Goal:** 构建一个本地、一次性的 Spike harness，验证 OpenCLI Discord Web 采集能力、可解释的逐页耗时、最小 Canonical Schema、checkpoint、幂等、恢复和失败隔离，并输出脱敏 Go/No-Go 证据。
+
+**Revision:** Revision-01 已批准；在 222 条真实消息证据基础上增加遥测、bounded soak、响应新鲜度校验和页面运行保护。Revision-01 不改变 1000 条真实采集的硬验收，也不固化最终生产网络策略。
 
 **Architecture:** 真实网页轨通过 OpenCLI Boundary 取得原始页面结果，Fake Connector 负责公开 fixture 和故障注入；两条轨道在 Canonical Schema、Validator、本地 Evidence Store 和 Checkpoint Emulator 汇合。harness 不连接云端，不进入生产应用。
 
@@ -17,7 +19,10 @@
 - Playwright/CDP 仅可用于诊断，不能作为字段补齐方案或后备采集器。
 - 原始结果、标准化结果和校验结果成功保存后才能推进 checkpoint。
 - 公开 fixture 必须人工构造；确定性测试完整率为 100%，重复率为 0%。
-- 真实网页轨必须验证至少 1000 条消息及已批准硬性字段；无法满足时写明未验证或不通过。
+- 真实网页轨必须验证至少 1000 条由采集器实际获取的消息及已批准硬性字段；人工导出、人工提供的数据或离线导入不计入该目标。
+- 正式 1000 条运行前必须先完成 100–200 条 bounded soak，用于收集逐页阶段耗时和响应匹配状态；soak 不能替代 1000 条验收。
+- 每页必须有硬性操作截止时间；计划中的 90 秒是防止运行失控的默认保护值，不是性能通过标准；超时必须保留证据、旧 checkpoint 和失败分类，不得无界重试。
+- 真实网页轨必须记录正常路径与失败/重试路径的耗时分布，不能只记录总墙钟时间。
 
 ---
 
@@ -33,6 +38,7 @@
 - spikes/spike_01/evidence.py：本地原始、标准化和校验结果存储。
 - spikes/spike_01/checkpoint.py：本地 JSON checkpoint 存储。
 - spikes/spike_01/connectors.py：Connector Protocol、Fake Connector、OpenCLI Connector。
+- spikes/spike_01/telemetry.py：真实网页轨阶段耗时、响应匹配状态和失败分类记录。
 - spikes/spike_01/runner.py：增量运行编排和命令行入口。
 - spikes/spike_01/fixtures/basic_page.json：公开基础 fixture。
 - spikes/spike_01/fixtures/recovery_pages.json：公开多页、关系、附件和恢复 fixture。
@@ -42,6 +48,7 @@
 - spikes/spike_01/tests/test_checkpoint.py：证据存储和 checkpoint 测试。
 - spikes/spike_01/tests/test_runner.py：Fake Connector、幂等、恢复和来源隔离测试。
 - spikes/spike_01/tests/test_opencli_connector.py：OpenCLI 边界测试。
+- spikes/spike_01/tests/test_telemetry.py：逐页耗时、失败分类和敏感信息排除测试。
 - spikes/spike_01/README.md：运行和安全说明。
 - docs/spikes/2026-07-15-spike-01-decision-report.md：脱敏决策报告。
 
@@ -73,7 +80,6 @@ class SourceConfig:
     channel_url: str
     source_account_id: str
     max_messages: int = 1000
-    profile_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -518,8 +524,8 @@ recovery_pages.json 必须包含：
 
 覆盖：
 
-- 二次运行使用已保存 checkpoint，不新增 Canonical 消息；
-- 重置 checkpoint 后重放同一页，将已存在 ID记录为 duplicate 且不重复追加；
+- 二次运行不新增 Canonical 消息；
+- 二次运行将已存在 ID记录为 duplicate；
 - 第二页失败时只提交第一页 checkpoint；
 - 失败后再次运行从旧 checkpoint 继续；
 - 同一运行内重复 ID不推进 checkpoint；
@@ -602,13 +608,15 @@ git commit -m "spike: add deterministic Discord incremental runner"
 
 - Modify: spikes/spike_01/connectors.py
 - Modify: spikes/spike_01/runner.py
+- Create: spikes/spike_01/telemetry.py
 - Create: spikes/spike_01/tests/test_opencli_connector.py
+- Create: spikes/spike_01/tests/test_telemetry.py
 - Modify: spikes/spike_01/README.md
 
 **Interfaces:**
 
-- Consumes: OpenCLI 版本检查、RawPage contract 和 Runner。
-- Produces: OpenCLIInvoker、SubprocessOpenCLIInvoker、OpenCLIConnector 和真实网页运行命令。
+- Consumes: OpenCLI 版本检查、RawPage contract、Runner 和 bounded soak 配置。
+- Produces: OpenCLIInvoker、SubprocessOpenCLIInvoker、OpenCLIConnector、逐页 TelemetryRecorder 和真实网页运行命令。
 
 - [ ] **Step 1: 捕获 OpenCLI 外部契约**
 
@@ -633,6 +641,13 @@ export OPENCLI_BIN='opencli'
 - contract 中的 channel_url、profile_path 和 cursor 被替换；
 - cursor 为空时不发送字符串 None；
 - 实际版本与契约版本不同则停止。
+
+同时为 telemetry 写失败测试，覆盖：
+
+- 页面开始和结束事件都能形成一条完整记录；
+- network retry 次数和 elapsed_ms 可计算；
+- 无响应、陈旧响应、错误频道、cursor 未推进和命令超时分别产生不同错误分类；
+- 遥测中不出现正文、频道 URL、Profile 路径、Cookie、Token 或完整附件链接。
 
 - [ ] **Step 3: 实现命令边界**
 
@@ -666,6 +681,27 @@ class OpenCLIConnector:
 
 SubprocessOpenCLIInvoker 从私有 contract 文件读取 executable、version、args template 和 output mode，校验版本后执行；不自动升级或降级。
 
+在同一任务中增加 `telemetry.py`：
+
+~~~python
+@dataclass(frozen=True)
+class PageTiming:
+    page_index: int
+    elapsed_ms: int
+    open_ms: int
+    wait_ms: int
+    network_observation_ms: int
+    detail_ms: int
+    mapping_ms: int
+    validation_ms: int
+    persist_ms: int
+    network_attempts: int
+    match_state: str
+    error_code: str | None
+~~~
+
+`TelemetryRecorder.record(PageTiming)` 只写安全元数据 JSONL。`match_state` 只能使用 `matched_new`, `matched_stale`, `missing`, `wrong_container`, `cursor_not_advanced`, `command_failed` 或 `timeout`。任何无法证明是当前分页的新响应，都必须进入失败状态，不得静默复用旧 network entry。
+
 - [ ] **Step 4: 增加真实运行入口**
 
 runner.py 必须支持：
@@ -673,12 +709,13 @@ runner.py 必须支持：
 ~~~text
 python3 -m spike_01.runner real
   --channel-url 本地频道 URL
-  --source-container-id Discord 频道唯一 ID
   --profile-path 本地专用 Profile 路径
   --source-account-id 脱敏标识
   --opencli-bin 可执行文件
   --contract-path 本地 contract 路径
   --evidence-dir 本地证据目录
+  --telemetry-path 本地遥测 JSONL 路径
+  --page-timeout-seconds 90
   --max-messages 1000
 ~~~
 
@@ -695,12 +732,27 @@ PYTHONPATH=spikes python3 -m spike_01.runner real \
   --opencli-bin opencli \
   --contract-path /private/tmp/invest-hub-spike-01-contract.json \
   --evidence-dir "$SPIKE_EVIDENCE_DIR" \
+  --telemetry-path "$SPIKE_EVIDENCE_DIR/telemetry.jsonl" \
+  --page-timeout-seconds 90 \
   --max-messages 1000
 ~~~
 
 命令只能读取 Discord，不发送消息、不修改频道内容、不访问其他网站。
 
-- [ ] **Step 5: 执行真实网页两轮**
+- [ ] **Step 5: 执行带遥测的 bounded soak**
+
+先运行 100–200 条真实消息，使用与正式运行相同的 OpenCLI contract、Profile、频道和 evidence 结构。必须确认：
+
+- 每页都有 `PageTiming`；
+- 正常页面的耗时分布可计算；
+- network 等待占比可计算；
+- 无响应、陈旧响应和 cursor 未推进可以区分；
+- 单页超过 90 秒会安全结束，不会继续无界等待；
+- 旧 checkpoint 未被失败页推进。
+
+如果 bounded soak 没有完整遥测，或出现无法解释的长时间空转，不得进入 1000 条运行；先修正 harness 或重新确认 OpenCLI 外部契约。
+
+- [ ] **Step 6: 执行真实网页两轮 1000 条验收**
 
 第一轮必须记录：
 
@@ -711,12 +763,13 @@ PYTHONPATH=spikes python3 -m spike_01.runner real \
 - 分页或虚拟滚动连续性；
 - OpenCLI 版本；
 - 原始、Canonical、ValidationReport 和指标文件。
+- 每页阶段耗时、network 尝试次数、响应匹配状态和失败分类。
 
 第二轮使用同一频道、Profile、contract 和新 run ID，验证已采集 ID不重复、checkpoint 从第一轮末尾开始、无明显漏采。
 
 失败必须分为环境前置条件、OpenCLI 能力缺口、harness 映射错误或页面采集不完整。
 
-- [ ] **Step 6: 运行 OpenCLI 单元测试并提交**
+- [ ] **Step 7: 运行 OpenCLI 单元测试并提交**
 
 ~~~bash
 PYTHONPATH=spikes python3 -m unittest \
@@ -760,7 +813,9 @@ git status --short
 
 - [ ] **Step 4: 对照 Spike-01 spec 验收**
 
-逐项核对双轨证据、1000 条真实采集、硬性字段、回复/引用/附件、幂等、fixture 100% 完整率、fixture 0% 重复率、checkpoint 后置推进、单频道失败隔离、未使用 Playwright/CDP 补齐和真实数据未入 Git。
+逐项核对双轨证据、1000 条真实采集、硬性字段、回复/引用/附件、幂等、fixture 100% 完整率、fixture 0% 重复率、checkpoint 后置推进、单频道失败隔离、逐页遥测、响应新鲜度、页面硬截止时间、未使用 Playwright/CDP 补齐和真实数据未入 Git。
+
+报告必须明确说明：人工导出或人工提供的 1000 条数据不计入真实网页验收；如果 2 小时墙钟时间中只有少量证据写入，必须把未解释时间标为遥测缺口，而不是推断为 Discord 网络本身耗时。
 
 缺少证据的项目写为未验证或不通过，不写整体通过。
 
@@ -773,7 +828,7 @@ git commit -m "docs: record Spike-01 Discord collection decision"
 
 ## 9. 完成条件
 
-本计划完成后应存在公开 fixture harness、真实网页运行入口、字段/关系验证结果、checkpoint/幂等/恢复测试结果、脱敏决策报告和明确的 OpenCLI-first Go/No-Go。
+本计划完成后应存在公开 fixture harness、真实网页运行入口、逐页耗时和响应匹配遥测、字段/关系验证结果、checkpoint/幂等/恢复测试结果、脱敏决策报告和明确的 OpenCLI-first Go/No-Go。
 
 本计划不批准 V0 或 V1 实现；决策报告审阅完成后，才开始下一子项目 spec。
 
@@ -784,4 +839,5 @@ git commit -m "docs: record Spike-01 Discord collection decision"
 - 接口一致性：Runner 使用 Connector、LocalEvidenceStore、JsonCheckpointStore、normalize_page 和 validate_page，后续任务不改名前序接口。
 - 数据安全检查：真实证据位于 /private/tmp，仓库只接收公开 fixture 和脱敏报告。
 - 验收检查：1000 条真实网页采集、硬性字段、二次运行、checkpoint、恢复、失败隔离和未验证分类均有任务。
+- Revision-01 检查：bounded soak 在 1000 条之前执行；每页耗时和响应匹配状态可追溯；单页不会无限等待；人工导出不能替代真实采集。
 - 占位符检查：步骤不依赖未填充的后续空白；OpenCLI 实际参数通过前置契约捕获，不凭空假设。
