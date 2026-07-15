@@ -56,6 +56,7 @@ class CLITests(unittest.TestCase):
         chunk = build_chunks(case, max_primary_messages=3)[0]
         self.assertIn("Do not use tools", chunk.prompt_text)
         self.assertIn("JSON", chunk.prompt_text)
+        self.assertIn("source_message_ids", chunk.prompt_text)
 
     def test_mock_cli_runs_without_network(self):
         with tempfile.TemporaryDirectory() as directory:

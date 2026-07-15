@@ -23,6 +23,11 @@ def parse_structured_output(text: str) -> StructuredOutput:
     if not isinstance(payload, Mapping):
         raise SchemaError("invalid_shape", "top-level JSON must be an object")
 
+    required_fields = {"topics", "media_unparsed", "warnings"}
+    missing_fields = sorted(required_fields - set(payload))
+    if missing_fields:
+        raise SchemaError("missing_field", ", ".join(missing_fields))
+
     topics_payload = payload.get("topics", [])
     if not isinstance(topics_payload, list):
         raise SchemaError("invalid_topics", "topics must be an array")

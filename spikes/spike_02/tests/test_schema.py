@@ -23,8 +23,14 @@ class SchemaTests(unittest.TestCase):
             )
 
     def test_program_repair_only_removes_json_fence(self):
-        output = parse_structured_output("```json\n{}\n```")
+        output = parse_structured_output(
+            '```json\n{"topics":[],"media_unparsed":false,"warnings":[]}\n```'
+        )
         self.assertEqual(output.topics, ())
+
+    def test_schema_rejects_missing_required_top_level_fields(self):
+        with self.assertRaisesRegex(SchemaError, "missing_field"):
+            parse_structured_output('{"messages":[]}')
 
     def test_target_topic_requires_known_target_author(self):
         text = valid_json().replace('"target-user"', '"other-user"')

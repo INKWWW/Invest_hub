@@ -127,6 +127,12 @@ def _message_line(scope: str, message: FixtureMessage) -> str:
 def _render_prompt(lines: tuple[str, ...]) -> str:
     return (
         "Do not use tools, read project files, or execute commands. Return JSON only.\n"
+        "Return exactly this shape: {\"topics\":[{\"title\":\"string\","
+        "\"summary\":\"string\",\"source_message_ids\":[\"message-id\"],"
+        "\"author_scope\":\"target|channel\",\"author_id\":\"string|null\","
+        "\"tickers\":[\"ABC\"],\"operation_tendency\":\"string|null\","
+        "\"uncertainty\":\"string|null\"}],"
+        "\"media_unparsed\":false,\"warnings\":[\"string\"]}.\n"
         "请只根据以下消息生成结构化 JSON。不得推测未解析媒体内容。\n"
         + "\n".join(lines)
     )
