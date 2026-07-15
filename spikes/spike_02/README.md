@@ -61,7 +61,7 @@ PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-small \
   --chunk-size 3 \
   --max-attempts 3 \
-  --codex-timeout-seconds 120
+  --codex-timeout-seconds 240
 ```
 
 运行规模 fixture：
@@ -72,7 +72,7 @@ PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-500-c25 \
   --chunk-size 25 \
   --max-attempts 3 \
-  --codex-timeout-seconds 120
+  --codex-timeout-seconds 240
 ```
 
 每次运行使用新的 evidence 目录，避免不同 Prompt、模型或失败状态混合。Evidence 包含 `requests.jsonl`、`results.jsonl`、`metrics.json` 和只在本地保存的 `raw_responses/`。

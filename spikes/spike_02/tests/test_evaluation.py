@@ -38,7 +38,7 @@ def output_with_claim(summary, source_ids=("public-001",), *, author_id="target-
 def successful_report(scale):
     return RunReport(
         run_id=f"run-{scale}",
-        provider="glm",
+        provider="codex",
         case_id=f"case-{scale}",
         scale=scale,
         chunk_size=3,
@@ -123,7 +123,7 @@ class EvaluationTests(unittest.TestCase):
                 successful_report("large"),
             ),
             quality,
-            has_real_glm_evidence=True,
+            has_real_codex_evidence=True,
             constrained=True,
         )
         self.assertEqual(decision, "conditional_pass")

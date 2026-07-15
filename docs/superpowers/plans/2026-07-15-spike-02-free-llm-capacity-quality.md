@@ -15,7 +15,7 @@
 - 每次真实调用必须使用 codex exec --sandbox read-only --add-dir <CODEX_HOME> --ephemeral --output-last-message <file> -。
 - Prompt 通过 stdin 传递，并明确要求不使用工具、不读取项目文件、不执行项目命令、只返回 JSON。
 - SPIKE02_CODEX_BIN 默认为 codex；SPIKE02_CODEX_MODEL 可选，不把登录凭据写入项目。
-- Codex 进程默认超时 120 秒；超时后必须终止子进程；已成功 chunk 不重复执行。
+- Codex 进程默认超时 240 秒；超时后必须终止子进程；已成功 chunk 不重复执行。实测小批次请求约 151 秒完成，120 秒会在最终输出已生成但进程尚未退出时误判为 timeout。
 - 真实 fixture、Prompt、完整 Codex 输出和历史数据只能写入本地受保护目录，不进入 Git。
 - ProviderResponse.input_tokens 和 output_tokens 在 Codex CLI 未提供时必须为 None，不得估算成精确 token 数。
 - 继续沿用初始质量门槛：首次成功率 >=90%、重试后最终成功率 >=99%、JSON 可解析率 >=98%、核心事实有据率 >=95%、严重错误归因 0、媒体臆测 0。
@@ -67,7 +67,7 @@ CodexCLIProvider(
     *,
     binary: str = "codex",
     model: str | None = None,
-    timeout_seconds: float = 120.0,
+    timeout_seconds: float = 240.0,
     cwd: str | None = None,
     codex_home: str | None = None,
 )
@@ -322,7 +322,7 @@ Expected: FAIL because the CLI still exposes glm and does not construct a Codex 
 Change the parser loop from ("mock", "glm") to ("mock", "codex"). Add:
 
 ~~~python
-subparser.add_argument("--codex-timeout-seconds", type=float, default=120.0)
+ subparser.add_argument("--codex-timeout-seconds", type=float, default=240.0)
 ~~~
 
 For codex, construct:
@@ -350,7 +350,7 @@ PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --fixture spikes/spike_02/fixtures/public_small.json \
   --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-small \
   --chunk-size 3 \
-  --codex-timeout-seconds 120
+  --codex-timeout-seconds 240
 ~~~
 
 State that Codex must already be logged in locally, the process is non-interactive, the sandbox is read-only, evidence is local-only, mock is offline, and glm is no longer supported.
@@ -383,7 +383,7 @@ git commit -m "docs: expose Codex CLI Spike-02 runner"
 - Consumes: Task 3 CLI, a local Codex login, public fixture, synthetic scale fixtures, and a local review sheet.
 - Produces: redacted Codex evidence, metrics, manual quality review, and one of passed, conditional, failed, or unverified.
 
-- [ ] **Step 1: Verify the local Codex CLI without project mutation**
+- [x] **Step 1: Verify the local Codex CLI without project mutation**
 
 Run:
 
@@ -395,17 +395,19 @@ git status --short
 
 Expected: the CLI is available, exec documents --sandbox, --ephemeral, and --output-last-message, and the worktree has no unrelated changes.
 
-- [ ] **Step 2: Run the annotated small fixture**
+- [x] **Step 2: Run the annotated small fixture**
 
-Use a new evidence directory:
+Use a new evidence directory. Because the 120-second window produced false timeouts after valid JSON generation, the verified run used a 240-second timeout and a separate evidence directory:
 
 ~~~bash
 PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --fixture spikes/spike_02/fixtures/public_small.json \
-  --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-small \
+  --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-single-long \
   --chunk-size 3 \
   --max-attempts 3 \
-  --codex-timeout-seconds 120
+  --codex-timeout-seconds 240
+
+Observed result: 1/1 final success, JSON/Schema rate 100%, P50/P95 150,956 ms. The 120-second run is retained separately as timeout evidence.
 ~~~
 
 Verify the terminal summary, metrics.json, requests.jsonl, results.jsonl, and local raw_responses/. Confirm that the worktree is unchanged and no secret appears in tracked files.
@@ -420,38 +422,38 @@ PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-500-c25 \
   --chunk-size 25 \
   --max-attempts 3 \
-  --codex-timeout-seconds 120
+  --codex-timeout-seconds 240
 
 PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --synthetic-count 1000 \
   --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-1000-c25 \
   --chunk-size 25 \
   --max-attempts 3 \
-  --codex-timeout-seconds 120
+  --codex-timeout-seconds 240
 
 PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --synthetic-count 1000 \
   --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-1000-c100 \
   --chunk-size 100 \
   --max-attempts 3 \
-  --codex-timeout-seconds 120
+  --codex-timeout-seconds 240
 ~~~
 
-Treat synthetic fixtures as capacity evidence only; do not use them for quality conclusions.
+Treat synthetic fixtures as capacity evidence only; do not use them for quality conclusions. This step remains outstanding after the observed approximately 151-second latency per small real request; the decision report therefore remains `unverified`.
 
-- [ ] **Step 4: Complete the manual quality review**
+- [x] **Step 4: Complete the manual quality review**
 
 Create a local JSONL review file with case_id, claim_id, covered, grounded, correct_attribution, media_hallucination, and note. Run:
 
 ~~~bash
 PYTHONPATH=spikes python3 -m spike_02.cli evaluate \
-  --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-small \
+  --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-single-long \
   --review-file /private/tmp/invest-hub-spike-02-evidence/codex-review.jsonl
 ~~~
 
 Every quality conclusion must cite fixture message IDs; severe attribution errors and media hallucinations cannot be averaged away.
 
-- [ ] **Step 5: Update the decision report without secrets**
+- [x] **Step 5: Update the decision report without secrets**
 
 Replace GLM-specific wording with Codex CLI wording. Record CLI version, configured model if known, input scale, chunk size, process count, retry count, success rates, JSON/Schema rates, P50/P95, total time, failure categories, quality review, limitations, and the final conclusion. Leave token fields as unavailable when the CLI did not provide them.
 

@@ -2,21 +2,22 @@
 
 ## Current phase
 
-**Discovery / Spike-01 已完成，Spike-02 harness 已完成但 GLM 真实轨未验证**
+**Discovery / Spike-01 已完成，Spike-02 Codex CLI 真实小批次已验证但容量结论未完成**
 
-项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证，Spike-02 harness 已完成，当前等待真实 GLM 轨验证。
+项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness 已完成，Codex CLI 已完成一次真实小批次结构化和质量验证，但 500/1000 条真实容量仍未验证。
 
 ## Approval status
 
 - Approved specification：
   - [模块 1 总体设计](superpowers/specs/2026-07-15-invest-hub-module-1-project-design.md)
   - [Spike-01 Discord 增量采集设计](superpowers/specs/2026-07-15-spike-01-opencli-discord-incremental-design.md)
+  - [Spike-02 Codex CLI 容量与质量设计](superpowers/specs/2026-07-15-spike-02-free-llm-capacity-quality-design.md)
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
-  - [Spike-02 免费 LLM 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
+  - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
 - Approved technology stack：无
 
-`intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 的 OpenCLI-first 结论只作为带恢复和遥测约束的后续设计输入。
+`intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
 
 ## Current scope
 
@@ -26,46 +27,35 @@
 
 ## Repository state
 
-当前仓库包含项目治理文档和已完成的 Spike-01 harness：
-
-- `AGENTS.md`
-- `README.md`
-- `.gitignore`
-- `docs/project-status.md`
-- `docs/README.md`
-- `docs/spikes/2026-07-15-spike-01-decision-report.md`
-- `spikes/spike_01/`：仅限 Spike 验证，不是生产应用代码
-- `spikes/spike_02/`：仅限免费 LLM 容量与质量验证，不是生产应用代码
-
-没有初始化生产应用框架，也没有安装生产依赖。真实 Discord evidence 保存在本地受保护目录，不进入 Git。
+当前仓库包含项目治理文档、Spike-01 harness 和 Spike-02 harness。Spike harness 仅限验证，不是生产应用代码；没有初始化生产应用框架，也没有安装生产依赖。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git。
 
 ## Spike-01 result
 
 - 确定性测试：32/32 通过；
 - bounded soak：202 条原始消息成功采集；
-- 第一轮真实采集：1392 条唯一 Canonical 消息；
-- 第二轮 checkpoint 恢复：新增 112 条，0 duplicate、0 invalid；
 - 两轮 evidence 合计：1504 条唯一 Canonical 消息；
-- network 空窗通过 checkpoint-resume 安全处理；
+- checkpoint 恢复、network 空窗和逐页 telemetry 验证通过；
 - 决策结论：OpenCLI-first 可作为后续设计输入，但生产采用必须保留 freshness、有限重试、失败恢复和逐页 telemetry。
 
 ## Spike-02 result
 
-- 确定性测试：27/27 通过；
-- Mock 小批次、约 500 条和 1000 条以上规模运行可以完成；
-- 1000 条合成 fixture 在 chunk size 25/100 下分别产生 40/10 次 Mock 请求，最终成功率和 JSON 解析率均为 100%；
-- 真实 GLM 未运行，结论为 `unverified`，没有真实容量、质量、P95 或 token 观测；
+- 确定性测试：34/34 通过；
+- Codex CLI：`codex-cli 0.144.3`，当前运行时报告模型为 `gpt-5.6-luna`；
+- 12 条公开 fixture 的一次真实 Codex CLI 运行：最终成功率 100%、JSON/Schema 率 100%，P50/P95 均为 150,956 ms；
+- 6/6 人工质量 claims grounded 且正确归因，严重归因错误和媒体臆测均为 0；
+- 120 秒窗口出现超时，默认窗口已调整为 240 秒；
+- 500/1000 条真实 Codex CLI 容量尚未运行，结论为 `unverified`；
 - 脱敏决策报告：[Spike-02 决策报告](spikes/2026-07-15-spike-02-decision-report.md)。
 
-Mock 结果不等同于 GLM 通过，也不批准 V0/V1 生产实现。
+小批次成功不等同于容量通过，也不批准 V0/V1 生产实现或自动 fallback。
 
 ## Next gate
 
-下一阶段需要在本地受保护环境提供 GLM 运行配置，完成小批次、约 500 条和 1000 条以上真实 GLM 验证及人工质量复核，再根据证据更新 Spike-02 结论。
+下一阶段需要在本地受保护环境完成约 500 条和 1000 条 Codex CLI 真实容量运行，至少比较 chunk size 25/100，并完成 P50/P95、失败分类和质量复核，再根据证据更新 Spike-02 结论。
 
-在真实 GLM 结论明确、后续正式 Spec 和 plan 获得批准前：
+在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
 
 - 不把现有 Spike-02 harness 直接升级为生产实现；
 - 不启动 V0/V1 生产实现；
 - 不把 Spike-01 harness 直接升级为生产应用；
-- 不把 OpenCLI、Discord Desktop 或官方 API 固化为最终生产架构。
+- 不把 OpenCLI、Discord Desktop、Codex CLI 或官方 API 固化为最终生产架构。

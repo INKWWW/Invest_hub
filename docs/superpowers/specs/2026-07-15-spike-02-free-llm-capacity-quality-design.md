@@ -111,7 +111,7 @@ codex exec
 - Codex 最终输出从 `output-last-message` 读取，再交给既有 JSON Parser 和 Schema Validator；
 - `SPIKE02_CODEX_BIN` 可指定 CLI 路径，默认值为 `codex`；
 - `SPIKE02_CODEX_MODEL` 可选，设置后通过 `--model` 传入；未设置时使用 Codex CLI 当前默认模型；
-- 进程超时默认 120 秒，可由运行参数覆盖；
+- 进程超时默认 240 秒，可由运行参数覆盖。实测本机 Codex CLI 在连接重试和退出清理后约 151 秒完成一次小批次请求，因此 120 秒不足以作为默认窗口；240 秒仍保持单进程有界等待；
 - 不读取或写入 GLM endpoint、API key 或其他外部 Provider 配置。
 
 Codex 输出至少需要能够表达：结构化话题、关键事实和观点类型、指定用户观点、标的和操作倾向、不确定性或未解析媒体标记以及原始消息 ID。

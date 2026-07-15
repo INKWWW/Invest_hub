@@ -11,7 +11,12 @@ from .chunking import build_chunks
 from .evaluation import evaluate_review_sheet
 from .evidence import EvidenceStore
 from .fixtures import build_synthetic_scale_case, load_fixture
-from .providers import CodexCLIProvider, MockOutcome, MockProvider
+from .providers import (
+    DEFAULT_CODEX_TIMEOUT_SECONDS,
+    CodexCLIProvider,
+    MockOutcome,
+    MockProvider,
+)
 from .runner import RunConfig, run_case
 
 
@@ -71,7 +76,11 @@ def _build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--chunk-size", type=int, default=25)
         subparser.add_argument("--max-attempts", type=int, default=3)
         subparser.add_argument("--prompt-version", default="spike-02-v1")
-        subparser.add_argument("--codex-timeout-seconds", type=float, default=120.0)
+        subparser.add_argument(
+            "--codex-timeout-seconds",
+            type=float,
+            default=DEFAULT_CODEX_TIMEOUT_SECONDS,
+        )
     evaluate = subparsers.add_parser("evaluate")
     evaluate.add_argument("--evidence-dir", required=True)
     evaluate.add_argument("--review-file", required=True)

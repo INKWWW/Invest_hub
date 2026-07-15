@@ -17,6 +17,9 @@ class ProviderError(RuntimeError):
     """Raised only for invalid Provider configuration."""
 
 
+DEFAULT_CODEX_TIMEOUT_SECONDS = 240.0
+
+
 class LLMProvider(Protocol):
     def complete(self, request: LLMRequest) -> ProviderResponse:
         raise NotImplementedError
@@ -80,7 +83,7 @@ class CodexCLIProvider:
         *,
         binary: str = "codex",
         model: str | None = None,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float = DEFAULT_CODEX_TIMEOUT_SECONDS,
         cwd: str | None = None,
         codex_home: str | None = None,
     ):

@@ -1,74 +1,76 @@
-# Spike-02 免费 LLM 容量与质量决策报告
+# Spike-02 Codex CLI 容量与质量决策报告
 
 ## 报告状态
 
 - 日期：2026-07-15
 - 结论：**未验证（unverified）**
-- 执行内容：本地确定性 harness、Mock 规模运行和 GLM 运行前置检查
-- 真实 GLM 请求：0 次
-- 本报告不批准 V0/V1 生产实现，也不批准 Codex CLI fallback
+- 执行内容：本地确定性 harness、Mock 规模对照、Codex CLI 小批次真实运行和人工质量复核
+- 真实 Provider：本机已登录的 Codex CLI；没有直接调用 GLM 或其他外部模型 API
+- 本报告不批准 V0/V1 生产实现，也不批准自动 fallback
 
 ## 1. 范围与安全边界
 
-本次执行只使用人工构造公开 fixture 和本地临时 evidence 目录。没有读取或提交 API key、真实 fixture、Prompt 正文、完整 GLM 响应、私有 URL 或历史数据。
+本次执行只使用人工构造公开 fixture。Codex CLI 通过非交互 `codex exec` 调用，使用 `--sandbox read-only`、`--ephemeral` 和 `--output-last-message`；仅通过 `--add-dir <CODEX_HOME>` 允许其维护自身状态，项目 worktree 不允许修改。
 
-Mock 轨完全离线。GLM 轨要求通过以下运行时环境变量提供配置：
-
-- `SPIKE02_GLM_API_KEY`；
-- `SPIKE02_GLM_ENDPOINT`；
-- `SPIKE02_GLM_MODEL`。
-
-当前运行环境未提供上述变量，因此没有猜测 endpoint、model 或密钥，也没有使用其他 Provider 替代 GLM。
+完整 Prompt、Codex 响应和诊断只保存在本地受保护 evidence 目录，不进入 Git。`requests.jsonl` 不保存 Prompt 正文；token usage 在 Codex CLI 未提供时记录为 `null`。
 
 ## 2. 确定性验证结果
 
-Spike-02 确定性测试：
+- 确定性测试：34/34 通过；
+- Mock 小批次、约 500 条和 1000 条规模路径保持可运行；
+- Mock 的规模结果只证明 harness 的 chunk、重试、Schema 和 evidence 流程，不代表 Codex CLI 的容量或质量。
 
-- 27/27 通过；
-- 覆盖 fixture 校验、chunk 保序、回复上下文、Schema、Mock 失败注入、局部重试、截断拆分、evidence 安全写入、质量评估和 CLI。
+## 3. Codex CLI 环境
 
-Mock 规模运行：
+- CLI：`codex-cli 0.144.3`；
+- 运行时报告模型：`gpt-5.6-luna`；
+- Provider：Codex CLI 当前登录配置；
+- 运行方式：单 chunk 一个非交互 Codex 进程，低并发、只读项目边界；
+- 默认进程超时：240 秒。一次小批次请求实测约 151 秒完成，120 秒窗口会在最终 JSON 已生成但进程尚未退出时误判为 timeout。
 
-| 输入 | chunk size | 请求次数 | 最终成功率 | JSON 解析率 |
-| --- | ---: | ---: | ---: | ---: |
-| 小批次 12 条 | 3 | 4 | 100% | 100% |
-| 约 500 条合成 fixture | 25 | 20 | 100% | 100% |
-| 1000 条合成 fixture | 25 | 40 | 100% | 100% |
-| 1000 条合成 fixture | 100 | 10 | 100% | 100% |
+## 4. 真实运行结果
 
-这些结果只证明本地 harness 的确定性流程和规模输入可以运行，不代表 GLM 的容量、延迟或摘要质量。
+### 4.1 小批次长窗口成功运行
 
-## 3. GLM 轨结果
+Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`。
 
-GLM 真实轨未执行。因缺少运行时配置，以下指标均没有真实观测值：
+| 输入 | chunk size | 请求次数 | 首次成功率 | 最终成功率 | JSON/Schema 率 | P50/P95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 12 条公开 fixture | 100 | 1 | 100% | 100% | 100% | 150,956 ms / 150,956 ms |
 
-- 首次请求成功率；
-- 重试后最终成功率；
-- JSON 合法率；
-- P50/P95 响应时间；
-- 输入/输出 token 使用量；
-- 超时、限流、截断和真实 Provider 错误；
-- 事实有据率和指定用户归因准确率。
+人工质量复核结果：
 
-因此不能根据 Mock 结果推断 GLM 通过，也不能推断 GLM 不通过。
+- 6/6 claims covered、grounded、correct attribution；
+- 严重归因错误：0；
+- 媒体臆测：0；
+- 指定用户观点保留 `target-analyst` 归因；
+- `public-008` 未解析图片被标记为 `media_unparsed=true`，没有推测图片内容。
 
-## 4. 当前结论
+### 4.2 120 秒窗口的失败证据
+
+先前使用 chunk size 3、120 秒超时窗口的运行，多个进程在 126–137 秒被终止。原始诊断显示 Codex 已生成合法 JSON，但仍在 WebSocket 重试和退出清理阶段，因此被 harness 记录为 `timeout`。这直接促成默认超时从 120 秒调整为 240 秒；它不能被计入成功率，也不能被忽略。
+
+### 4.3 尚未完成的容量证据
+
+约 500 条和 1000 条 Codex CLI 真实容量运行尚未完成。按当前小批次约 151 秒的实测延迟，直接执行全部计划规模会产生较长的串行运行时间；因此本报告不把单次小批次成功外推为中、大规模容量结论。
+
+## 5. 当前结论
 
 结论为 **未验证**：
 
-1. Spike-02 harness 的本地确定性边界已验证；
-2. Mock 的失败恢复和规模输入路径已验证；
-3. 真实 GLM 容量、质量和 P95 尚未验证；
-4. 不能进入“GLM 通过”或“有条件通过”的生产设计结论。
+1. Codex CLI 可以在受限的非交互进程边界下返回符合 Schema 的结构化结果；
+2. 当前公开小 fixture 的归因、来源 ID 和未解析媒体边界通过人工复核；
+3. 120 秒不足以覆盖本机 Codex CLI 的完整进程生命周期，240 秒应作为当前 Spike 默认窗口；
+4. 500/1000 条真实容量、重试后的稳定性和可接受 P95 尚未验证；
+5. 不能据此批准 Codex CLI 进入 V0/V1 生产架构。
 
-## 5. 下一阶段门槛
+## 6. 下一阶段门槛
 
-在受保护的本地环境提供 GLM 运行配置后，需要重新执行：
+后续需要在同一受保护环境、分别使用 chunk size 25 和 100，完成约 500 条与 1000 条 Codex CLI 运行，并记录：
 
-1. 小批次带人工标注 fixture；
-2. 约 500 条输入；
-3. 1000 条以上输入；
-4. 至少两个候选 chunk size；
-5. 质量人工复核和脱敏 evidence 汇总。
+- 全部 chunk 的首次/最终成功率、JSON/Schema 率、重试率和 P50/P95；
+- timeout、provider failure、empty response、invalid JSON/Schema 的分类；
+- 真实总耗时和可接受的串行运行边界；
+- 小 fixture 的人工质量复核是否在新的 Prompt/模型配置下保持通过。
 
-重新运行必须继续使用本 Spike 的安全 evidence 目录和不自动 fallback Codex CLI 的约束。完成真实 GLM 轨后，才能根据 Spec 中的门槛更新本报告结论。
+在这些证据齐全、正式 Spec 和 implementation plan 另行批准前，不启动 V0/V1 生产实现。

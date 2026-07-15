@@ -119,11 +119,11 @@ def classify_run(
     reports: Iterable[RunReport],
     quality: QualityReport,
     *,
-    has_real_glm_evidence: bool,
+    has_real_codex_evidence: bool,
     constrained: bool,
 ) -> str:
     reports_tuple = tuple(reports)
-    if not has_real_glm_evidence:
+    if not has_real_codex_evidence:
         return "unverified"
     if {report.scale for report in reports_tuple} != {"small", "medium", "large"}:
         return "unverified"
