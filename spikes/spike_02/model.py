@@ -118,6 +118,7 @@ class RunReport:
     run_id: str
     provider: ProviderName
     case_id: str
+    scale: Scale
     chunk_size: int
     request_count: int
     retry_count: int

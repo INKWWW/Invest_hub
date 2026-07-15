@@ -182,6 +182,7 @@ def run_case(
         run_id=run_id,
         provider=provider_name,
         case_id=case.case_id,
+        scale=case.scale,
         chunk_size=config.max_primary_messages,
         request_count=request_count,
         retry_count=retry_count,
