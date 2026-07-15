@@ -52,7 +52,7 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 
 ### 4.3 尚未完成的容量证据
 
-尝试使用 500 条、`chunk-size 500`、240 秒超时运行：首个 chunk 在 240,014 ms 后被正常记录为 `timeout`，没有出现此前的 runner 卡死或孤儿进程。说明 500 条单 chunk 在当前 Codex CLI/Prompt 条件下不是安全配置。约 500 条和 1000 条的完整容量运行仍未完成；本报告不把单次小批次成功外推为中、大规模容量结论。
+尝试使用 500 条、`chunk-size 500` 和 `chunk-size 250`、240 秒超时运行：两次首个 chunk 分别在 240,014 ms 和 240,009 ms 后被正常记录为 `timeout`，没有出现此前的 runner 卡死或孤儿进程。说明当前 Codex CLI/Prompt 条件下，500 和 250 都不是安全配置。约 500 条和 1000 条的完整容量运行仍未完成；本报告不把单次小批次成功外推为中、大规模容量结论。
 
 ## 5. 当前结论
 
@@ -61,12 +61,12 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 1. Codex CLI 可以在受限的非交互进程边界下返回符合 Schema 的结构化结果；
 2. 当前公开小 fixture 的归因、来源 ID 和未解析媒体边界通过人工复核；
 3. 120 秒不足以覆盖本机 Codex CLI 的完整进程生命周期，240 秒应作为当前 Spike 默认窗口；
-4. `chunk-size 500` 已实测超时；500/1000 条真实容量、重试后的稳定性和可接受 P95 尚未验证；
+4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；500/1000 条真实容量、重试后的稳定性和可接受 P95 尚未验证；
 5. 不能据此批准 Codex CLI 进入 V0/V1 生产架构。
 
 ## 6. 下一阶段门槛
 
-后续需要在同一受保护环境、优先使用 chunk size 100/250，完成约 500 条与 1000 条 Codex CLI 运行，并记录：
+后续需要在同一受保护环境、优先使用 chunk size 100 或更小，完成约 500 条与 1000 条 Codex CLI 运行，并记录：
 
 - 全部 chunk 的首次/最终成功率、JSON/Schema 率、重试率和 P50/P95；
 - timeout、provider failure、empty response、invalid JSON/Schema 的分类；
