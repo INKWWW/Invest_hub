@@ -1,0 +1,164 @@
+{
+  "case_id": "public-small-001",
+  "scale": "small",
+  "messages": [
+    {
+      "message_id": "public-001",
+      "author_id": "target-analyst",
+      "author_scope": "target",
+      "published_at": "2026-01-01T08:00:00Z",
+      "content": "ABC 的收入增速仍然稳健，但估值需要观察。",
+      "kind": "text",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-002",
+      "author_id": "other-001",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:01:00Z",
+      "content": "回复：我关注现金流，不把收入增速直接等同于买入信号。",
+      "kind": "text",
+      "parent_id": "public-001"
+    },
+    {
+      "message_id": "public-003",
+      "author_id": "other-002",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:02:00Z",
+      "content": "The group is debating margins and demand visibility.",
+      "kind": "text",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-004",
+      "author_id": "other-003",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:03:00Z",
+      "content": "XYZ 的库存数据需要和渠道反馈一起看。",
+      "kind": "text",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-005",
+      "author_id": "target-analyst",
+      "author_scope": "target",
+      "published_at": "2026-01-01T08:04:00Z",
+      "content": "我的操作倾向是先观察，不追高。",
+      "kind": "text",
+      "parent_id": "public-004"
+    },
+    {
+      "message_id": "public-006",
+      "author_id": "other-004",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:05:00Z",
+      "content": "ABC 的关键风险是毛利率继续下滑。",
+      "kind": "text",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-007",
+      "author_id": "other-005",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:06:00Z",
+      "content": "A separate topic is the timing of the next product cycle.",
+      "kind": "text",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-008",
+      "author_id": "other-006",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:07:00Z",
+      "content": "[image attachment not parsed]",
+      "kind": "unparsed_media",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-009",
+      "author_id": "other-007",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:08:00Z",
+      "content": "价格 105 和 110 只是群聊中的示例，不代表预测。",
+      "kind": "text",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-010",
+      "author_id": "other-008",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:09:00Z",
+      "content": "不要把普通成员的猜测归因给指定用户。",
+      "kind": "text",
+      "parent_id": "public-005"
+    },
+    {
+      "message_id": "public-011",
+      "author_id": "other-009",
+      "author_scope": "other",
+      "published_at": "2026-01-01T08:10:00Z",
+      "content": "Sentiment is cautious rather than outright bearish.",
+      "kind": "text",
+      "parent_id": null
+    },
+    {
+      "message_id": "public-012",
+      "author_id": "target-analyst",
+      "author_scope": "target",
+      "published_at": "2026-01-01T08:11:00Z",
+      "content": "如果现金流改善，ABC 才值得重新评估。",
+      "kind": "text",
+      "parent_id": "public-001"
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim-001",
+      "category": "fact",
+      "required_terms": ["ABC", "收入增速"],
+      "source_message_ids": ["public-001"],
+      "target_author_id": "target-analyst",
+      "forbidden_terms": []
+    },
+    {
+      "claim_id": "claim-002",
+      "category": "target_viewpoint",
+      "required_terms": ["先观察", "不追高"],
+      "source_message_ids": ["public-005"],
+      "target_author_id": "target-analyst",
+      "forbidden_terms": ["已经买入"]
+    },
+    {
+      "claim_id": "claim-003",
+      "category": "ticker",
+      "required_terms": ["XYZ", "库存"],
+      "source_message_ids": ["public-004"],
+      "target_author_id": null,
+      "forbidden_terms": []
+    },
+    {
+      "claim_id": "claim-004",
+      "category": "operation_tendency",
+      "required_terms": ["现金流", "重新评估"],
+      "source_message_ids": ["public-012"],
+      "target_author_id": "target-analyst",
+      "forbidden_terms": ["确定买入"]
+    },
+    {
+      "claim_id": "claim-005",
+      "category": "context",
+      "required_terms": ["毛利率", "风险"],
+      "source_message_ids": ["public-006"],
+      "target_author_id": null,
+      "forbidden_terms": []
+    },
+    {
+      "claim_id": "claim-006",
+      "category": "context",
+      "required_terms": ["未解析"],
+      "source_message_ids": ["public-008"],
+      "target_author_id": null,
+      "forbidden_terms": ["图片显示", "视频证明"]
+    }
+  ]
+}
