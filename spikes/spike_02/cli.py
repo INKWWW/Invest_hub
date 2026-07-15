@@ -57,7 +57,12 @@ def main(argv: list[str] | None = None) -> int:
                 model=os.environ["SPIKE02_GLM_MODEL"],
             )
         report = run_case(case, provider, config, evidence)
-        print(json.dumps(asdict(report), ensure_ascii=False, sort_keys=True))
+        summary = asdict(report)
+        summary.pop("primary_message_ids", None)
+        summary.pop("results", None)
+        summary["result_count"] = len(report.results)
+        summary["primary_message_count"] = len(report.primary_message_ids)
+        print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
         return 0
     except (OSError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
