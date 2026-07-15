@@ -1,0 +1,21 @@
+{
+  "page_id": "page-001",
+  "source_container_id": "channel-public-001",
+  "cursor_before": null,
+  "cursor_after": "cursor-001",
+  "raw_payload_ref": "fixture://basic_page.json",
+  "messages": [
+    {
+      "id": "message-001",
+      "author": {"id": "author-001", "name": "Analyst A"},
+      "channel_id": "channel-public-001",
+      "published_at": "2026-01-01T08:00:00Z",
+      "content": "人工构造的公开测试消息，ticker ABC。",
+      "content_type": "text",
+      "reply_to": null,
+      "quote": null,
+      "attachments": [],
+      "source_url": "https://discord.example/messages/message-001"
+    }
+  ]
+}
