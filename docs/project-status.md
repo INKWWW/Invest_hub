@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Current phase
 
@@ -46,7 +46,7 @@ Last updated: 2026-07-16
 - 12 条公开 fixture 的一次真实 Codex CLI 运行：最终成功率 100%、JSON/Schema 率 100%，P50/P95 均为 150,956 ms；
 - 6/6 人工质量 claims grounded 且正确归因，严重归因错误和媒体臆测均为 0；
 - 120 秒窗口出现超时，默认窗口已调整为 240 秒；
-- `chunk-size 500` 和 `chunk-size 250` 的 500 条真实运行首个 chunk 均在约 240 秒超时；修复后已能正常回收进程，当前建议降至 `chunk-size 100` 或更小；500/1000 条完整容量尚未验证，结论为 `unverified`；
+- `chunk-size 500` 和前一轮 `chunk-size 250` 的 500 条真实运行首个 chunk 均在约 240 秒超时；2026-07-17 重跑 `chunk-size 250` 时首个 chunk 约 77 秒成功，第二个 chunk 三次均在约 240 秒超时，最终成功率 50%，进程组均正常回收；因此 250 仍不是安全配置，当前建议降至 `chunk-size 100` 或更小，500/1000 条完整容量尚未验证，结论为 `unverified`；
 - Codex timeout 清理回归测试已加入，完整确定性测试为 35/35；
 - 脱敏决策报告：[Spike-02 决策报告](spikes/2026-07-15-spike-02-decision-report.md)。
 
