@@ -5,6 +5,7 @@ import os
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -50,18 +51,22 @@ class MockProvider:
     def __init__(self, scripts: Mapping[str, Sequence[MockOutcome]]):
         self._scripts = {chunk_id: tuple(outcomes) for chunk_id, outcomes in scripts.items()}
         self._calls: dict[str, int] = {}
+        self._lock = threading.Lock()
 
     @property
     def call_count(self) -> int:
-        return sum(self._calls.values())
+        with self._lock:
+            return sum(self._calls.values())
 
     def calls_for(self, chunk_id: str) -> int:
-        return self._calls.get(chunk_id, 0)
+        with self._lock:
+            return self._calls.get(chunk_id, 0)
 
     def complete(self, request: LLMRequest) -> ProviderResponse:
         chunk_id = request.chunk.chunk_id
-        call_index = self._calls.get(chunk_id, 0)
-        self._calls[chunk_id] = call_index + 1
+        with self._lock:
+            call_index = self._calls.get(chunk_id, 0)
+            self._calls[chunk_id] = call_index + 1
         script = self._scripts.get(chunk_id, ())
         if call_index >= len(script):
             outcome = MockOutcome.failure("provider_script_exhausted")
