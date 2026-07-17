@@ -64,6 +64,24 @@ PYTHONPATH=spikes python3 -m spike_02.cli codex \
   --codex-timeout-seconds 240
 ```
 
+### 有界并发
+
+`--max-concurrency` 控制同时运行的独立 `codex exec` 请求数，默认值为 `1`，即串行兼容模式。容量 Spike 可以显式使用 `2`：
+
+```bash
+PYTHONPATH=spikes python3 -m spike_02.cli codex \
+  --synthetic-count 500 \
+  --evidence-dir /private/tmp/invest-hub-spike-02-evidence/codex-500-c100-c2 \
+  --chunk-size 100 \
+  --max-concurrency 2 \
+  --max-attempts 3 \
+  --codex-timeout-seconds 240
+```
+
+并发只发生在不同 chunk 的 Provider 请求之间；单个 chunk 的重试仍由同一个 worker 独立完成。EvidenceStore 会串行化本地 JSONL/JSON 写入，并发上限和实际活动请求数会写入 `metrics.json` 的 `max_concurrency` 与 `max_active_requests`。
+
+本 Spike 当前只验证 `max-concurrency=2`，不复用 Codex 会话，也不引入 app-server、生产任务调度或更大的 chunk。规模 fixture 仍只用于容量与耗时观察，不能据此宣称业务质量通过。
+
 运行规模 fixture：
 
 ```bash

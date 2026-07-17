@@ -82,6 +82,24 @@ class CLITests(unittest.TestCase):
             self.assertIn("batch_elapsed_ms", metrics)
             self.assertIn("max_active_requests", metrics)
 
+            with tempfile.TemporaryDirectory() as default_directory:
+                default_code = main(
+                    [
+                        "codex",
+                        "--fixture",
+                        FIXTURE_PATH,
+                        "--evidence-dir",
+                        default_directory,
+                        "--max-attempts",
+                        "1",
+                    ]
+                )
+                self.assertEqual(default_code, 0)
+                default_metrics = json.loads(
+                    (Path(default_directory) / "metrics.json").read_text()
+                )
+                self.assertEqual(default_metrics["max_concurrency"], 1)
+
     def test_cli_rejects_non_positive_concurrency(self):
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(
