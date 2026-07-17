@@ -4,9 +4,9 @@ Last updated: 2026-07-18
 
 ## Current phase
 
-**Discovery / Spike-01 已完成，Spike-02 Codex CLI harness 和小批次验证已完成，但容量结论未完成**
+**Discovery / Spike-01 已完成，Spike-02 Codex CLI harness、并发验证和小批次验证已完成，但容量结论未完成**
 
-项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理和小批次质量验证已完成，但 500/1000 条真实容量仍未验证。
+项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理、小批次质量验证和最多 2 并发容量验证已完成，但 1000 条真实容量、重复稳定性和生产边界仍未验证。
 
 ## Approval status
 
@@ -14,9 +14,11 @@ Last updated: 2026-07-18
   - [模块 1 总体设计](superpowers/specs/2026-07-15-invest-hub-module-1-project-design.md)
   - [Spike-01 Discord 增量采集设计](superpowers/specs/2026-07-15-spike-01-opencli-discord-incremental-design.md)
   - [Spike-02 Codex CLI 容量与质量设计](superpowers/specs/2026-07-15-spike-02-free-llm-capacity-quality-design.md)
+  - [Spike-02 有界并发设计](superpowers/specs/2026-07-18-spike-02-bounded-concurrency-design.md)
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
+  - [Spike-02 有界并发计划](superpowers/plans/2026-07-18-spike-02-bounded-concurrency-plan.md)
 - Approved technology stack：无
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
@@ -41,21 +43,22 @@ Last updated: 2026-07-18
 
 ## Spike-02 result
 
-- 确定性测试：35/35 通过；
+- 确定性测试：40/40 通过；
 - Codex CLI：`codex-cli 0.144.3`，当前运行时报告模型为 `gpt-5.6-luna`；
 - 12 条公开 fixture 的一次真实 Codex CLI 运行：最终成功率 100%、JSON/Schema 率 100%，P50/P95 均为 150,956 ms；
 - 6/6 人工质量 claims grounded 且正确归因，严重归因错误和媒体臆测均为 0；
 - 120 秒窗口出现超时，默认窗口已调整为 240 秒；
 - `chunk-size 500` 和前一轮 `chunk-size 250` 的 500 条真实运行首个 chunk 均在约 240 秒超时；2026-07-17 重跑 `chunk-size 250` 时首个 chunk 约 77 秒成功，第二个 chunk 三次均在约 240 秒超时，最终成功率 50%，进程组均正常回收；因此 250 仍不是安全配置，当前建议降至 `chunk-size 100` 或更小，500/1000 条完整容量尚未验证，结论为 `unverified`；
 - 2026-07-18 使用 `chunk-size 100` 完成 500 条 synthetic capacity run：5/5 chunk 首次及最终成功，0 次重试，JSON/Schema 率 100%，P50/P95 为 123,354/157,740 ms，进程退出码均为 0；该结果支持 100 作为当前安全候选，但 1000 条容量、重复运行稳定性和业务质量仍未验证；
-- Codex timeout 清理回归测试已加入，完整确定性测试为 35/35；
+- 在不复用 Codex 会话的前提下增加最多 2 并发：公开小 fixture smoke 为 4/4 成功、批次耗时 39,884 ms、`max_active_requests=2`；500 条 `chunk-size 100` synthetic run 为 5/5 成功、0 次重试、批次墙钟 321,965 ms、P50/P95 为 127,935/129,800 ms，较串行请求延迟总和 645,827 ms 约快 2.006x；该证据只支持容量吞吐改善，不支持业务质量或生产限流结论；
+- Codex timeout 清理回归测试、EvidenceStore 并发写入保护和 runner 并发/重试隔离测试已加入，完整确定性测试为 40/40；
 - 脱敏决策报告：[Spike-02 决策报告](spikes/2026-07-15-spike-02-decision-report.md)。
 
 小批次成功不等同于容量通过，也不批准 V0/V1 生产实现或自动 fallback。
 
 ## Next gate
 
-下一阶段需要在本地受保护环境使用 chunk size 100 或更小完成约 1000 条 Codex CLI 真实容量运行，并视需要重复 500 条运行验证稳定性；同时完成 P50/P95、失败分类和质量复核，再根据证据更新 Spike-02 结论。
+下一阶段需要在本地受保护环境使用 chunk size 100 或更小完成约 1000 条 Codex CLI 真实容量运行，并重复 500 条运行验证串行/最多 2 并发的稳定性；同时完成 P50/P95、失败分类和质量复核，再根据证据更新 Spike-02 结论。
 
 在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
 

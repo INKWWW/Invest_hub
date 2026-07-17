@@ -4,7 +4,7 @@
 
 - 日期：2026-07-15；最近更新：2026-07-18
 - 结论：**未验证（unverified）**
-- 执行内容：本地确定性 harness、Mock 规模对照、Codex CLI 小批次真实运行和人工质量复核
+- 执行内容：本地确定性 harness、Mock 规模对照、Codex CLI 小批次真实运行、人工质量复核和有界并发容量验证
 - 真实 Provider：本机已登录的 Codex CLI；没有直接调用 GLM 或其他外部模型 API
 - 本报告不批准 V0/V1 生产实现，也不批准自动 fallback
 
@@ -16,7 +16,7 @@
 
 ## 2. 确定性验证结果
 
-- 确定性测试：35/35 通过；
+- 确定性测试：40/40 通过；
 - Mock 小批次、约 500 条和 1000 条规模路径保持可运行；
 - Mock 的规模结果只证明 harness 的 chunk、重试、Schema 和 evidence 流程，不代表 Codex CLI 的容量或质量。
 
@@ -25,7 +25,7 @@
 - CLI：`codex-cli 0.144.3`；
 - 运行时报告模型：`gpt-5.6-luna`；
 - Provider：Codex CLI 当前登录配置；
-- 运行方式：单 chunk 一个非交互 Codex 进程，低并发、只读项目边界；
+- 运行方式：单 chunk 一个非交互 Codex 进程；默认串行，容量验证显式使用最多 2 个并发 worker，项目边界只读；
 - 默认进程超时：240 秒。一次小批次请求实测约 151 秒完成，120 秒窗口会在最终 JSON 已生成但进程尚未退出时误判为 timeout。Provider 已改为独立进程组、文件诊断流和有界清理。
 
 ## 4. 真实运行结果
@@ -56,6 +56,16 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 
 2026-07-18 使用 500 条 synthetic fixture、`chunk-size 100` 和 240 秒超时运行：5 个 chunk 全部首次成功，最终成功率 100%，JSON/Schema 率 100%，请求数 5、重试数 0，P50/P95 为 123,354/157,740 ms，五个请求耗时合计 645,827 ms；所有进程退出码均为 0。该结果支持 100 作为当前安全候选，但 synthetic fixture 只能证明当前规模的调用容量，不能证明业务质量；1000 条容量、重复运行稳定性和新的质量复核仍未完成。
 
+### 4.4 有界并发验证
+
+在不复用 Codex 会话、不改变 Provider 和 chunk size 的前提下，增加标准库 `ThreadPoolExecutor` 的最多 2 worker 模式；EvidenceStore 对本地 JSON/JSONL 写入加锁，单 chunk 的重试仍保持独立。
+
+- 公开小 fixture smoke：12 条消息、`chunk-size 3`、4 个 chunk、`max-concurrency 2`；4/4 成功、0 重试，批次耗时 39,884 ms，`max_active_requests=2`。
+- 500 条 synthetic fixture：5 个 chunk、`chunk-size 100`、`max-concurrency 2`；5/5 首次及最终成功，0 重试，JSON/Schema 率 100%，P50/P95 为 127,935/129,800 ms，批次墙钟 321,965 ms，`max_active_requests=2`。
+- 与同一 500 条、`chunk-size 100` 串行基线的请求耗时合计 645,827 ms 相比，本轮观测 speedup 约 2.006x；并发 evidence 的 5 条 request、5 条 result 和 5 个 raw response 均完整，所有 Provider 状态为 `success`。
+
+该结果验证了“独立 chunk 的最多 2 并发”可以缩短 synthetic capacity 的批次耗时，但不代表业务质量提升，也不代表 1000 条、重复运行稳定性或生产限流边界已经通过。
+
 ## 5. 当前结论
 
 结论为 **未验证**：
@@ -63,8 +73,9 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 1. Codex CLI 可以在受限的非交互进程边界下返回符合 Schema 的结构化结果；
 2. 当前公开小 fixture 的归因、来源 ID 和未解析媒体边界通过人工复核；
 3. 120 秒不足以覆盖本机 Codex CLI 的完整进程生命周期，240 秒应作为当前 Spike 默认窗口；
-4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；500 条在 `chunk-size 100` 的一次 synthetic run 中达到 100% 首次/最终成功率，P95 为 157,740 ms，但 1000 条容量、重复稳定性和可接受生产边界尚未验证；
-5. 不能据此批准 Codex CLI 进入 V0/V1 生产架构。
+4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；500 条在 `chunk-size 100` 的串行和最多 2 并发运行中均完成，但 1000 条容量、重复稳定性和可接受生产边界尚未验证；
+5. 最多 2 并发将一次 500 条 synthetic 批次的观测墙钟从约 645.8 秒降至约 322.0 秒，但这只是容量吞吐证据；
+6. 不能据此批准 Codex CLI 进入 V0/V1 生产架构。
 
 ## 6. 下一阶段门槛
 
