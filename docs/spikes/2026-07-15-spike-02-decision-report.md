@@ -2,7 +2,7 @@
 
 ## 报告状态
 
-- 日期：2026-07-15；最近更新：2026-07-17
+- 日期：2026-07-15；最近更新：2026-07-18
 - 结论：**未验证（unverified）**
 - 执行内容：本地确定性 harness、Mock 规模对照、Codex CLI 小批次真实运行和人工质量复核
 - 真实 Provider：本机已登录的 Codex CLI；没有直接调用 GLM 或其他外部模型 API
@@ -54,6 +54,8 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 
 此前尝试使用 500 条、`chunk-size 500` 和 `chunk-size 250`、240 秒超时运行，首个 chunk 分别在 240,014 ms 和 240,009 ms 后被正常记录为 `timeout`。2026-07-17 重跑 500 条、`chunk-size 250`：chunk 0000 首次成功，耗时 77,235 ms；chunk 0001 的三次尝试分别在 240,019 ms、240,017 ms、240,023 ms 超时，最终成功率 50%，重试次数 2，P50/P95 为 240,017/240,023 ms。所有超时均以退出码 -9 正常回收，没有出现此前的 runner 卡死或孤儿进程。该结果说明 250 仍不是安全配置；约 500 条和 1000 条的完整容量运行仍未完成，本报告不把部分成功外推为中、大规模容量结论。
 
+2026-07-18 使用 500 条 synthetic fixture、`chunk-size 100` 和 240 秒超时运行：5 个 chunk 全部首次成功，最终成功率 100%，JSON/Schema 率 100%，请求数 5、重试数 0，P50/P95 为 123,354/157,740 ms，五个请求耗时合计 645,827 ms；所有进程退出码均为 0。该结果支持 100 作为当前安全候选，但 synthetic fixture 只能证明当前规模的调用容量，不能证明业务质量；1000 条容量、重复运行稳定性和新的质量复核仍未完成。
+
 ## 5. 当前结论
 
 结论为 **未验证**：
@@ -61,12 +63,12 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 1. Codex CLI 可以在受限的非交互进程边界下返回符合 Schema 的结构化结果；
 2. 当前公开小 fixture 的归因、来源 ID 和未解析媒体边界通过人工复核；
 3. 120 秒不足以覆盖本机 Codex CLI 的完整进程生命周期，240 秒应作为当前 Spike 默认窗口；
-4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；250 在重试后仍只有 50% 最终成功率，500/1000 条真实容量和可接受 P95 尚未验证；
+4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；500 条在 `chunk-size 100` 的一次 synthetic run 中达到 100% 首次/最终成功率，P95 为 157,740 ms，但 1000 条容量、重复稳定性和可接受生产边界尚未验证；
 5. 不能据此批准 Codex CLI 进入 V0/V1 生产架构。
 
 ## 6. 下一阶段门槛
 
-后续需要在同一受保护环境、优先使用 chunk size 100 或更小，完成约 500 条与 1000 条 Codex CLI 运行，并记录：
+后续需要在同一受保护环境、优先使用 chunk size 100 或更小，完成约 1000 条 Codex CLI 运行，并视需要重复 500 条运行，同时记录：
 
 - 全部 chunk 的首次/最终成功率、JSON/Schema 率、重试率和 P50/P95；
 - timeout、provider failure、empty response、invalid JSON/Schema 的分类；

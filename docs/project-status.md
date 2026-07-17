@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Current phase
 
@@ -47,6 +47,7 @@ Last updated: 2026-07-17
 - 6/6 人工质量 claims grounded 且正确归因，严重归因错误和媒体臆测均为 0；
 - 120 秒窗口出现超时，默认窗口已调整为 240 秒；
 - `chunk-size 500` 和前一轮 `chunk-size 250` 的 500 条真实运行首个 chunk 均在约 240 秒超时；2026-07-17 重跑 `chunk-size 250` 时首个 chunk 约 77 秒成功，第二个 chunk 三次均在约 240 秒超时，最终成功率 50%，进程组均正常回收；因此 250 仍不是安全配置，当前建议降至 `chunk-size 100` 或更小，500/1000 条完整容量尚未验证，结论为 `unverified`；
+- 2026-07-18 使用 `chunk-size 100` 完成 500 条 synthetic capacity run：5/5 chunk 首次及最终成功，0 次重试，JSON/Schema 率 100%，P50/P95 为 123,354/157,740 ms，进程退出码均为 0；该结果支持 100 作为当前安全候选，但 1000 条容量、重复运行稳定性和业务质量仍未验证；
 - Codex timeout 清理回归测试已加入，完整确定性测试为 35/35；
 - 脱敏决策报告：[Spike-02 决策报告](spikes/2026-07-15-spike-02-decision-report.md)。
 
@@ -54,7 +55,7 @@ Last updated: 2026-07-17
 
 ## Next gate
 
-下一阶段需要在本地受保护环境优先测试 chunk size 100 或更小，再决定是否继续约 500 条和 1000 条 Codex CLI 真实容量运行，并完成 P50/P95、失败分类和质量复核，再根据证据更新 Spike-02 结论。
+下一阶段需要在本地受保护环境使用 chunk size 100 或更小完成约 1000 条 Codex CLI 真实容量运行，并视需要重复 500 条运行验证稳定性；同时完成 P50/P95、失败分类和质量复核，再根据证据更新 Spike-02 结论。
 
 在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
 
