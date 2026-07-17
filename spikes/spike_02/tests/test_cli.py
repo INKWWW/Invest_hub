@@ -1,4 +1,5 @@
 import os
+import json
 import stat
 import tempfile
 import textwrap
@@ -50,6 +51,53 @@ class CLITests(unittest.TestCase):
                 else:
                     os.environ["SPIKE02_CODEX_MODEL"] = old_model
             self.assertEqual(code, 0)
+
+    def test_cli_records_concurrency_telemetry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = self._write_fake_codex(directory)
+            old_binary = os.environ.get("SPIKE02_CODEX_BIN")
+            os.environ["SPIKE02_CODEX_BIN"] = binary
+            try:
+                code = main(
+                    [
+                        "codex",
+                        "--fixture",
+                        FIXTURE_PATH,
+                        "--evidence-dir",
+                        directory,
+                        "--max-attempts",
+                        "1",
+                        "--max-concurrency",
+                        "2",
+                    ]
+                )
+            finally:
+                if old_binary is None:
+                    os.environ.pop("SPIKE02_CODEX_BIN", None)
+                else:
+                    os.environ["SPIKE02_CODEX_BIN"] = old_binary
+            self.assertEqual(code, 0)
+            metrics = json.loads((Path(directory) / "metrics.json").read_text())
+            self.assertEqual(metrics["max_concurrency"], 2)
+            self.assertIn("batch_elapsed_ms", metrics)
+            self.assertIn("max_active_requests", metrics)
+
+    def test_cli_rejects_non_positive_concurrency(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                main(
+                    [
+                        "mock",
+                        "--fixture",
+                        FIXTURE_PATH,
+                        "--evidence-dir",
+                        directory,
+                        "--max-concurrency",
+                        "0",
+                    ]
+                ),
+                2,
+            )
 
     def test_chunk_prompt_forbids_tools_and_requires_json(self):
         case = load_fixture(Path(FIXTURE_PATH))

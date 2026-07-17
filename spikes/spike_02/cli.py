@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
             max_primary_messages=args.chunk_size,
             max_attempts=args.max_attempts,
             prompt_version=args.prompt_version,
+            max_concurrency=args.max_concurrency,
         )
         if args.command == "mock":
             chunks = build_chunks(case, args.chunk_size, config.context_limit)
@@ -75,6 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--evidence-dir", required=True)
         subparser.add_argument("--chunk-size", type=int, default=25)
         subparser.add_argument("--max-attempts", type=int, default=3)
+        subparser.add_argument("--max-concurrency", type=int, default=1)
         subparser.add_argument("--prompt-version", default="spike-02-v1")
         subparser.add_argument(
             "--codex-timeout-seconds",

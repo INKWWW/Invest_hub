@@ -131,3 +131,6 @@ class RunReport:
     p95_latency_ms: int
     primary_message_ids: tuple[str, ...]
     results: tuple[ChunkResult, ...]
+    batch_elapsed_ms: int
+    max_concurrency: int
+    max_active_requests: int

@@ -42,6 +42,7 @@ class RunConfig:
     max_attempts: int = 3
     prompt_version: str = "spike-02-v1"
     retry_delays_seconds: tuple[float, ...] = (1.0, 2.0)
+    max_concurrency: int = 1
 
 
 def run_case(
@@ -54,6 +55,9 @@ def run_case(
 ) -> RunReport:
     if config.max_attempts < 1:
         raise ValueError("max_attempts must be positive")
+    if config.max_concurrency < 1:
+        raise ValueError("max_concurrency must be positive")
+    batch_started = time.monotonic_ns()
     run_id = uuid.uuid4().hex
     initial_chunks = list(
         build_chunks(
@@ -203,6 +207,9 @@ def run_case(
         p95_latency_ms=_percentile(latencies, 0.95),
         primary_message_ids=tuple(message.message_id for message in case.messages),
         results=tuple(results),
+        batch_elapsed_ms=(time.monotonic_ns() - batch_started) // 1_000_000,
+        max_concurrency=config.max_concurrency,
+        max_active_requests=1 if request_count else 0,
     )
     evidence.persist_metrics(report)
     return report

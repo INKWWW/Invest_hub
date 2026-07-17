@@ -51,6 +51,9 @@ def successful_report(scale):
         p95_latency_ms=20,
         primary_message_ids=(),
         results=(),
+        batch_elapsed_ms=0,
+        max_concurrency=1,
+        max_active_requests=0,
     )
 
 
