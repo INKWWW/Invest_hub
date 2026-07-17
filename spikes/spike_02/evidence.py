@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -16,35 +17,40 @@ class EvidenceError(RuntimeError):
 class EvidenceStore:
     def __init__(self, root: Path):
         self.root = root
+        self._lock = threading.Lock()
         (root / "raw_responses").mkdir(parents=True, exist_ok=True)
 
     def persist_request(self, request: LLMRequest, response: ProviderResponse) -> None:
-        self._append_jsonl(
-            self.root / "requests.jsonl",
-            {
-                "run_id": request.run_id,
-                "prompt_version": request.prompt_version,
-                "case_id": request.chunk.case_id,
-                "chunk_id": request.chunk.chunk_id,
-                "attempt": request.attempt,
-                "provider_response_status": response.status,
-                "latency_ms": response.latency_ms,
-                "input_tokens": response.input_tokens,
-                "output_tokens": response.output_tokens,
-                "error_code": response.error_code,
-                "process_exit_code": response.process_exit_code,
-                "stderr_present": bool(response.diagnostic),
-            },
-        )
+        with self._lock:
+            self._append_jsonl(
+                self.root / "requests.jsonl",
+                {
+                    "run_id": request.run_id,
+                    "prompt_version": request.prompt_version,
+                    "case_id": request.chunk.case_id,
+                    "chunk_id": request.chunk.chunk_id,
+                    "attempt": request.attempt,
+                    "provider_response_status": response.status,
+                    "latency_ms": response.latency_ms,
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                    "error_code": response.error_code,
+                    "process_exit_code": response.process_exit_code,
+                    "stderr_present": bool(response.diagnostic),
+                },
+            )
 
     def persist_result(self, result: ChunkResult) -> None:
-        self._append_jsonl(self.root / "results.jsonl", asdict(result))
+        with self._lock:
+            self._append_jsonl(self.root / "results.jsonl", asdict(result))
 
     def persist_raw_response(self, request_id: str, payload: object) -> None:
-        self._write_json(self.root / "raw_responses" / f"{request_id}.json", payload)
+        with self._lock:
+            self._write_json(self.root / "raw_responses" / f"{request_id}.json", payload)
 
     def persist_metrics(self, report: RunReport) -> None:
-        self._write_json(self.root / "metrics.json", asdict(report))
+        with self._lock:
+            self._write_json(self.root / "metrics.json", asdict(report))
 
     @staticmethod
     def _write_json(target: Path, payload: object) -> None:

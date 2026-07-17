@@ -1,6 +1,9 @@
 import json
 import tempfile
+import threading
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from spike_02.evidence import EvidenceStore
@@ -8,6 +11,70 @@ from spike_02.model import Chunk, LLMRequest, ProviderResponse
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_concurrent_request_persistence_serializes_file_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = EvidenceStore(root)
+            original_append = evidence._append_jsonl
+            state_lock = threading.Lock()
+            active = 0
+            max_active = 0
+
+            def slow_append(target, payload):
+                nonlocal active, max_active
+                with state_lock:
+                    active += 1
+                    max_active = max(max_active, active)
+                try:
+                    time.sleep(0.01)
+                    original_append(target, payload)
+                finally:
+                    with state_lock:
+                        active -= 1
+
+            evidence._append_jsonl = slow_append
+
+            def persist(index):
+                chunk = Chunk(
+                    chunk_id=f"case-{index:04d}",
+                    case_id="case",
+                    index=index,
+                    primary_message_ids=(f"public-{index:04d}",),
+                    context_message_ids=(),
+                    prompt_text="secret prompt",
+                    input_chars=13,
+                    prompt_lines=(f"primary\tpublic-{index:04d}",),
+                )
+                evidence.persist_request(
+                    LLMRequest("run-001", chunk, 1, "test-v1"),
+                    ProviderResponse(
+                        "success",
+                        "{}",
+                        10,
+                        None,
+                        None,
+                        "stop",
+                        None,
+                        diagnostic="secret diagnostic",
+                    ),
+                )
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                list(executor.map(persist, range(40)))
+
+            lines = [
+                json.loads(line)
+                for line in (root / "requests.jsonl").read_text().splitlines()
+            ]
+            self.assertEqual(max_active, 1)
+            self.assertEqual(len(lines), 40)
+            self.assertEqual(
+                {row["chunk_id"] for row in lines},
+                {f"case-{index:04d}" for index in range(40)},
+            )
+            self.assertTrue(all("prompt_text" not in row for row in lines))
+            self.assertTrue(all("secret diagnostic" not in row for row in lines))
+
     def test_safe_request_record_contains_metadata_but_not_prompt_or_key(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
