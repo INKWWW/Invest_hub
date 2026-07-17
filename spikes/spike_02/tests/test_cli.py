@@ -71,34 +71,34 @@ class CLITests(unittest.TestCase):
                         "2",
                     ]
                 )
+                self.assertEqual(code, 0)
+                metrics = json.loads((Path(directory) / "metrics.json").read_text())
+                self.assertEqual(metrics["max_concurrency"], 2)
+                self.assertIn("batch_elapsed_ms", metrics)
+                self.assertIn("max_active_requests", metrics)
+
+                with tempfile.TemporaryDirectory() as default_directory:
+                    default_code = main(
+                        [
+                            "codex",
+                            "--fixture",
+                            FIXTURE_PATH,
+                            "--evidence-dir",
+                            default_directory,
+                            "--max-attempts",
+                            "1",
+                        ]
+                    )
+                    self.assertEqual(default_code, 0)
+                    default_metrics = json.loads(
+                        (Path(default_directory) / "metrics.json").read_text()
+                    )
+                    self.assertEqual(default_metrics["max_concurrency"], 1)
             finally:
                 if old_binary is None:
                     os.environ.pop("SPIKE02_CODEX_BIN", None)
                 else:
                     os.environ["SPIKE02_CODEX_BIN"] = old_binary
-            self.assertEqual(code, 0)
-            metrics = json.loads((Path(directory) / "metrics.json").read_text())
-            self.assertEqual(metrics["max_concurrency"], 2)
-            self.assertIn("batch_elapsed_ms", metrics)
-            self.assertIn("max_active_requests", metrics)
-
-            with tempfile.TemporaryDirectory() as default_directory:
-                default_code = main(
-                    [
-                        "codex",
-                        "--fixture",
-                        FIXTURE_PATH,
-                        "--evidence-dir",
-                        default_directory,
-                        "--max-attempts",
-                        "1",
-                    ]
-                )
-                self.assertEqual(default_code, 0)
-                default_metrics = json.loads(
-                    (Path(default_directory) / "metrics.json").read_text()
-                )
-                self.assertEqual(default_metrics["max_concurrency"], 1)
 
     def test_cli_rejects_non_positive_concurrency(self):
         with tempfile.TemporaryDirectory() as directory:
