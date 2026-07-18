@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from .errors import LeaseUncertain
 from .lease import LeaseState
@@ -63,7 +63,8 @@ class Worker:
                 raise LeaseUncertain("lease expired before execution")
             self.preflight(claim)
             self.state = WorkerState.EXECUTING
-            result = self.execute(claim)
+            execution = self.execute(claim)
+            result = self._persist_before_result(execution)
             self.state = WorkerState.REPORTING
             acknowledgement = self.protocol.report_result(result)
             if acknowledgement.get("status") != "succeeded":
@@ -71,6 +72,7 @@ class Worker:
             self.state = WorkerState.IDLE
             return RunOutcome("succeeded", task_id, acknowledgement=acknowledgement)
         except Exception as exc:
+            self._report_failure(claim, exc)
             return self._recover(task_id, exc)
 
     def stop(self) -> None:
@@ -79,6 +81,57 @@ class Worker:
     @staticmethod
     def _not_configured(_claim: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("worker executor is not configured")
+
+    def _persist_before_result(self, execution: dict[str, Any]) -> dict[str, Any]:
+        """Persist a complete execution before allowing a success result.
+
+        Legacy deterministic executors return a task-result directly.  The
+        authorized runtime returns ``{persistence, result}``, which makes the
+        remote persistence acknowledgement an explicit state transition.
+        """
+
+        persistence = execution.get("persistence")
+        nested_result = execution.get("result")
+        if persistence is None and nested_result is None:
+            return execution
+        if not isinstance(persistence, Mapping) or not isinstance(nested_result, Mapping):
+            raise RuntimeError("invalid execution bundle")
+
+        acknowledgement = self.protocol.persist(dict(persistence))
+        if acknowledgement.get("persisted") is not True:
+            raise LeaseUncertain("control plane did not acknowledge persistence")
+        run_ids = acknowledgement.get("structured_run_ids")
+        if not isinstance(run_ids, list) or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
+            raise LeaseUncertain("control plane returned invalid structured run IDs")
+        result = dict(nested_result)
+        result["structured_run_ids"] = run_ids
+        return result
+
+    def _report_failure(self, claim: Mapping[str, Any], error: Exception) -> None:
+        failure_class = str(getattr(error, "failure_class", "unknown"))
+        allowed = {
+            "timeout", "provider_failure", "empty_response", "invalid_json", "schema_error",
+            "persistence_failure", "lease_expired", "network_error", "preflight", "unauthorized",
+            "opencli_contract", "opencli_missing", "opencli_stale", "unknown",
+        }
+        if failure_class not in allowed:
+            failure_class = "unknown"
+        try:
+            self.protocol.report_failure(
+                {
+                    "contract_version": "v0",
+                    "task_id": str(claim["task_id"]),
+                    "attempt": int(claim["attempt"]),
+                    "status": "retryable_failed",
+                    "failure_class": failure_class,
+                    "safe_checkpoint": claim.get("safe_checkpoint"),
+                    "retryable": True,
+                }
+            )
+        except Exception:
+            # A failed failure report must not be mistaken for a successful
+            # task completion; the lease will remain conservative for retry.
+            return
 
     def _recover(self, task_id: str | None, error: Exception) -> RunOutcome:
         self.state = WorkerState.RECOVERING
