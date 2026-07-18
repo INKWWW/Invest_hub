@@ -6,7 +6,9 @@ Invest Hub 是面向个人及少量受邀用户的投资信息与投资决策工
 
 ## 当前状态
 
-项目处于 Discovery 阶段。尚无批准后的 specification 和 implementation plan，因此当前仓库只维护需求输入和项目治理结构，不包含应用代码、框架脚手架或生产依赖。
+V0「基础设施与技术验证」的确定性实现与回归已完成，结论为有条件通过：控制面、Worker、Active Adapter、Provider 边界、管理员调试页、RLS 和恢复 harness 均已验证。真实 Discord 页面与隔离远程部署尚未执行，因此这不是生产发布批准。
+
+仓库现在包含 V0 验证实现和脱敏 E2E harness，但不包含真实内容、凭据、Prompt、完整响应或本地 evidence。进入 V1 前必须补齐授权真实页面和远程部署验收。
 
 详见 [docs/project-status.md](docs/project-status.md)。
 
@@ -15,10 +17,14 @@ Invest Hub 是面向个人及少量受邀用户的投资信息与投资决策工
 - [docs/intake.md](docs/intake.md)：前期讨论形成的需求输入、产品边界、推进版本、测试要求和待确认事项。
 - [AGENTS.md](AGENTS.md)：项目治理规则、当前阶段门禁、数据安全和工作方式。
 - [docs/project-status.md](docs/project-status.md)：当前阶段、批准状态和后续工作入口。
+- [docs/superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md](docs/superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md)：V0 已批准 Spec。
+- [docs/superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md](docs/superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)：V0 已批准 implementation plan。
+- [docs/engineering-journal/2026-07-18-v0.md](docs/engineering-journal/2026-07-18-v0.md)：V0 执行记录与验证证据。
+- [docs/spikes/2026-07-18-v0-decision-report.md](docs/spikes/2026-07-18-v0-decision-report.md)：V0 脱敏 Final Report。
 
 ## 后续推进方向
 
-按 intake 中的建议，后续先审阅和澄清需求，再分别推进 OpenCLI Discord Web 采集 Spike、LLM 容量 Spike、V0 基础设施、V1 Discord、V2 X 和 V3 收敛。每个阶段都应先形成并批准对应的 specification 和 implementation plan，再进入实现。
+下一步先补齐 V0 conditional gate：授权真实 Discord 增量页和隔离远程部署/HTTP 验收；通过后再为 V1 Discord 编写独立 Spec 和 implementation plan。V2 X、V3 收敛以及模块 2–4 仍不在当前范围。
 
 ## 安全边界
 
