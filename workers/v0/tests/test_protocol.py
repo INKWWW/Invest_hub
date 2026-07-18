@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+from invest_hub_worker.errors import AlreadyEnrolled, ProtocolError
+from invest_hub_worker.protocol import WorkerProtocol
+
+
+class FakeTransport:
+    def __init__(self, *responses: tuple[int, object]) -> None:
+        self.responses = list(responses)
+        self.calls: list[dict[str, object]] = []
+
+    def __call__(self, method: str, url: str, body: object | None, headers: dict[str, str], timeout: float) -> tuple[int, object]:
+        self.calls.append({"method": method, "url": url, "body": body, "headers": headers, "timeout": timeout})
+        if not self.responses:
+            raise AssertionError("unexpected transport call")
+        return self.responses.pop(0)
+
+
+def enrolment_response() -> dict[str, object]:
+    return {
+        "contract_version": "v0",
+        "worker_id": "worker-1",
+        "device_secret": "device-secret-that-is-long-enough-123456789",
+        "expires_at": "2099-01-01T00:00:00Z",
+    }
+
+
+class WorkerProtocolTests(unittest.TestCase):
+    def test_enrol_persists_secret_but_never_the_raw_code(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = Path(directory) / "credentials.json"
+            transport = FakeTransport((201, enrolment_response()))
+            protocol = WorkerProtocol("https://control.example.invalid", credential_path, transport=transport)
+
+            credential = protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(credential.worker_id, "worker-1")
+            self.assertNotIn("one-time-enrolment-code", credential_path.read_text(encoding="utf-8"))
+            self.assertEqual(os.stat(credential_path).st_mode & 0o777, 0o600)
+            with self.assertRaises(AlreadyEnrolled):
+                protocol.enrol("second-code")
+
+    def test_heartbeat_and_claim_send_contract_and_bearer_secret(self) -> None:
+        heartbeat = {
+            "contract_version": "v0",
+            "worker_id": "worker-1",
+            "sent_at": "2099-01-01T00:00:00Z",
+            "status": "idle",
+            "capabilities": ["discord_sync"],
+        }
+        claim = {
+            "contract_version": "v0",
+            "task_id": "task-1",
+            "attempt": 1,
+            "task_type": "discord_sync",
+            "source_id": "source-1",
+            "parameter_version": "v0-default",
+            "lease_expires_at": "2099-01-01T00:10:00Z",
+            "safe_checkpoint": None,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, heartbeat), (200, claim))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+            self.assertEqual(protocol.heartbeat("idle", ["discord_sync"], "2099-01-01T00:00:00Z")["status"], "idle")
+            self.assertEqual(protocol.claim()["task_id"], "task-1")
+            self.assertEqual(transport.calls[1]["headers"].get("Authorization"), f"Bearer {enrolment_response()['device_secret']}")
+            self.assertEqual(transport.calls[1]["body"]["contract_version"], "v0")
+
+    def test_empty_claim_is_none_and_invalid_response_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (204, None), (200, {"unexpected": True}))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+            self.assertIsNone(protocol.claim())
+            with self.assertRaises(ProtocolError):
+                protocol.claim()
+
+
+if __name__ == "__main__":
+    unittest.main()
