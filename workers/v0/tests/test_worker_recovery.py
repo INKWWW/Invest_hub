@@ -37,7 +37,9 @@ class FakeProtocol:
     def __init__(self) -> None:
         self.heartbeat_error: Exception | None = None
         self.claim_value: dict[str, object] | None = CLAIM
+        self.persisted_payloads: list[dict[str, object]] = []
         self.reported_results: list[dict[str, object]] = []
+        self.reported_failures: list[dict[str, object]] = []
         self.report_result_value: dict[str, object] = {"status": "succeeded", "idempotent": False}
         self.report_result_error: Exception | None = None
 
@@ -55,7 +57,12 @@ class FakeProtocol:
             raise self.report_result_error
         return self.report_result_value
 
-    def report_failure(self, _failure: dict[str, object]) -> dict[str, object]:
+    def persist(self, payload: dict[str, object]) -> dict[str, object]:
+        self.persisted_payloads.append(payload)
+        return {"persisted": True, "structured_run_ids": ["run-1"]}
+
+    def report_failure(self, failure: dict[str, object]) -> dict[str, object]:
+        self.reported_failures.append(failure)
         return {"status": "retryable_failed"}
 
 
@@ -78,6 +85,7 @@ class WorkerRecoveryTests(unittest.TestCase):
 
         self.assertEqual(outcome.status, "recovering")
         self.assertEqual(protocol.reported_results, [])
+        self.assertEqual(protocol.reported_failures[0]["failure_class"], "unknown")
 
     def test_expired_lease_stops_before_execution_or_result_report(self) -> None:
         protocol = FakeProtocol()
@@ -103,6 +111,27 @@ class WorkerRecoveryTests(unittest.TestCase):
         outcome = worker.run_once()
         self.assertEqual(outcome.status, "recovering")
         self.assertNotEqual(outcome.status, "succeeded")
+
+    def test_worker_persists_execution_before_reporting_the_checkpoint(self) -> None:
+        protocol = FakeProtocol()
+        execution = {
+            "persistence": {
+                "contract_version": "v0",
+                "task_id": "task-1",
+                "attempt": 1,
+                "source_id": "source-1",
+                "raw_messages": [],
+                "canonical_messages": [],
+                "structured_runs": [],
+            },
+            "result": dict(RESULT),
+        }
+
+        outcome = Worker(protocol, execute=lambda _claim: execution).run_once()
+
+        self.assertEqual(outcome.status, "succeeded")
+        self.assertEqual(len(protocol.persisted_payloads), 1)
+        self.assertEqual(protocol.reported_results[0]["structured_run_ids"], ["run-1"])
 
 
 if __name__ == "__main__":

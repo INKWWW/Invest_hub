@@ -82,6 +82,29 @@ class WorkerProtocolTests(unittest.TestCase):
             with self.assertRaises(ProtocolError):
                 protocol.claim()
 
+    def test_persist_validates_contract_and_uses_the_task_scoped_endpoint(self) -> None:
+        payload = {
+            "contract_version": "v0",
+            "task_id": "task-1",
+            "attempt": 1,
+            "source_id": "source-1",
+            "raw_messages": [],
+            "canonical_messages": [],
+            "structured_runs": [],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"persisted": True, "idempotent": False, "structured_run_ids": []}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            acknowledgement = protocol.persist(payload)
+
+            self.assertTrue(acknowledgement["persisted"])
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-1/persist"))
+
 
 if __name__ == "__main__":
     unittest.main()

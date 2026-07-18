@@ -121,6 +121,18 @@ class WorkerProtocol:
         _, value = self._request("POST", f"api/worker/tasks/{payload['task_id']}/result", payload)
         return self._object(value, "invalid result acknowledgement")
 
+    def persist(self, persistence: dict[str, Any]) -> dict[str, Any]:
+        self._require_credential()
+        try:
+            payload = load_contract("worker-persistence", persistence)
+        except ContractError as exc:
+            raise ProtocolError("invalid worker persistence") from exc
+        _, value = self._request("POST", f"api/worker/tasks/{payload['task_id']}/persist", payload)
+        acknowledgement = self._object(value, "invalid persistence acknowledgement")
+        if acknowledgement.get("persisted") is not True:
+            raise ProtocolError("persistence was not acknowledged")
+        return acknowledgement
+
     def report_failure(self, failure: dict[str, Any]) -> dict[str, Any]:
         self._require_credential()
         try:
