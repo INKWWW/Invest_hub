@@ -6,6 +6,7 @@ type InviteInsert = Database["public"]["Tables"]["invites"]["Insert"];
 export async function createInviteRecord(input: {
   codeHash: string;
   role: AppRole;
+  purpose?: "user" | "worker";
   expiresAt: string;
   createdBy: string;
 }) {
@@ -13,6 +14,7 @@ export async function createInviteRecord(input: {
   const row: InviteInsert = {
     code_hash: input.codeHash,
     role: input.role,
+    purpose: input.purpose ?? "user",
     expires_at: input.expiresAt,
     created_by: input.createdBy,
   };
@@ -24,14 +26,14 @@ export async function createInviteRecord(input: {
 export async function consumeInvite(
   codeHash: string,
   userId: string,
+  purpose: "user" | "worker" = "user",
   now = new Date().toISOString(),
 ) {
   const db = createSupabaseAdminClient();
-  const { data, error } = await db.rpc("consume_invite", {
-    p_code_hash: codeHash,
-    p_user_id: userId,
-    p_now: now,
-  });
+  const args = purpose === "user"
+    ? { p_code_hash: codeHash, p_user_id: userId, p_now: now }
+    : { p_code_hash: codeHash, p_purpose: purpose, p_user_id: userId, p_now: now };
+  const { data, error } = await db.rpc("consume_invite", args);
   if (error) throw error;
-  return data as { invite_id: string; role: AppRole; expires_at: string } | null;
+  return data as { invite_id: string; role: AppRole; purpose: "user" | "worker"; expires_at: string } | null;
 }

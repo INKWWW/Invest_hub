@@ -49,6 +49,7 @@ export interface Database {
           id: string;
           code_hash: string;
           role: AppRole;
+          purpose: "user" | "worker";
           created_by: string | null;
           expires_at: string;
           consumed_at: string | null;
@@ -59,6 +60,7 @@ export interface Database {
           id?: string;
           code_hash: string;
           role?: AppRole;
+          purpose?: "user" | "worker";
           created_by?: string | null;
           expires_at: string;
           consumed_at?: string | null;
@@ -320,7 +322,7 @@ export interface Database {
     CompositeTypes: Record<string, never>;
     Functions: {
       consume_invite: {
-        Args: { p_code_hash: string; p_user_id: string; p_now: string };
+        Args: { p_code_hash: string; p_purpose?: string; p_user_id: string; p_now: string };
         Returns: Json | null;
       };
       claim_next_task: {
