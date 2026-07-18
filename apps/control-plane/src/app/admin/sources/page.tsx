@@ -1,4 +1,5 @@
 import { listSources } from "../../../lib/db/repositories/sources";
+import { SourceCreateForm } from "../../../components/admin/SourceCreateForm";
 
 export default async function AdminSourcesPage() {
   const sources = await listSources();
@@ -6,6 +7,7 @@ export default async function AdminSourcesPage() {
     <section>
       <h1>Sources</h1>
       <p>Only logical source identifiers are shown. Channel URLs and Profile references remain on the Worker.</p>
+      <SourceCreateForm />
       {sources.length > 0 ? (
         <table>
           <thead><tr><th>Source</th><th>Type</th><th>Parameter version</th><th>State</th></tr></thead>
@@ -24,4 +26,3 @@ export default async function AdminSourcesPage() {
     </section>
   );
 }
-
