@@ -18,6 +18,7 @@ const workerRepositoryMocks = vi.hoisted(() => ({
 }));
 const taskMocks = vi.hoisted(() => ({
   acceptTaskResult: vi.fn(),
+  getTaskDetail: vi.fn(),
   recordTaskFailure: vi.fn(),
 }));
 const loginMocks = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ import { POST as postLogin } from "./auth/login/route";
 import { POST as postEnrol } from "./worker/enrol/route";
 import { POST as postHeartbeat } from "./worker/heartbeat/route";
 import { POST as postResult } from "./worker/tasks/[taskId]/result/route";
+import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${path}`, {
@@ -72,6 +74,15 @@ describe("v0 control-plane API authorization", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden" });
     expect(inviteMocks.createOneTimeInvite).not.toHaveBeenCalled();
+  });
+
+  it("blocks ordinary users from admin task detail without reading evidence", async () => {
+    const response = await getAdminTaskDetail(new Request("http://localhost/api/admin/tasks/task-1"), {
+      params: Promise.resolve({ taskId: "task-1" }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden" });
+    expect(taskMocks.getTaskDetail).not.toHaveBeenCalled();
   });
 
   it("returns a one-time invite code only to an admin", async () => {
