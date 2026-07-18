@@ -63,8 +63,9 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 - 公开小 fixture smoke：12 条消息、`chunk-size 3`、4 个 chunk、`max-concurrency 2`；4/4 成功、0 重试，批次耗时 39,884 ms，`max_active_requests=2`。
 - 500 条 synthetic fixture：5 个 chunk、`chunk-size 100`、`max-concurrency 2`；5/5 首次及最终成功，0 重试，JSON/Schema 率 100%，P50/P95 为 127,935/129,800 ms，批次墙钟 321,965 ms，`max_active_requests=2`。
 - 与同一 500 条、`chunk-size 100` 串行基线的请求耗时合计 645,827 ms 相比，本轮观测 speedup 约 2.006x；并发 evidence 的 5 条 request、5 条 result 和 5 个 raw response 均完整，所有 Provider 状态为 `success`。
+- 追加 5 并发探针：同样的 500 条 synthetic fixture、5 个 chunk、`chunk-size 100`；5/5 首次及最终成功，0 重试，P50/P95 为 112,947/129,807 ms，批次墙钟 129,814 ms，`max_active_requests=5`。相对串行约 4.975x、相对 2 并发约 2.480x；evidence 的 5 条 request、5 条 result 和 5 个 raw response 均完整。
 
-该结果验证了“独立 chunk 的最多 2 并发”可以缩短 synthetic capacity 的批次耗时，但不代表业务质量提升，也不代表 1000 条、重复运行稳定性或生产限流边界已经通过。
+该结果验证了“独立 chunk 的有界并发”可以缩短 synthetic capacity 的批次耗时，但 5 并发目前只有一次成功探针，不代表其稳定性、限流边界或生产安全性；也不代表业务质量提升或 1000 条容量已经通过。
 
 ## 5. 当前结论
 
@@ -74,7 +75,7 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 2. 当前公开小 fixture 的归因、来源 ID 和未解析媒体边界通过人工复核；
 3. 120 秒不足以覆盖本机 Codex CLI 的完整进程生命周期，240 秒应作为当前 Spike 默认窗口；
 4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；500 条在 `chunk-size 100` 的串行和最多 2 并发运行中均完成，但 1000 条容量、重复稳定性和可接受生产边界尚未验证；
-5. 最多 2 并发将一次 500 条 synthetic 批次的观测墙钟从约 645.8 秒降至约 322.0 秒，但这只是容量吞吐证据；
+5. 最多 2 并发将一次 500 条 synthetic 批次的观测墙钟从约 645.8 秒降至约 322.0 秒；追加的 5 并发探针进一步降至约 129.8 秒，但目前只有单次成功运行，仍只是容量吞吐证据；
 6. 不能据此批准 Codex CLI 进入 V0/V1 生产架构。
 
 ## 6. 下一阶段门槛
