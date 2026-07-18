@@ -109,8 +109,8 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 5. 1000 条 c10 三轮批次墙钟为 132.2–144.4 秒，c5 三轮为 253.9–304.2 秒；在本次 synthetic 观测中 c10 明显更快，但不等于生产限流上限；
 6. 修复后的新鲜公开质量复核为 6/6 claims covered、grounded、correct attribution，严重归因错误和媒体臆测均为 0，质量门槛通过；
 7. 结合 1000 条 c100 的 c5/c10 各三轮容量稳定性通过，Spike-02 在已记录的本机 Codex CLI 条件下为 `conditional pass`；
-8. 之所以是有条件通过，是因为此前 500 条 c100 的 5 并发 Repeat-2 出现过一次可恢复 timeout/retry，且 250/500 chunk 已实测不稳定；当前只把 c100 作为候选边界；
-9. 不能据此批准 Codex CLI 进入 V0/V1 生产架构，也不能把 5 或 10 并发写成生产默认值。
+8. 之所以是有条件通过，是因为此前 500 条、chunk size 100 的 5 个并发请求 Repeat-2 出现过一次可恢复 timeout/retry，且 chunk size 250/500 已实测不稳定；
+9. 用户已确认未来生产试运行优先采用 chunk size 100、5 个并发请求，10 个并发请求作为后续扩容候选；这仍需在未来正式生产 Spec/Plan 中确认，不等于本报告批准 V0/V1 实现或最终 Provider 选型。
 
 ## 6. 下一阶段门槛
 

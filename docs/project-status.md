@@ -6,7 +6,7 @@ Last updated: 2026-07-18
 
 **Discovery / Spike-01 已完成，Spike-02 完整验证有条件通过；项目仍未进入 V0/V1 生产实现**
 
-项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理、小批次质量验证、有界并发验证、1000 条 c100 的 5/10 并发重复容量验证和媒体来源链路修复后的新鲜质量复核均已完成。按已批准的增量验证口径，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；这不等于生产边界、SLA 或最终 Provider 选型已经确定。
+项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理、小批次质量验证、有界并发验证、1000 条 c100 的 5/10 并发重复容量验证和媒体来源链路修复后的新鲜质量复核均已完成。按已批准的增量验证口径，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；你已确认未来生产试运行优先采用 chunk size 100、5 个并发请求，但这仍是后续生产设计的候选配置，不等于生产边界、SLA 或最终 Provider 选型已经确定。
 
 ## Approval status
 
@@ -59,7 +59,7 @@ Last updated: 2026-07-18
 - 完整验证追加 1000 条 c100 重复运行：5 并发三轮批次墙钟为 253,921/304,162/264,062 ms，10 并发三轮为 132,241/139,351/144,374 ms；六轮均 10/10 最终成功、首次成功率和 JSON/Schema 率均为 100%、重试数均为 0、实际最大并发符合配置，容量重复稳定性通过；
 - 完整验证的首轮公开 fixture 质量运行曾为 5/6 covered/grounded，缺口是 `public-008` 没有来源链路；该缺口随后按已批准的方案 1 修复：新增必填 `media_source_message_ids`，由 Schema 校验当前 chunk 的全部未解析媒体 ID，评估器使用该字段判断 grounding；确定性回归为 46/46 通过；
 - 修复后的新鲜公开质量 evidence：`/private/tmp/invest-hub-spike-02-evidence/codex-public-small-media-linkage-20260718-luna`。1/1 chunk 首次及最终成功，JSON/Schema 率 100%，请求数 1、重试数 0、P50/P95 为 46,938/46,938 ms；Codex CLI 运行时报告模型为 `gpt-5.6-luna`；`public-008` 出现在 `media_source_message_ids`，6/6 claims covered、grounded、correct attribution，严重归因错误 0，媒体臆测 0；
-- 综合结论：Spike-02 为**有条件通过**。1000 条 c100 的 5/10 并发各 3 轮容量重复稳定性通过，质量门槛也通过；但此前 500 条 c100 的 5 并发 Repeat-2 曾出现一次可恢复 timeout/retry，且 250/500 chunk 已实测不稳定，因此当前只把 c100 作为候选边界，不把 5/10 并发或 Codex CLI 写成生产默认配置；
+- 综合结论：Spike-02 为**有条件通过**。1000 条、chunk size 100 的 5/10 并发各 3 轮容量重复稳定性通过，质量门槛也通过；但此前 500 条、chunk size 100 的 5 个并发请求 Repeat-2 曾出现一次可恢复 timeout/retry，且 chunk size 250/500 已实测不稳定。因此，未来生产试运行的初始候选配置为 chunk size 100、5 个并发请求；10 个并发请求暂作为后续扩容候选，不把 Codex CLI 写成最终生产 Provider；
 - Codex timeout 清理回归测试、EvidenceStore 并发写入保护和 runner 并发/重试隔离测试已加入，完整确定性测试为 46/46；
 - 脱敏决策报告：[Spike-02 决策报告](spikes/2026-07-15-spike-02-decision-report.md)。
 
@@ -67,7 +67,7 @@ Last updated: 2026-07-18
 
 ## Next gate
 
-下一阶段可基于 Spike-02 的有条件通过结果，另行设计和批准 V0/V1 的生产边界；仍需明确真实数据运行、限流/SLA、Provider 选择和失败降级策略。在此之前不启动 V0/V1 生产实现、不把 5/10 并发写成生产默认值，也不把本次公开 fixture 质量结果外推为真实业务质量。
+下一阶段暂不启动 V0。未来恢复生产设计时，可基于 Spike-02 的有条件通过结果，另行明确真实数据运行、限流/SLA、Provider 选择和失败降级策略，并以 chunk size 100、5 个并发请求作为初始候选；本次公开 fixture 质量结果不外推为真实业务质量。
 
 在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
 
