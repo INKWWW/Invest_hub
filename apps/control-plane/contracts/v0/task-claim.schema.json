@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://invest-hub.local/contracts/v0/task-claim.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "task_id", "attempt", "task_type", "source_id", "parameter_version", "lease_expires_at", "safe_checkpoint"],
+  "properties": {
+    "contract_version": { "const": "v0" },
+    "task_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "task_type": { "const": "discord_sync" },
+    "source_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "parameter_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "lease_expires_at": { "type": "string", "format": "date-time" },
+    "safe_checkpoint": { "type": ["string", "null"], "maxLength": 512 }
+  }
+}
