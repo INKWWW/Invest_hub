@@ -7,6 +7,7 @@ import {
   hasAdminRole,
   statusLabel,
 } from "../../lib/admin/view-model";
+import { parseWorkerInviteResponse } from "../../components/admin/worker-invite";
 
 describe("admin debug view models", () => {
   it("distinguishes no-new-data, retryable, failed, unresolved success and success", () => {
@@ -64,5 +65,15 @@ describe("admin debug view models", () => {
     expect(canRetryTask({ status: "retryable_failed" })).toBe(true);
     expect(canRetryTask({ status: "failed" })).toBe(false);
     expect(canRetryTask({ status: "succeeded" })).toBe(false);
+  });
+
+  it("accepts only a one-time Worker invite response and never treats a device secret as an invite code", () => {
+    expect(parseWorkerInviteResponse({
+      invite_id: "invite-1",
+      code: "one-time-worker-code",
+      purpose: "worker",
+      expires_at: "2099-01-01T00:00:00.000Z",
+    })).toEqual({ code: "one-time-worker-code", expiresAt: "2099-01-01T00:00:00.000Z" });
+    expect(parseWorkerInviteResponse({ purpose: "worker", device_secret: "must-not-display" })).toBeNull();
   });
 });
