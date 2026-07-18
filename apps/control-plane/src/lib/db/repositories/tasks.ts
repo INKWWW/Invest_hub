@@ -33,6 +33,40 @@ export async function listRecentTasks(limit = 50) {
   return data;
 }
 
+export async function retryTask(taskId: string, requestedBy: string) {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("sync_tasks")
+    .update({ status: "queued", requested_by: requestedBy, lease_owner: null, lease_expires_at: null })
+    .eq("id", taskId)
+    .eq("status", "retryable_failed")
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function recordTaskEvent(event: {
+  task_id: string;
+  attempt: number;
+  event_type: string;
+  occurred_at: string;
+  details: Record<string, unknown>;
+}) {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("task_events")
+    .insert({
+      task_id: event.task_id,
+      attempt: event.attempt,
+      event_type: event.event_type,
+      occurred_at: event.occurred_at,
+      details: event.details as Json,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function claimNextTask(workerId: string, now = new Date().toISOString()) {
   const { data, error } = await createSupabaseAdminClient().rpc("claim_next_task", {
     p_worker_id: workerId,
