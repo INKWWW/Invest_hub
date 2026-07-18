@@ -33,6 +33,46 @@ export async function listRecentTasks(limit = 50) {
   return data;
 }
 
+export async function getTaskDetail(taskId: string) {
+  const supabase = createSupabaseAdminClient();
+  const [{ data: task, error: taskError }, { data: attempts, error: attemptsError }, { data: events, error: eventsError }, { data: structuredRuns, error: runsError }] =
+    await Promise.all([
+      supabase.from("sync_tasks").select("*").eq("id", taskId).maybeSingle(),
+      supabase
+        .from("task_attempts")
+        .select("id,task_id,attempt,worker_id,status,lease_expires_at,result,failure,started_at,completed_at,created_at,updated_at")
+        .eq("task_id", taskId)
+        .order("attempt", { ascending: false }),
+      supabase
+        .from("task_events")
+        .select("id,task_id,attempt,event_type,occurred_at,details,created_at")
+        .eq("task_id", taskId)
+        .order("occurred_at", { ascending: true }),
+      supabase
+        .from("structured_runs")
+        .select("id,task_id,provider,parameter_version,output,created_at")
+        .eq("task_id", taskId)
+        .order("created_at", { ascending: true }),
+    ]);
+  if (taskError) throw taskError;
+  if (attemptsError) throw attemptsError;
+  if (eventsError) throw eventsError;
+  if (runsError) throw runsError;
+  if (!task) return null;
+
+  const runIds = (structuredRuns ?? []).map((run) => run.id);
+  let evidenceRefs: Database["public"]["Tables"]["evidence_refs"]["Row"][] = [];
+  if (runIds.length > 0) {
+    const { data, error } = await supabase
+      .from("evidence_refs")
+      .select("id,structured_run_id,canonical_message_id,evidence_kind,local_raw_ref,created_at")
+      .in("structured_run_id", runIds);
+    if (error) throw error;
+    evidenceRefs = data ?? [];
+  }
+  return { task, attempts: attempts ?? [], events: events ?? [], structuredRuns: structuredRuns ?? [], evidenceRefs };
+}
+
 export async function retryTask(taskId: string, requestedBy: string) {
   const { data, error } = await createSupabaseAdminClient()
     .from("sync_tasks")
