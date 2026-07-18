@@ -13,11 +13,13 @@ export async function listWorkers() {
 }
 
 export async function registerWorker(input: {
+  id?: string;
   name: string;
   deviceSecretHash: string;
   status?: WorkerStatus;
 }) {
   const row: WorkerInsert = {
+    id: input.id,
     name: input.name,
     device_secret_hash: input.deviceSecretHash,
     status: input.status ?? "enrolled",
