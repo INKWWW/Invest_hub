@@ -148,6 +148,22 @@ export async function acceptTaskResult(
   return data;
 }
 
+export async function persistWorkerExecution(
+  taskId: string,
+  attempt: number,
+  workerId: string,
+  payload: Json,
+) {
+  const { data, error } = await createSupabaseAdminClient().rpc("persist_worker_execution", {
+    p_task_id: taskId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+    p_payload: payload,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function recordTaskFailure(
   taskId: string,
   attempt: number,

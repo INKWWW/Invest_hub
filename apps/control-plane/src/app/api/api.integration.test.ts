@@ -19,6 +19,7 @@ const workerRepositoryMocks = vi.hoisted(() => ({
 const taskMocks = vi.hoisted(() => ({
   acceptTaskResult: vi.fn(),
   getTaskDetail: vi.fn(),
+  persistWorkerExecution: vi.fn(),
   recordTaskFailure: vi.fn(),
 }));
 const loginMocks = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ import { POST as postAdminInvite } from "./admin/invites/route";
 import { POST as postLogin } from "./auth/login/route";
 import { POST as postEnrol } from "./worker/enrol/route";
 import { POST as postHeartbeat } from "./worker/heartbeat/route";
+import { POST as postPersist } from "./worker/tasks/[taskId]/persist/route";
 import { POST as postResult } from "./worker/tasks/[taskId]/result/route";
 import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
 
@@ -60,6 +62,42 @@ const validTaskResult = {
   unparsed_media_count: 0,
   structured_run_ids: [],
   telemetry: { elapsed_ms: 10, retry_count: 0, failure_class: null },
+};
+
+const validPersistencePayload = {
+  contract_version: "v0",
+  task_id: "task-1",
+  attempt: 1,
+  source_id: "discord-v0-test",
+  raw_messages: [
+    {
+      external_message_id: "message-1",
+      occurred_at: "2099-01-01T00:00:00.000Z",
+      local_raw_ref: "local://v0/raw/message-1.json",
+      payload_hash: "a".repeat(64),
+      retention_expires_at: "2100-01-01T00:00:00.000Z",
+    },
+  ],
+  canonical_messages: [
+    {
+      external_message_id: "message-1",
+      occurred_at: "2099-01-01T00:00:00.000Z",
+      author_display: "fixture-author",
+      content: "fixture content",
+      has_unparsed_media: false,
+      metadata: {},
+    },
+  ],
+  structured_runs: [
+    {
+      chunk_key: "chunk-1",
+      provider: "mock",
+      parameter_version: "v0-test-1",
+      input_message_ids: ["message-1"],
+      media_source_message_ids: [],
+      output: { topics: [] },
+    },
+  ],
 };
 
 describe("v0 control-plane API authorization", () => {
@@ -153,6 +191,23 @@ describe("v0 control-plane API authorization", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "lease_mismatch" });
+  });
+
+  it("accepts a valid Worker persistence payload without returning its local reference", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.persistWorkerExecution.mockResolvedValue({
+      persisted: true,
+      structured_run_ids: ["run-1"],
+    });
+
+    const response = await postPersist(
+      jsonRequest("/api/worker/tasks/task-1/persist", validPersistencePayload, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ persisted: true, structured_run_ids: ["run-1"] });
+    expect(taskMocks.persistWorkerExecution).toHaveBeenCalledWith("task-1", 1, "worker-1", validPersistencePayload);
   });
 
   it("maps a conflicting duplicate result to 409", async () => {

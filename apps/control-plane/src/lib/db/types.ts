@@ -258,16 +258,22 @@ export interface Database {
         Row: {
           id: string;
           task_id: string;
+          attempt: number;
+          chunk_key: string;
           provider: "mock" | "codex_cli";
           parameter_version: string;
+          input_message_ids: Json;
           output: Json;
           created_at: string;
         };
         Insert: {
           id?: string;
           task_id: string;
+          attempt?: number;
+          chunk_key?: string;
           provider: "mock" | "codex_cli";
           parameter_version: string;
+          input_message_ids?: Json;
           output: Json;
           created_at?: string;
         };
@@ -335,6 +341,10 @@ export interface Database {
       };
       accept_task_result: {
         Args: { p_task_id: string; p_attempt: number; p_result: Json; p_context: Json };
+        Returns: Json;
+      };
+      persist_worker_execution: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
         Returns: Json;
       };
       record_task_failure: {

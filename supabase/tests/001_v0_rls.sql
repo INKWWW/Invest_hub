@@ -195,11 +195,23 @@ select throws_ok(
   null,
   'result cannot advance checkpoint before persistence confirmation'
 );
+insert into public.worker_execution_receipts (
+  task_id, attempt, worker_id, payload_digest, raw_count, canonical_count, structured_run_ids
+)
+values (
+  '00000000-0000-0000-0000-000000000031',
+  2,
+  '00000000-0000-0000-0000-000000000012',
+  'fixture-persistence-receipt',
+  0,
+  1,
+  '[]'::jsonb
+);
 select is(
   public.accept_task_result(
     '00000000-0000-0000-0000-000000000031',
     2,
-    '{"status":"succeeded","safe_checkpoint":"message-2"}'::jsonb,
+    '{"status":"succeeded","safe_checkpoint":"message-2","raw_count":0,"canonical_count":1,"structured_run_ids":[]}'::jsonb,
     '{"worker_id":"00000000-0000-0000-0000-000000000012","persisted":true}'::jsonb
   ) ->> 'status',
   'succeeded',
@@ -219,7 +231,7 @@ select is(
   public.accept_task_result(
     '00000000-0000-0000-0000-000000000031',
     2,
-    '{"status":"succeeded","safe_checkpoint":"message-2"}'::jsonb,
+    '{"status":"succeeded","safe_checkpoint":"message-2","raw_count":0,"canonical_count":1,"structured_run_ids":[]}'::jsonb,
     '{"worker_id":"00000000-0000-0000-0000-000000000012","persisted":true}'::jsonb
   ) ->> 'idempotent',
   'true',
@@ -229,7 +241,7 @@ select throws_ok(
   $$select public.accept_task_result(
     '00000000-0000-0000-0000-000000000031',
     2,
-    '{"status":"succeeded","safe_checkpoint":"message-conflict"}'::jsonb,
+    '{"status":"succeeded","safe_checkpoint":"message-conflict","raw_count":0,"canonical_count":1,"structured_run_ids":[]}'::jsonb,
     '{"worker_id":"00000000-0000-0000-0000-000000000012","persisted":true}'::jsonb
   );$$,
   '23505',
@@ -240,7 +252,7 @@ select throws_ok(
   $$select public.accept_task_result(
     '00000000-0000-0000-0000-000000000031',
     1,
-    '{"status":"succeeded","safe_checkpoint":"stale"}'::jsonb,
+    '{"status":"succeeded","safe_checkpoint":"stale","raw_count":0,"canonical_count":1,"structured_run_ids":[]}'::jsonb,
     '{"worker_id":"00000000-0000-0000-0000-000000000011","persisted":true}'::jsonb
   );$$,
   '40001',
