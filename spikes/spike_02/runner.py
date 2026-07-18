@@ -176,7 +176,17 @@ def _process_chunk(
                     for message in case.messages
                     if message.author_scope == "target"
                 }
-                validate_structured_output(output, input_ids, target_ids)
+                unparsed_media_ids = {
+                    message.message_id
+                    for message in case.messages
+                    if message.message_id in input_ids and message.kind == "unparsed_media"
+                }
+                validate_structured_output(
+                    output,
+                    input_ids,
+                    target_ids,
+                    unparsed_media_ids,
+                )
             except SchemaError as exc:
                 status = "invalid_json" if exc.code == "invalid_json" else "schema_error"
                 if attempts < config.max_attempts:

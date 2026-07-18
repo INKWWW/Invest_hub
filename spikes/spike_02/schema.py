@@ -23,7 +23,7 @@ def parse_structured_output(text: str) -> StructuredOutput:
     if not isinstance(payload, Mapping):
         raise SchemaError("invalid_shape", "top-level JSON must be an object")
 
-    required_fields = {"topics", "media_unparsed", "warnings"}
+    required_fields = {"topics", "media_unparsed", "media_source_message_ids", "warnings"}
     missing_fields = sorted(required_fields - set(payload))
     if missing_fields:
         raise SchemaError("missing_field", ", ".join(missing_fields))
@@ -51,12 +51,21 @@ def parse_structured_output(text: str) -> StructuredOutput:
     media_unparsed = payload.get("media_unparsed", False)
     if not isinstance(media_unparsed, bool):
         raise SchemaError("invalid_media_flag", "media_unparsed must be boolean")
+    media_source_message_ids = payload.get("media_source_message_ids", [])
+    if not isinstance(media_source_message_ids, list) or not all(
+        isinstance(item, str) and item for item in media_source_message_ids
+    ):
+        raise SchemaError(
+            "invalid_media_sources",
+            "media_source_message_ids must be an array of non-empty strings",
+        )
     warnings = payload.get("warnings", [])
     if not isinstance(warnings, list) or not all(isinstance(item, str) for item in warnings):
         raise SchemaError("invalid_warnings", "warnings must be an array of strings")
     return StructuredOutput(
         topics=tuple(topics),
         media_unparsed=media_unparsed,
+        media_source_message_ids=tuple(media_source_message_ids),
         warnings=tuple(warnings),
     )
 
@@ -65,6 +74,7 @@ def validate_structured_output(
     output: StructuredOutput,
     input_message_ids: set[str],
     target_author_ids: set[str],
+    unparsed_media_message_ids: set[str],
 ) -> StructuredOutput:
     for topic in output.topics:
         if topic.author_scope not in {"target", "channel"}:
@@ -78,6 +88,30 @@ def validate_structured_output(
         if topic.author_scope == "target":
             if not topic.author_id or topic.author_id not in target_author_ids:
                 raise SchemaError("author_id", "target topic must cite a known target author")
+    media_source_ids = set(output.media_source_message_ids)
+    if len(media_source_ids) != len(output.media_source_message_ids):
+        raise SchemaError("media_source_message_ids", "duplicate message ID")
+    unknown_media_ids = media_source_ids - input_message_ids
+    if unknown_media_ids:
+        unknown = sorted(unknown_media_ids)[0]
+        raise SchemaError("media_source_message_ids", f"unknown message ID: {unknown}")
+    non_media_ids = media_source_ids - unparsed_media_message_ids
+    if non_media_ids:
+        non_media = sorted(non_media_ids)[0]
+        raise SchemaError(
+            "media_source_message_ids",
+            f"message is not unparsed media: {non_media}",
+        )
+    if output.media_unparsed != bool(unparsed_media_message_ids):
+        raise SchemaError(
+            "media_unparsed",
+            "media_unparsed must match the current chunk's unparsed media messages",
+        )
+    if media_source_ids != unparsed_media_message_ids:
+        raise SchemaError(
+            "media_source_message_ids",
+            "must cite every unparsed media message in the current chunk",
+        )
     return output
 
 

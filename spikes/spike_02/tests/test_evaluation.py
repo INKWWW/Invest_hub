@@ -31,6 +31,7 @@ def output_with_claim(summary, source_ids=("public-001",), *, author_id="target-
             ),
         ),
         media_unparsed=False,
+        media_source_message_ids=(),
         warnings=(),
     )
 
@@ -86,6 +87,18 @@ class EvaluationTests(unittest.TestCase):
         )
         report = evaluate_output(self.case, output)
         self.assertEqual(report.media_hallucinations, 1)
+
+    def test_explicit_media_source_grounds_unparsed_media_claim(self):
+        output = StructuredOutput(
+            topics=(),
+            media_unparsed=True,
+            media_source_message_ids=("public-008",),
+            warnings=("存在未解析媒体，未推测其内容。",),
+        )
+        report = evaluate_output(self.case, output)
+        self.assertEqual(report.covered_claims, 1)
+        self.assertEqual(report.grounded_claims, 1)
+        self.assertEqual(report.media_hallucinations, 0)
 
     def test_review_sheet_requires_boolean_fields(self):
         with tempfile.TemporaryDirectory() as directory:

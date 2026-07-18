@@ -20,7 +20,7 @@ from .providers import (
 from .runner import RunConfig, run_case
 
 
-VALID_JSON = '{"topics":[],"media_unparsed":false,"warnings":[]}'
+VALID_JSON = '{"topics":[],"media_unparsed":false,"media_source_message_ids":[],"warnings":[]}'
 
 
 def main(argv: list[str] | None = None) -> int:

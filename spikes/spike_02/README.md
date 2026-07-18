@@ -20,6 +20,10 @@ codex --version
 codex exec --help
 ```
 
+## 结构化输出契约
+
+Codex 每个 chunk 必须返回 `topics`、`media_unparsed`、`media_source_message_ids` 和 `warnings`。当输入包含 `kind=unparsed_media` 的消息时，`media_source_message_ids` 必须列出当前 chunk 中全部这类消息的原始 ID；没有未解析媒体时必须为 `[]`。该字段只用于来源追溯，不表示 harness 会读取或推断媒体内容。
+
 ## 确定性测试
 
 ```bash

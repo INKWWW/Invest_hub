@@ -11,7 +11,20 @@ from spike_02.providers import MockOutcome, MockProvider
 from spike_02.runner import RunConfig, run_case
 
 
-VALID_JSON = '{"topics":[],"media_unparsed":false,"warnings":[]}'
+VALID_JSON = '{"topics":[],"media_unparsed":false,"media_source_message_ids":[],"warnings":[]}'
+MEDIA_INVALID_JSON = (
+    '{"topics":[],"media_unparsed":true,"media_source_message_ids":[],'
+    '"warnings":["存在未解析媒体，未推测其内容。"]}'
+)
+MEDIA_VALID_JSON = (
+    '{"topics":[],"media_unparsed":true,"media_source_message_ids":["public-008"],'
+    '"warnings":["存在未解析媒体，未推测其内容。"]}'
+)
+
+
+def response_json_for_request(request):
+    input_ids = set(request.chunk.primary_message_ids) | set(request.chunk.context_message_ids)
+    return MEDIA_VALID_JSON if "public-008" in input_ids else VALID_JSON
 
 
 class SlowProvider:
@@ -31,7 +44,7 @@ class SlowProvider:
             time.sleep(self.delay_seconds)
             return ProviderResponse(
                 "success",
-                VALID_JSON,
+                response_json_for_request(request),
                 10,
                 None,
                 None,
@@ -89,8 +102,8 @@ class RunnerTests(unittest.TestCase):
             {
                 ids[0]: [MockOutcome.failure("timeout"), MockOutcome.success(VALID_JSON)],
                 ids[1]: [MockOutcome.success(VALID_JSON)],
-                ids[2]: [MockOutcome.success(VALID_JSON)],
-                ids[3]: [MockOutcome.success(VALID_JSON)],
+                ids[2]: [MockOutcome.success(MEDIA_VALID_JSON)],
+                ids[3]: [MockOutcome.success(MEDIA_VALID_JSON)],
             }
         )
         with tempfile.TemporaryDirectory() as directory:
@@ -105,6 +118,24 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(provider.calls_for(ids[0]), 2)
         self.assertEqual(provider.calls_for(ids[1]), 1)
         self.assertEqual(report.retry_count, 1)
+
+    def test_invalid_media_source_schema_retries_and_accepts_complete_source(self):
+        chunk_id = f"{self.case.case_id}-0000"
+        provider = MockProvider(
+            {chunk_id: [MockOutcome.success(MEDIA_INVALID_JSON), MockOutcome.success(MEDIA_VALID_JSON)]}
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            report = run_case(
+                self.case,
+                provider,
+                RunConfig(max_primary_messages=12),
+                EvidenceStore(Path(directory)),
+                sleep=lambda _: None,
+            )
+        self.assertEqual(report.final_success_rate, 1.0)
+        self.assertEqual(provider.calls_for(chunk_id), 2)
+        self.assertEqual(report.retry_count, 1)
+        self.assertEqual(report.results[0].output.media_source_message_ids, ("public-008",))
 
     def test_bounded_concurrency_processes_chunks_in_parallel(self):
         provider = SlowProvider(delay_seconds=0.05)
@@ -127,7 +158,7 @@ class RunnerTests(unittest.TestCase):
         provider = DelayedScriptProvider(
             {
                 ids[0]: [MockOutcome.failure("timeout"), MockOutcome.success(VALID_JSON)],
-                ids[1]: [MockOutcome.success(VALID_JSON)],
+                ids[1]: [MockOutcome.success(MEDIA_VALID_JSON)],
             },
             {(ids[0], 0): 0.05},
         )
@@ -151,8 +182,8 @@ class RunnerTests(unittest.TestCase):
                 root_id: [MockOutcome.truncated("partial")],
                 f"{root_id}-split-0000": [MockOutcome.success(VALID_JSON)],
                 f"{root_id}-split-0001": [MockOutcome.success(VALID_JSON)],
-                f"{self.case.case_id}-0001": [MockOutcome.success(VALID_JSON)],
-                f"{self.case.case_id}-0002": [MockOutcome.success(VALID_JSON)],
+                f"{self.case.case_id}-0001": [MockOutcome.success(MEDIA_VALID_JSON)],
+                f"{self.case.case_id}-0002": [MockOutcome.success(MEDIA_VALID_JSON)],
             }
         )
         with tempfile.TemporaryDirectory() as directory:

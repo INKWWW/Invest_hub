@@ -93,6 +93,7 @@ class StructuredTopic:
 class StructuredOutput:
     topics: tuple[StructuredTopic, ...]
     media_unparsed: bool
+    media_source_message_ids: tuple[str, ...]
     warnings: tuple[str, ...]
 
 

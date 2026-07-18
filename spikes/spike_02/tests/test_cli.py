@@ -123,6 +123,8 @@ class CLITests(unittest.TestCase):
         self.assertIn("Do not use tools", chunk.prompt_text)
         self.assertIn("JSON", chunk.prompt_text)
         self.assertIn("source_message_ids", chunk.prompt_text)
+        self.assertIn("media_source_message_ids", chunk.prompt_text)
+        self.assertIn("every unparsed_media message", chunk.prompt_text)
         self.assertIn("target-analyst", chunk.prompt_text)
         self.assertIn("unparsed_media", build_chunks(case, max_primary_messages=12)[0].prompt_text)
 
@@ -152,7 +154,7 @@ class CLITests(unittest.TestCase):
                 import sys
                 output_path = sys.argv[sys.argv.index("--output-last-message") + 1]
                 pathlib.Path(output_path).write_text(
-                    '{"topics":[],"media_unparsed":false,"warnings":[]}'
+                    '{"topics":[],"media_unparsed":false,"media_source_message_ids":[],"warnings":[]}'
                 )
                 """
             ).lstrip(),

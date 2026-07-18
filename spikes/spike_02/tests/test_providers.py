@@ -11,7 +11,7 @@ from spike_02.model import Chunk, LLMRequest
 from spike_02.providers import CodexCLIProvider, MockOutcome, MockProvider
 
 
-VALID_JSON = '{"topics":[],"media_unparsed":false,"warnings":[]}'
+VALID_JSON = '{"topics":[],"media_unparsed":false,"media_source_message_ids":[],"warnings":[]}'
 
 
 def request_for(chunk_id="case-0000"):
@@ -111,7 +111,7 @@ class ProviderTests(unittest.TestCase):
                 sys.exit(9)
             output_path = sys.argv[sys.argv.index("--output-last-message") + 1]
             pathlib.Path(output_path).write_text(
-                '{"topics":[],"media_unparsed":false,"warnings":[]}'
+                '{"topics":[],"media_unparsed":false,"media_source_message_ids":[],"warnings":[]}'
             )
             """
         )

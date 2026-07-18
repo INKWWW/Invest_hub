@@ -134,10 +134,10 @@ def _render_prompt(lines: tuple[str, ...]) -> str:
         "\"author_scope\":\"target|channel\",\"author_id\":\"string|null\","
         "\"tickers\":[\"ABC\"],\"operation_tendency\":\"string|null\","
         "\"uncertainty\":\"string|null\"}],"
-        "\"media_unparsed\":false,\"warnings\":[\"string\"]}.\n"
+        "\"media_unparsed\":false,\"media_source_message_ids\":[\"message-id\"],\"warnings\":[\"string\"]}.\n"
         "Use the exact author_id from each input line. Only use author_scope=target "
         "when the topic is a target user's viewpoint; otherwise use channel. "
-        "If any input line has kind=unparsed_media, set media_unparsed=true and do not infer its contents.\n"
+        "If any input line has kind=unparsed_media, set media_unparsed=true, include every unparsed_media message ID in media_source_message_ids, and do not infer its contents. If none, set media_unparsed=false and use an empty media_source_message_ids array.\n"
         "请只根据以下消息生成结构化 JSON。不得推测未解析媒体内容。\n"
         + "\n".join(lines)
     )

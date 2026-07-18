@@ -19,8 +19,12 @@ INITIAL_THRESHOLDS = {
 
 
 def evaluate_output(case: FixtureCase, output: StructuredOutput) -> QualityReport:
-    topics = tuple(_topic_text(topic) for topic in output.topics)
-    topic_sources = tuple(set(topic.source_message_ids) for topic in output.topics)
+    topics = [_topic_text(topic) for topic in output.topics]
+    topic_sources = [set(topic.source_message_ids) for topic in output.topics]
+    if output.media_unparsed and output.media_source_message_ids:
+        media_text = "未解析 " + " ".join(output.warnings)
+        topics.append(media_text)
+        topic_sources.append(set(output.media_source_message_ids))
     unparsed_ids = {
         message.message_id
         for message in case.messages
@@ -164,5 +168,7 @@ def _author_matches(
 ) -> bool:
     if target_author_id is None:
         return True
+    if topic_index >= len(output.topics):
+        return False
     topic = output.topics[topic_index]
     return topic.author_scope == "target" and topic.author_id == target_author_id
