@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://invest-hub.local/contracts/v0/task-event.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "task_id", "attempt", "event_type", "occurred_at", "details"],
+  "properties": {
+    "contract_version": { "const": "v0" },
+    "task_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "event_type": {
+      "enum": ["claimed", "heartbeat", "phase_started", "phase_completed", "retry", "checkpoint_safe", "failed", "succeeded"]
+    },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "details": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phase": { "type": "string", "maxLength": 64 },
+        "elapsed_ms": { "type": "integer", "minimum": 0 },
+        "failure_class": { "type": ["string", "null"], "maxLength": 64 },
+        "retry_count": { "type": "integer", "minimum": 0 },
+        "safe_checkpoint": { "type": ["string", "null"], "maxLength": 512 }
+      }
+    }
+  }
+}
