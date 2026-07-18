@@ -1,0 +1,19 @@
+{
+  "page_id": "fixture-page-1",
+  "expected_request_key": "request-1",
+  "expected_request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+  "network": [
+    {
+      "request_key": "request-1",
+      "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+      "messages": [
+        {
+          "id": "message-1",
+          "author": {"id": "author-1", "name": "Author"},
+          "content": "fixture content"
+        }
+      ]
+    }
+  ],
+  "cursor_after": null
+}
