@@ -26,6 +26,7 @@ cache/
 logs/
 *.log
 tmp/
+.tmp/
 temp/
 coverage/
 dist/
@@ -38,6 +39,11 @@ build/
 /docs/spikes/*-real.md
 __pycache__/
 *.py[cod]
+node_modules/
+.next/
+*.tsbuildinfo
+supabase/.temp/
+supabase/.branches/
 
 # OS and editor files
 .DS_Store
