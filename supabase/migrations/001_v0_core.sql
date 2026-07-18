@@ -16,7 +16,7 @@ create table public.invites (
   created_by uuid references public.profiles(id) on delete set null,
   expires_at timestamptz not null,
   consumed_at timestamptz,
-  consumed_by uuid references auth.users(id) on delete set null,
+  consumed_by uuid,
   created_at timestamptz not null default timezone('utc', now()),
   check ((consumed_at is null and consumed_by is null) or (consumed_at is not null and consumed_by is not null))
 );
