@@ -6,7 +6,7 @@ Invest Hub 是面向个人及少量受邀用户的投资信息与投资决策工
 
 ## 当前状态
 
-V0「基础设施与技术验证」的确定性实现与回归已完成，结论为有条件通过：控制面、Worker、Active Adapter、Provider 边界、管理员调试页、RLS 和恢复 harness 均已验证。真实 Discord 页面与隔离远程部署尚未执行，因此这不是生产发布批准。
+V0「基础设施与技术验证」的确定性实现与回归已完成，结论为有条件通过：控制面、Worker、Active Adapter、Provider 边界、管理员调试页、RLS 和恢复 harness 均已验证。隔离 Supabase 迁移和 Vercel Preview 已部署；真实 Discord 页面与已登录会话下的应用级 HTTPS 验收尚未执行，因此这不是生产发布批准。
 
 仓库现在包含 V0 验证实现和脱敏 E2E harness，但不包含真实内容、凭据、Prompt、完整响应或本地 evidence。进入 V1 前必须补齐授权真实页面和远程部署验收。
 
@@ -24,7 +24,7 @@ V0「基础设施与技术验证」的确定性实现与回归已完成，结论
 
 ## 后续推进方向
 
-下一步先补齐 V0 conditional gate：授权真实 Discord 增量页和隔离远程部署/HTTP 验收；通过后再为 V1 Discord 编写独立 Spec 和 implementation plan。V2 X、V3 收敛以及模块 2–4 仍不在当前范围。
+下一步先补齐 V0 conditional gate：授权真实 Discord 增量页，以及已登录 Vercel 会话下的远程应用 HTTP 验收；通过后再为 V1 Discord 编写独立 Spec 和 implementation plan。V2 X、V3 收敛以及模块 2–4 仍不在当前范围。
 
 ## 安全边界
 
