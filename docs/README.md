@@ -25,9 +25,12 @@ docs/
 │   └── plans/
 ├── engineering-journal/
 │   ├── 2026-07-15-spike-01.md
-│   └── 2026-07-15-spike-02.md
+│   ├── 2026-07-15-spike-02.md
+│   └── 2026-07-18-v0.md
 └── spikes/
-    └── 2026-07-15-spike-01-decision-report.md
+    ├── 2026-07-15-spike-01-decision-report.md
+    ├── 2026-07-15-spike-02-decision-report.md
+    └── 2026-07-18-v0-decision-report.md
 ```
 
 当前暂不创建 `docs/adr/`。Spike-01 的架构取舍已在其 Spec 和 Final Report 中记录；当 Spike-02 或 V0 产生需要跨阶段沿用的正式架构决策时，再新增独立 ADR。
@@ -59,3 +62,7 @@ intake
 - [Spike-01 Final Report](spikes/2026-07-15-spike-01-decision-report.md)
 - [Spike-02 Engineering Journal](engineering-journal/2026-07-15-spike-02.md)
 - [Spike-02 Final Report](spikes/2026-07-15-spike-02-decision-report.md)
+- [V0 基础设施与技术验证 Spec（已批准）](superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md)
+- [V0 基础设施与技术验证 Plan（已批准）](superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)
+- [V0 Engineering Journal](engineering-journal/2026-07-18-v0.md)
+- [V0 Final Report（有条件通过）](spikes/2026-07-18-v0-decision-report.md)

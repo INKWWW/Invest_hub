@@ -4,9 +4,9 @@ Last updated: 2026-07-18
 
 ## Current phase
 
-**Discovery / Spike-01 已完成，Spike-02 完整验证有条件通过；项目仍未进入 V0/V1 生产实现**
+**V0 确定性基础设施验证有条件通过；真实页面和远程部署验收待补证据**
 
-项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证，后续 Active Adapter 验证也已完成；Spike-02 harness、进程超时清理、小批次质量验证、有界并发验证、1000 条 c100 的 5/10 并发重复容量验证和媒体来源链路修复后的新鲜质量复核均已完成。按已批准的增量验证口径，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；你已确认未来生产试运行优先采用 chunk size 100、5 个并发请求，但这仍是后续生产设计的候选配置，不等于生产边界、SLA 或最终 Provider 选型已经确定。
+Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python Worker、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。确定性测试、恢复不变量和 redaction check 均通过，但本次没有可授权的真实 Discord 专用 Profile/source，也没有隔离 V0 Supabase/Vercel 部署目标，因此 V0 结论不是生产发布批准。
 
 ## Approval status
 
@@ -16,12 +16,15 @@ Last updated: 2026-07-18
   - [Spike-02 Codex CLI 容量与质量设计](superpowers/specs/2026-07-15-spike-02-free-llm-capacity-quality-design.md)
   - [Spike-02 有界并发设计](superpowers/specs/2026-07-18-spike-02-bounded-concurrency-design.md)
   - [Spike-02 未解析媒体来源链路设计](superpowers/specs/2026-07-18-spike-02-media-source-linkage-design.md)
+  - [V0 基础设施与技术验证设计](superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md)
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
   - [Spike-02 有界并发计划](superpowers/plans/2026-07-18-spike-02-bounded-concurrency-plan.md)
   - [Spike-02 未解析媒体来源链路计划](superpowers/plans/2026-07-18-spike-02-media-source-linkage-plan.md)
-- Approved technology stack：无
+  - [V0 基础设施与技术验证计划](superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)
+- V0 implementation status：已完成确定性实现与验证，结论为 conditional pass；真实页面/远程部署仍是退出门槛。
+- V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
 
@@ -35,7 +38,7 @@ Last updated: 2026-07-18
 
 ## Repository state
 
-当前仓库包含项目治理文档、Spike-01 harness 和 Spike-02 harness。Spike harness 仅限验证，不是生产应用代码；没有初始化生产应用框架，也没有安装生产依赖。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git。
+当前仓库包含项目治理文档、Spike harness、V0 控制面/Worker 验证实现、确定性 E2E harness 和管理员调试面。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git；V0 真实页面与远程部署仍未执行。
 
 ## Spike-01 result
 
@@ -50,7 +53,7 @@ Last updated: 2026-07-18
 - Active Adapter 不是第二套完整浏览器采集框架，而是基于 OpenCLI Browser Bridge，由项目侧主动控制 Discord 频道规范化、分页、响应匹配、freshness、有限重试和失败分类的采集适配层；Canonical Schema、Evidence Store 和 checkpoint 仍沿用项目边界。
 - 后续验证结果：Active Adapter 确定性测试 24/24 通过，原始 Spike-01 回归测试 32/32 通过；完成 1008 条原始/Canonical 消息处理，其中 969 条接受、39 条标记为未解决关系，重复和无效消息均为 0，并验证了 checkpoint 恢复；缺失/陈旧响应降为 0，平均每页尝试次数由 20 降至 1.13。
 - 证据边界：原始 Connector 对照运行使用了错误会话，首屏未成功，因此不能据此宣称严格的同条件性能提升；长期无人值守稳定性、长尾 P95、跨日期运行、网络变化和浏览器升级后的行为仍需在 V0 设计中继续验证。
-- 当前决策：Active Adapter 作为未来 V0 Discord 抓取 Spec 的候选主路径；原始 OpenCLI Connector 保留为诊断基线和必要时的回退候选。该决策不等于生产批准，Active Adapter 代码也尚未合并到 main。
+- 当前决策：Active Adapter 作为 V0 Discord 抓取的候选主路径；原始 OpenCLI Connector 保留为诊断基线和必要时的回退候选。V0 已实现该边界，但真实页面稳定性和长期生产采用仍需补证据。
 
 ## Spike-02 result
 
@@ -74,13 +77,21 @@ Last updated: 2026-07-18
 
 小批次成功不等同于容量通过，也不批准 V0/V1 生产实现或自动 fallback。
 
+## V0 result
+
+- 确定性验收：通过。控制面 28 个测试、Worker 40 个测试、Spike 回归 78 个测试、V0 E2E 7 个测试和 Supabase pgTAP 44 assertions 均通过。
+- 安全与恢复：通过。邀请码单次消费、普通用户 403、lease 竞争、raw/Canonical/structured 持久化失败、Provider timeout、媒体来源精确链路和 checkpoint 不前移均有证据。
+- 管理调试面：通过。状态区分 `no_new_data`、`retryable_failed`、`failed`、`succeeded_with_unresolved`、`succeeded`；Credential、Prompt、Profile reference 和完整模型响应不进入调试视图。
+- 真实页面：条件通过。已提供 preflight 和显式授权门禁，但本次没有运行真实 Discord 页面。
+- 远程部署：条件通过。已提供 Vercel/Supabase 配置边界，但没有执行隔离 V0 环境部署或 post-deploy HTTP 验收。
+
+完整证据见 [V0 Engineering Journal](engineering-journal/2026-07-18-v0.md) 和 [V0 Final Report](spikes/2026-07-18-v0-decision-report.md)。
+
 ## Next gate
 
-下一阶段暂不启动 V0。未来恢复生产设计时，V0 Discord 抓取 Spec 必须以 Active Adapter 作为候选主路径，同时保留原始 OpenCLI Connector 作为诊断基线和必要时的回退候选，并明确 Profile/会话前置条件、健康检查、freshness、有限重试、截止时间、逐页 telemetry 和 checkpoint 语义。V0 还需基于 Spike-02 的有条件通过结果，另行明确真实数据运行、限流/SLA、Provider 选择和失败降级策略，并以 chunk size 100、5 个并发请求作为初始候选；本次公开 fixture 质量结果不外推为真实业务质量。
+进入 V1 Spec 前必须补齐两项 conditional 证据：
 
-在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
+- 在用户明确授权的专用 Profile 和 Discord 来源上完成至少一次真实增量页，保留仓库外 evidence，并验证登录失效、权限失败、freshness 和 checkpoint 恢复；
+- 部署到隔离的 V0 Supabase/Vercel 环境，完成真实 HTTP `enrol → heartbeat → claim → result`、普通用户 admin 阻断和 lease/checkpoint 恢复验收。
 
-- 不把现有 Spike-02 harness 直接升级为生产实现；
-- 不启动 V0/V1 生产实现；
-- 不把 Spike-01 harness 直接升级为生产应用；
-- 不把 OpenCLI、Discord Desktop、Codex CLI 或官方 API 固化为未经 V0 验证的最终生产架构；Active Adapter 当前也只是 V0 候选路径。
+在上述证据补齐并重新审阅 Final Report 前，不把 V0 conditional pass 写成生产 SLA，不启动 V1 实现，不实现 X、多来源运营、正式阅读页、GLM 或自动 fallback。

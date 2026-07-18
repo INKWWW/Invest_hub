@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：Discovery / Spike-02 设计修订
-- 书面状态：待用户审阅
+- 书面状态：已批准（Spike-02）；后续 V0 仍需独立 Spec 与 implementation plan 批准
 - 本文范围：只设计 Spike-02，不授权 V0/V1 生产实现
 - 设计依据：`AGENTS.md`、`README.md`、`docs/project-status.md`、`docs/intake.md`
 - 已确认范围：Codex CLI 真实评估、Mock 确定性对照；不直接调用 GLM 或其他外部模型 API

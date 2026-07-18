@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：Discovery / 项目级设计
-- 书面状态：待用户审阅
+- 书面状态：已批准（项目级设计）；V0 及后续子项目仍需各自的 Spec 与 implementation plan 批准
 - 本文范围：Invest Hub 模块 1「投资信息收集」
 - 本文性质：项目总 spec，不是一次性实施授权
 - 事实输入：AGENTS.md、docs/project-status.md、docs/intake.md
