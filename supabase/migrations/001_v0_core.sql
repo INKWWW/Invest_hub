@@ -12,6 +12,7 @@ create table public.invites (
   id uuid primary key default gen_random_uuid(),
   code_hash text not null unique,
   role text not null default 'user' check (role in ('admin', 'user')),
+  purpose text not null default 'user' check (purpose in ('user', 'worker')),
   created_by uuid references public.profiles(id) on delete set null,
   expires_at timestamptz not null,
   consumed_at timestamptz,
@@ -181,6 +182,7 @@ $$;
 
 create or replace function public.consume_invite(
   p_code_hash text,
+  p_purpose text,
   p_user_id uuid,
   p_now timestamptz
 )
@@ -195,6 +197,7 @@ begin
   update public.invites
   set consumed_at = p_now, consumed_by = p_user_id
   where code_hash = p_code_hash
+    and purpose = p_purpose
     and consumed_at is null
     and expires_at > p_now
   returning * into v_invite;
@@ -206,8 +209,24 @@ begin
   return jsonb_build_object(
     'invite_id', v_invite.id::text,
     'role', v_invite.role,
+    'purpose', v_invite.purpose,
     'expires_at', v_invite.expires_at
   );
+end;
+$$;
+
+create or replace function public.consume_invite(
+  p_code_hash text,
+  p_user_id uuid,
+  p_now timestamptz
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  return public.consume_invite(p_code_hash, 'user', p_user_id, p_now);
 end;
 $$;
 
@@ -517,6 +536,7 @@ grant select, insert, update, delete on all tables in schema public to authentic
 grant usage, select on all sequences in schema public to authenticated, service_role;
 grant execute on function public.is_admin() to authenticated, service_role;
 grant execute on function public.consume_invite(text, uuid, timestamptz) to service_role;
+grant execute on function public.consume_invite(text, text, uuid, timestamptz) to service_role;
 grant execute on function public.claim_next_task(uuid, timestamptz) to service_role;
 grant execute on function public.renew_task_lease(uuid, integer, uuid, timestamptz) to service_role;
 grant execute on function public.accept_task_result(uuid, integer, jsonb, jsonb) to service_role;
@@ -552,6 +572,7 @@ for all to authenticated using (public.is_admin()) with check (public.is_admin()
 
 revoke all on function public.claim_next_task(uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.consume_invite(text, uuid, timestamptz) from public, anon, authenticated;
+revoke all on function public.consume_invite(text, text, uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.renew_task_lease(uuid, integer, uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.accept_task_result(uuid, integer, jsonb, jsonb) from public, anon, authenticated;
 revoke all on function public.record_task_failure(uuid, integer, jsonb, jsonb) from public, anon, authenticated;
