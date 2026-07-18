@@ -8,6 +8,10 @@
 - 设计依据：`AGENTS.md`、`README.md`、`docs/project-status.md`、`docs/intake.md`
 - 已确认范围：Codex CLI 真实评估、Mock 确定性对照；不直接调用 GLM 或其他外部模型 API
 
+## Provider 路线决策
+
+2026-07-18 起，当前路线后续使用 Codex CLI 方案：Codex CLI 是唯一真实 Provider 候选，Mock 仅用于确定性测试；不实现 GLM API、不实现自动 fallback。`docs/intake.md` 中较早记录的 GLM 方案作为历史输入保留，不作为当前实现授权；如未来需要重新引入其他 Provider，必须另行完成 Spike、Spec 和 Plan。
+
 ## 1. 目标与第一性原理
 
 Spike-02 只回答一个问题：

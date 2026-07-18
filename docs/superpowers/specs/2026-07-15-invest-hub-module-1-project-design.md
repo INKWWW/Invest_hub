@@ -51,7 +51,7 @@ Invest Hub 面向个人及少量受邀用户，是一个持续沉淀外部投研
 - 项目 spec 采用总 spec 形式，覆盖完整模块 1 的产品与技术边界；
 - Spike-01、Spike-02、V0、V1、V2、V3 保持独立子项目；
 - V1 Discord 正式可用定义为 MVP；
-- V1 MVP 同时支持 GLM、Codex CLI、Mock，并包含 GLM 到 Codex 的自动 fallback；
+- 当前路线以 Codex CLI 作为唯一真实 LLM Provider 候选，Mock 仅用于确定性测试；不纳入 GLM API 或自动 fallback；
 - MVP 包含管理员、邀请码和受邀普通用户；
 - V1 支持多个 Discord 频道、全局指定用户和频道级覆盖；
 - MVP 质量采用“安全门槛硬性化、性能指标暂定”；
@@ -78,8 +78,8 @@ V1 是第一个可日常使用的产品版本，至少包含：
 - 管理员配置中心；
 - 管理员任务控制；
 - 管理员、邀请码和普通用户权限隔离；
-- GLM、Codex CLI、Mock Provider；
-- GLM 失败后的 Codex CLI fallback；
+- Codex CLI、Mock Provider；
+- Codex CLI 失败后保留失败状态、局部重试和恢复入口；不自动切换到 GLM 或其他外部 Provider；
 - Prompt 版本和实际 Provider 记录；
 - 桌面端和手机端阅读；
 - 任务状态、简化错误和局部重试。
@@ -223,7 +223,7 @@ V1 不支持：
 - 规则处理和动态分块；
 - LLM Provider 调用；
 - JSON Schema 校验；
-- 局部重试和 Provider fallback；
+- 局部重试和失败恢复记录，不自动切换到未验证的其他 Provider；
 - 结果上传和任务状态回报；
 - 本地日志和心跳。
 
@@ -287,7 +287,7 @@ intake 中的 Next.js、TypeScript、Vercel、Supabase 及任务机制是候选�
 
 ### 7.8 Provider Gateway
 
-负责 GLM、Codex CLI、Mock 的统一接口、重试、fallback、健康状态和实际 Provider 记录；不负责直接访问来源网页。
+负责 Codex CLI、Mock 的统一接口、重试、健康状态和实际 Provider 记录；不负责直接访问来源网页，也不负责自动切换到未验证的外部 Provider。
 
 ### 7.9 总结流水线
 
@@ -457,7 +457,7 @@ X 摘要统一使用中文，同时保留原文、ticker、公司名、ETF、缩
 - 输出截断：缩小或拆分 chunk；
 - JSON 错误：程序修复或短格式修复请求；
 - 单 chunk 失败：只重试该 chunk；
-- GLM 连续失败：fallback 到 Codex CLI；
+- Codex CLI 连续失败：保留失败状态、输入范围和诊断，按任务策略恢复或人工处理；
 - Codex 也失败：保留失败状态和输入范围；
 - 每次执行记录 Provider、Prompt 版本、耗时和重试次数。
 
@@ -497,7 +497,7 @@ X 摘要统一使用中文，同时保留原文、ticker、公司名、ETF、缩
 
 不得进入 Git 或普通日志：
 
-- Supabase、GLM、Codex 等密钥；
+- Supabase、Codex 等密钥；
 - Cookie、Token、密码和 Chrome Profile；
 - 私有频道、博主名单和邀请码；
 - 私有 Prompt；
@@ -642,7 +642,7 @@ docs/superpowers/specs/2026-07-15-spike-01-opencli-discord-incremental-design.md
 
 ### 14.3 Spike-02
 
-验证 GLM 容量和质量、动态分块、JSON 稳定性、Codex CLI 无人值守和 fallback。
+验证 Codex CLI 容量和质量、动态分块、JSON 稳定性和 Codex CLI 无人值守运行。
 
 ### 14.4 V0
 
@@ -661,8 +661,8 @@ docs/superpowers/specs/2026-07-15-spike-01-opencli-discord-incremental-design.md
 - OpenCLI 是否需要私有 Adapter；
 - Canonical Schema 最终字段和统一表/分表模型；
 - Worker 认证、任务租约和恢复细节；
-- GLM/Codex 的实际容量、限流和成本；
-- fallback 的精确触发规则；
+- Codex CLI 的实际容量、限流和成本；
+- 未来如引入其他 Provider 时的独立验证和切换规则；
 - 动态分块的安全输入、输出和重叠参数；
 - Prompt 测试、启用和回滚流程；
 - 日累计总结的输入上限；
@@ -680,7 +680,7 @@ docs/superpowers/specs/2026-07-15-spike-01-opencli-discord-incremental-design.md
 - 电脑离线后能补采；
 - 原始数据不丢失；
 - 指定用户和博主观点不错误归因；
-- 免费 LLM 失败时可以局部重试或 fallback；
+- Codex CLI 失败时可以局部重试、恢复或明确记录失败状态；
 - 高消息量下任务最终可完成；
 - 日累计总结突出核心点和观点变化；
 - 用户可以从自然日和批次快速阅读；
