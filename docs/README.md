@@ -24,7 +24,8 @@ docs/
 │   ├── specs/
 │   └── plans/
 ├── engineering-journal/
-│   └── 2026-07-15-spike-01.md
+│   ├── 2026-07-15-spike-01.md
+│   └── 2026-07-15-spike-02.md
 └── spikes/
     └── 2026-07-15-spike-01-decision-report.md
 ```
@@ -56,3 +57,5 @@ intake
 - [Spike-01 Plan](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
 - [Spike-01 Engineering Journal](engineering-journal/2026-07-15-spike-01.md)
 - [Spike-01 Final Report](spikes/2026-07-15-spike-01-decision-report.md)
+- [Spike-02 Engineering Journal](engineering-journal/2026-07-15-spike-02.md)
+- [Spike-02 Final Report](spikes/2026-07-15-spike-02-decision-report.md)
