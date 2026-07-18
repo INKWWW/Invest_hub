@@ -3,7 +3,7 @@
 ## 报告状态
 
 - 日期：2026-07-15；最近更新：2026-07-18
-- 结论：**未验证（unverified）**
+- 结论：**有条件通过（conditional pass）**
 - 执行内容：本地确定性 harness、Mock 规模对照、Codex CLI 小批次真实运行、重复容量验证、人工质量复核和有界并发容量验证
 - 真实 Provider：本机已登录的 Codex CLI；没有直接调用 GLM 或其他外部模型 API
 - 本报告不批准 V0/V1 生产实现，也不批准自动 fallback
@@ -16,7 +16,7 @@
 
 ## 2. 确定性验证结果
 
-- 确定性测试：40/40 通过；
+- 确定性测试：46/46 通过；
 - Mock 小批次、约 500 条和 1000 条规模路径保持可运行；
 - Mock 的规模结果只证明 harness 的 chunk、重试、Schema 和 evidence 流程，不代表 Codex CLI 的容量或质量。
 
@@ -88,28 +88,37 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 | c5 | 253,921 / 304,162 / 264,062 ms | 119,898/129,648；122,831/188,732；125,138/138,903 ms | 0 | 100% / 100% / 100% | `capacity_stable_pass` |
 | c10 | 132,241 / 139,351 / 144,374 ms | 123,711/132,231；126,464/139,341；120,682/144,362 ms | 0 | 100% / 100% / 100% | `capacity_stable_pass` |
 
-随后使用 `public_small.json` 做一轮新鲜质量复核：1/1 chunk 成功、JSON/Schema 率 100%、6 个 claims 中 5 个 covered、5 个 grounded，人工复核未发现严重归因错误或媒体臆测。失败点是 `public-008`：输出设置了全局 `media_unparsed=true` 并给出未解析图片 warning，但没有在 topic 中引用 `public-008`，因此没有满足可追溯的 coverage/grounding 门槛。
+随后使用 `public_small.json` 做一轮新鲜质量复核：1/1 chunk 成功、JSON/Schema 率 100%、6 个 claims 中 5 个 covered、5 个 grounded，人工复核未发现严重归因错误或媒体臆测。失败点是 `public-008`：输出设置了全局 `media_unparsed=true` 并给出未解析图片 warning，但没有在 topic 中引用 `public-008`，因此没有满足可追溯的 coverage/grounding 门槛。该结果作为历史失败证据保留。
+
+### 4.7 未解析媒体 source linkage 修复后的新鲜质量复核
+
+按方案 1 增加必填的 `media_source_message_ids` 字段，并在 Schema 中要求它精确覆盖当前 chunk 的全部 `unparsed_media` 消息；runner 传入当前 chunk 的媒体 ID 集合，评估器使用该字段判断媒体 claim 的 grounding。确定性测试从 40/40 增加到 46/46，缺失、未知、非媒体和漏引用 ID 均有回归覆盖。
+
+使用明确设置的 `gpt-5.6-luna`、`public_small.json`、`chunk-size=12`、`max-concurrency=1`、最多 3 次尝试和 240 秒 timeout 重新运行；新鲜 evidence 为 `/private/tmp/invest-hub-spike-02-evidence/codex-public-small-media-linkage-20260718-luna`。1/1 chunk 首次及最终成功，JSON/Schema 率 100%，请求数 1、重试数 0，P50/P95 为 46,938/46,938 ms。
+
+模型输出显式包含 `media_source_message_ids=["public-008"]`。直接 Schema 校验和质量评估均为 6/6 covered、6/6 grounded、6/6 correct attribution，严重归因错误 0，媒体臆测 0；未解析媒体仍未被推断。该结果通过了质量门槛。
 
 ## 5. 当前结论
 
-结论为 **未验证**：
+结论为 **有条件通过（conditional pass）**：
 
 1. Codex CLI 可以在受限的非交互进程边界下返回符合 Schema 的结构化结果；
 2. 当前公开小 fixture 的归因、来源 ID 和未解析媒体边界通过人工复核；
 3. 120 秒不足以覆盖本机 Codex CLI 的完整进程生命周期，240 秒应作为当前 Spike 默认窗口；
 4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；1000 条 c100 的 c5/c10 各 3 轮均最终成功且无 retry，重复容量稳定性通过；
 5. 1000 条 c10 三轮批次墙钟为 132.2–144.4 秒，c5 三轮为 253.9–304.2 秒；在本次 synthetic 观测中 c10 明显更快，但不等于生产限流上限；
-6. 新鲜公开质量复核只有 5/6 claims covered/grounded，原因是 `public-008` 未进入 topic source IDs；严重归因错误和媒体臆测为 0，但质量门槛未通过；
-7. 因质量门槛未通过，Spike-02 总体仍为 `unverified`；需要先修复未解析媒体的 source linkage/grounding，再重新进行新鲜质量复核；
-8. 不能据此批准 Codex CLI 进入 V0/V1 生产架构，也不能把 5 或 10 并发写成生产默认值。
+6. 修复后的新鲜公开质量复核为 6/6 claims covered、grounded、correct attribution，严重归因错误和媒体臆测均为 0，质量门槛通过；
+7. 结合 1000 条 c100 的 c5/c10 各三轮容量稳定性通过，Spike-02 在已记录的本机 Codex CLI 条件下为 `conditional pass`；
+8. 之所以是有条件通过，是因为此前 500 条 c100 的 5 并发 Repeat-2 出现过一次可恢复 timeout/retry，且 250/500 chunk 已实测不稳定；当前只把 c100 作为候选边界；
+9. 不能据此批准 Codex CLI 进入 V0/V1 生产架构，也不能把 5 或 10 并发写成生产默认值。
 
 ## 6. 下一阶段门槛
 
-后续需要在同一受保护环境，先解决 `public-008` 未解析媒体的 source linkage/grounding 缺口，再重新运行公开质量复核，同时记录：
+后续如果进入生产设计，需要在新的正式 Spec/Plan 中明确真实数据运行、限流/SLA、Provider 选择和失败降级策略，同时保留以下运行约束：
 
 - 全部 chunk 的首次/最终成功率、JSON/Schema 率、重试率和 P50/P95；
 - timeout、provider failure、empty response、invalid JSON/Schema 的分类；
 - 真实总耗时、并发间 speedup 和可接受的运行边界；
-- 小 fixture 的人工质量复核是否达到 6/6 coverage、grounding 和正确归因，且媒体臆测为 0。
+- 小 fixture 的人工质量复核已达到 6/6 coverage、grounding 和正确归因，且媒体臆测为 0；本结果不外推为真实业务质量。
 
 在这些证据齐全、正式 Spec 和 implementation plan 另行批准前，不启动 V0/V1 生产实现。

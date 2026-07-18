@@ -1,5 +1,7 @@
 # Spike-02 Media Source Linkage Implementation Plan
 
+Status: Approved and executed 2026-07-18
+
 > For the implementation agent: REQUIRED SUB-SKILL: use `superpowers:test-driven-development` for every code task, and `superpowers:verification-before-completion` before reporting completion.
 
 **Goal:** Make every unparsed-media input message explicitly traceable in the structured output, so the existing quality evaluator can distinguish “media was safely left unparsed” from “media was omitted from the result.”

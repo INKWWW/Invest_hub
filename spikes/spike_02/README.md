@@ -84,7 +84,7 @@ PYTHONPATH=spikes python3 -m spike_02.cli codex \
 
 并发只发生在不同 chunk 的 Provider 请求之间；单个 chunk 的重试仍由同一个 worker 独立完成。EvidenceStore 会串行化本地 JSONL/JSON 写入，并发上限和实际活动请求数会写入 `metrics.json` 的 `max_concurrency` 与 `max_active_requests`。
 
-本 Spike 当前只验证 `max-concurrency=2`，不复用 Codex 会话，也不引入 app-server、生产任务调度或更大的 chunk。规模 fixture 仍只用于容量与耗时观察，不能据此宣称业务质量通过。
+此前并发设计先验证了 `max-concurrency=2`；后续完整验证也覆盖了 `5` 和 `10` 并发的 1000 条 synthetic 重复运行。不复用 Codex 会话，也不引入 app-server、生产任务调度或更大的 chunk。规模 fixture 仍只用于容量与耗时观察，不能据此宣称真实业务质量通过。
 
 运行规模 fixture：
 

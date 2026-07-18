@@ -1,6 +1,6 @@
 # Spike-02 Media Source Linkage Specification
 
-Status: Draft for implementation in `spike-02-implementation`
+Status: Approved for implementation in `spike-02-implementation` (user-approved 2026-07-18)
 
 Date: 2026-07-18
 
