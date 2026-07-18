@@ -111,9 +111,17 @@
 - 单次运行不应以“未出现错误”作为唯一成功标准，应以 checkpoint 和证据完整性判断；
 - 登录态、Profile 生命周期和 OpenCLI 版本必须作为环境前置条件管理。
 
+## 6.1 Active Adapter 后续决策
+
+后续验证的 Active Adapter 不是第二套完整浏览器采集框架，而是基于 OpenCLI Browser Bridge、由项目侧主动控制 Discord 频道规范化、分页、响应匹配、freshness、有限重试和失败分类的采集适配层；Canonical Schema、Evidence Store 和 checkpoint 仍沿用本项目边界。
+
+Active Adapter 确定性测试 24/24 通过，原始 Spike-01 回归测试 32/32 通过；验证处理 1008 条原始/Canonical 消息，其中 969 条接受、39 条标记为未解决关系，重复和无效消息均为 0，并验证 checkpoint 恢复；缺失/陈旧响应降为 0，平均每页尝试次数由 20 降至 1.13。原始 Connector 对照运行使用了错误会话，首屏未成功，因此本报告不据此宣称严格的同条件性能提升。
+
+当前决策是：Active Adapter 作为未来 V0 Discord 抓取 Spec 的候选主路径；原始 OpenCLI Connector 保留为诊断基线和必要时的回退候选。该决策不等于生产批准，长期无人值守稳定性、长尾 P95、跨日期运行、网络变化和浏览器升级后的行为仍需在 V0 中继续验证；Active Adapter 代码暂不并入 main。
+
 ## 7. 后续建议
 
-- 可以进入下一阶段的 V0 采集设计，但先把本 Spike 的恢复、freshness、90 秒硬截止和 evidence 约束写入 V0 specification；
+- V0 采集设计应以 Active Adapter 作为 Discord 抓取候选主路径，同时保留原始 OpenCLI Connector 作为诊断基线和必要时的回退候选；先把本 Spike 的恢复、freshness、90 秒硬截止和 evidence 约束写入 V0 specification；
 - V0 implementation plan 不应直接复制 Spike harness，也不应把 Browser Bridge 的具体命令当作永久公共接口；
 - 在 V0 实现前，继续保留 OpenCLI contract 版本校验和真实网页回归验收；
 - 当前不引入 Desktop 客户端、Agent-Reach、Playwright/CDP 或第二套完整采集框架。

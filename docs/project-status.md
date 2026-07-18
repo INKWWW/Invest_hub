@@ -6,7 +6,7 @@ Last updated: 2026-07-18
 
 **Discovery / Spike-01 已完成，Spike-02 完整验证有条件通过；项目仍未进入 V0/V1 生产实现**
 
-项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理、小批次质量验证、有界并发验证、1000 条 c100 的 5/10 并发重复容量验证和媒体来源链路修复后的新鲜质量复核均已完成。按已批准的增量验证口径，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；你已确认未来生产试运行优先采用 chunk size 100、5 个并发请求，但这仍是后续生产设计的候选配置，不等于生产边界、SLA 或最终 Provider 选型已经确定。
+项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证，后续 Active Adapter 验证也已完成；Spike-02 harness、进程超时清理、小批次质量验证、有界并发验证、1000 条 c100 的 5/10 并发重复容量验证和媒体来源链路修复后的新鲜质量复核均已完成。按已批准的增量验证口径，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；你已确认未来生产试运行优先采用 chunk size 100、5 个并发请求，但这仍是后续生产设计的候选配置，不等于生产边界、SLA 或最终 Provider 选型已经确定。
 
 ## Approval status
 
@@ -45,6 +45,13 @@ Last updated: 2026-07-18
 - checkpoint 恢复、network 空窗和逐页 telemetry 验证通过；
 - 决策结论：OpenCLI-first 可作为后续设计输入，但生产采用必须保留 freshness、有限重试、失败恢复和逐页 telemetry。
 
+## Spike-01 Active Adapter 后续方向
+
+- Active Adapter 不是第二套完整浏览器采集框架，而是基于 OpenCLI Browser Bridge，由项目侧主动控制 Discord 频道规范化、分页、响应匹配、freshness、有限重试和失败分类的采集适配层；Canonical Schema、Evidence Store 和 checkpoint 仍沿用项目边界。
+- 后续验证结果：Active Adapter 确定性测试 24/24 通过，原始 Spike-01 回归测试 32/32 通过；完成 1008 条原始/Canonical 消息处理，其中 969 条接受、39 条标记为未解决关系，重复和无效消息均为 0，并验证了 checkpoint 恢复；缺失/陈旧响应降为 0，平均每页尝试次数由 20 降至 1.13。
+- 证据边界：原始 Connector 对照运行使用了错误会话，首屏未成功，因此不能据此宣称严格的同条件性能提升；长期无人值守稳定性、长尾 P95、跨日期运行、网络变化和浏览器升级后的行为仍需在 V0 设计中继续验证。
+- 当前决策：Active Adapter 作为未来 V0 Discord 抓取 Spec 的候选主路径；原始 OpenCLI Connector 保留为诊断基线和必要时的回退候选。该决策不等于生产批准，Active Adapter 代码也尚未合并到 main。
+
 ## Spike-02 result
 
 - 确定性测试：46/46 通过；
@@ -69,11 +76,11 @@ Last updated: 2026-07-18
 
 ## Next gate
 
-下一阶段暂不启动 V0。未来恢复生产设计时，可基于 Spike-02 的有条件通过结果，另行明确真实数据运行、限流/SLA、Provider 选择和失败降级策略，并以 chunk size 100、5 个并发请求作为初始候选；本次公开 fixture 质量结果不外推为真实业务质量。
+下一阶段暂不启动 V0。未来恢复生产设计时，V0 Discord 抓取 Spec 必须以 Active Adapter 作为候选主路径，同时保留原始 OpenCLI Connector 作为诊断基线和必要时的回退候选，并明确 Profile/会话前置条件、健康检查、freshness、有限重试、截止时间、逐页 telemetry 和 checkpoint 语义。V0 还需基于 Spike-02 的有条件通过结果，另行明确真实数据运行、限流/SLA、Provider 选择和失败降级策略，并以 chunk size 100、5 个并发请求作为初始候选；本次公开 fixture 质量结果不外推为真实业务质量。
 
 在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
 
 - 不把现有 Spike-02 harness 直接升级为生产实现；
 - 不启动 V0/V1 生产实现；
 - 不把 Spike-01 harness 直接升级为生产应用；
-- 不把 OpenCLI、Discord Desktop、Codex CLI 或官方 API 固化为最终生产架构。
+- 不把 OpenCLI、Discord Desktop、Codex CLI 或官方 API 固化为未经 V0 验证的最终生产架构；Active Adapter 当前也只是 V0 候选路径。

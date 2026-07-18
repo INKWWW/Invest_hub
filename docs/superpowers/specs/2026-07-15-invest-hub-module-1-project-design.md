@@ -52,6 +52,7 @@ Invest Hub 面向个人及少量受邀用户，是一个持续沉淀外部投研
 - Spike-01、Spike-02、V0、V1、V2、V3 保持独立子项目；
 - V1 Discord 正式可用定义为 MVP；
 - 当前路线以 Codex CLI 作为唯一真实 LLM Provider 候选，Mock 仅用于确定性测试；不纳入 GLM API 或自动 fallback；
+- Discord 后续采集路线以 OpenCLI Browser Bridge + 项目侧 Active Adapter 作为未来 V0 的候选主路径；原始 OpenCLI Connector 保留为诊断基线和必要时的回退候选；该路线仍需在 V0 Spec/Plan 中确认，不等于当前生产批准；
 - MVP 包含管理员、邀请码和受邀普通用户；
 - V1 支持多个 Discord 频道、全局指定用户和频道级覆盖；
 - MVP 质量采用“安全门槛硬性化、性能指标暂定”；
@@ -174,7 +175,7 @@ V1 不支持：
 
 1. 本地 Worker 启动并上报心跳。
 2. 拉取可执行任务和已启用来源配置。
-3. 复用专用 Chrome Profile，通过 OpenCLI 读取网页。
+3. 复用专用 Chrome Profile，通过 OpenCLI Browser Bridge 和项目侧 Discord Active Adapter 读取网页。
 4. 根据来源 checkpoint 增量采集。
 5. 完成规则处理、动态分块、结构化分析和批次总结。
 6. 原始数据和结果成功持久化后推进 checkpoint。
@@ -219,6 +220,7 @@ V1 不支持：
 - 专用 Chrome Profile；
 - OpenCLI Runtime；
 - Discord Connector 和 X Connector；
+- Discord Active Adapter（V0 候选主路径）；
 - checkpoint 增量采集；
 - 规则处理和动态分块；
 - LLM Provider 调用；
@@ -646,7 +648,7 @@ docs/superpowers/specs/2026-07-15-spike-01-opencli-discord-incremental-design.md
 
 ### 14.4 V0
 
-只有在两个 Spike 结论可用后，才确定控制面、Worker、任务、权限、Provider 和 OpenCLI 的正式实现边界。
+只有在两个 Spike 结论可用后，才确定控制面、Worker、任务、权限、Provider 和 OpenCLI 的正式实现边界。V0 Discord 抓取 Spec 应以 Active Adapter 作为候选主路径，明确其与原始 OpenCLI Connector 诊断基线/回退候选的关系，并把会话健康检查、freshness、有限重试、截止时间、逐页 telemetry 和 checkpoint 恢复写入验收标准；这仍不授权当前开始 V0 实现。
 
 ### 14.5 V1、V2、V3
 
