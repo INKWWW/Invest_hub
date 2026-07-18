@@ -11,7 +11,7 @@ function validatorFor(name: string): ValidateFunction {
   const existing = validators.get(name);
   if (existing) return existing;
 
-  const schemaPath = resolve(process.cwd(), "..", "..", "contracts", "v0", `${name}.schema.json`);
+  const schemaPath = resolve(process.cwd(), "contracts", "v0", `${name}.schema.json`);
   const schema = JSON.parse(readFileSync(schemaPath, "utf8")) as object;
   const validator = ajv.compile(schema);
   validators.set(name, validator);

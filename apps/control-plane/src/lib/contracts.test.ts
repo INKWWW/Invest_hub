@@ -1,8 +1,33 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { parseContract } from "./contracts";
 
 describe("v0 contracts", () => {
+  it("ships the control-plane contract bundle and keeps it equal to the canonical contracts", () => {
+    const names = [
+      "heartbeat",
+      "source-config",
+      "task-claim",
+      "task-event",
+      "task-failure",
+      "task-result",
+      "worker-enrolment",
+      "worker-persistence",
+    ];
+    const deploymentRoot = resolve(process.cwd(), "contracts", "v0");
+    const canonicalRoot = resolve(process.cwd(), "..", "..", "contracts", "v0");
+
+    for (const name of names) {
+      const filename = `${name}.schema.json`;
+      const deployed = resolve(deploymentRoot, filename);
+      expect(existsSync(deployed)).toBe(true);
+      expect(readFileSync(deployed, "utf8")).toBe(readFileSync(resolve(canonicalRoot, filename), "utf8"));
+    }
+  });
+
   it("accepts a valid heartbeat", () => {
     const heartbeat = parseContract<{ worker_id: string }>("heartbeat", {
       contract_version: "v0",

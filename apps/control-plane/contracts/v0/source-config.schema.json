@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://invest-hub.local/contracts/v0/source-config.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_id", "source_type", "channel_url", "profile_ref", "opencli_contract_version", "parameter_version"],
+  "properties": {
+    "source_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "source_type": { "const": "discord" },
+    "channel_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "profile_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "opencli_contract_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "parameter_version": { "type": "string", "minLength": 1, "maxLength": 128 }
+  }
+}
