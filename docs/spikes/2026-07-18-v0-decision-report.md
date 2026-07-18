@@ -1,43 +1,42 @@
-# V0 Final Report — 基础设施与技术验证
+# V0 最终报告——基础设施与技术验证
 
-Last updated: 2026-07-18
+最后更新：2026-07-18
 
-## Decision
+## 决策
 
-**Conditional pass（确定性基础设施通过；真实页面与远程部署待补证据）**。
+**有条件通过（确定性基础设施通过；真实页面与远程部署待补证据）**。
 
-V0 的最小闭环已在公开 fixture、Mock Provider、本地 Supabase 和脱敏控制面边界中验证：邀请码与角色隔离、Worker 生命周期、单任务 lease、raw → Canonical → structured 证据链、checkpoint 安全推进、Provider 超时回收和管理员调试面均有可复现测试。由于本次没有可授权的真实 Discord Profile/source，也没有隔离 V0 远程部署目标，不能宣称已完成 V0 的部署端到端验收或真实页面验收。
+V0 的最小闭环已在公开测试样例、Mock 提供方、本地 Supabase 和脱敏控制面边界中验证：邀请码与角色隔离、Worker 生命周期、单任务租约、原始数据 → 规范数据 → 结构化输出的证据链、检查点安全推进、提供方超时回收和管理员调试面均有可复现测试。由于本次没有可授权的真实 Discord 专用浏览器配置档和来源，也没有隔离的 V0 远程部署目标，不能宣称已完成 V0 的部署端到端验收或真实页面验收。
 
-## Acceptance matrix
+## 验收矩阵
 
-| 验收项 | 结论 | Evidence / command | 限制 |
+| 验收项 | 结论 | 证据 / 命令 | 限制 |
 | --- | --- | --- | --- |
-| 跨语言 contract 拒绝非法字段 | pass | `tests://v0/contracts`; Worker contract tests | 只验证公开 fixture |
-| Supabase schema、RLS、invite single-use | pass | `db://v0/rls/001`; `supabase test db` — 44 assertions | local DB only |
-| Admin/user API and task state | pass | `tests://v0/control-plane`; 28 Vitest tests | no remote deployment |
-| Worker enrol/heartbeat/claim/result | pass | `tests://v0/worker`; 40 unittest tests | deterministic transport and fake clock boundaries |
-| Active Adapter freshness/deadline | pass | `tests://v0/active-adapter` | no real browser page in this report |
-| Mock/Codex Provider boundary | pass | `tests://v0/provider`; process-group and schema tests | no new real Codex capacity claim |
-| Media evidence linkage | pass | `e2e://v0/deterministic`; exact source-ID assertions | public fixture only |
-| Admin debug redaction and retry gating | pass | `tests://v0/admin`; `npm run lint`; `npm run build` | view is an operational debug surface, not reader UI |
-| Deterministic recovery | pass | `e2e://v0/deterministic`; 7 tests | in-memory control plane, not deployed HTTP |
-| Repository redaction | pass | `checks://v0/redaction`; `bash scripts/v0/redact-check.sh` | checks credential-shaped values, not semantic review |
-| Authorized real Discord increment | conditional | `preflight://v0/real-discord` | Profile/source authorization was not supplied |
-| Deployed V0 HTTP/auth/recovery | conditional | `deploy://v0/pending` | isolated Supabase/Vercel target and credentials absent |
+| 跨语言契约拒绝非法字段 | 通过 | `tests://v0/contracts`；Worker 契约测试 | 只验证公开测试样例 |
+| Supabase 数据结构、RLS、邀请码单次使用 | 通过 | `db://v0/rls/001`；`supabase test db`——44 条断言 | 仅验证本地数据库 |
+| 管理员/普通用户 API 与任务状态 | 通过 | `tests://v0/control-plane`；28 个 Vitest 测试 | 未进行远程部署 |
+| Worker 注册/心跳/领取/结果 | 通过 | `tests://v0/worker`；40 个单元测试 | 仅覆盖确定性传输与模拟时钟边界 |
+| Active Adapter 新鲜度/截止时间 | 通过 | `tests://v0/active-adapter` | 本报告未包含真实浏览器页面 |
+| Mock/Codex 提供方边界 | 通过 | `tests://v0/provider`；进程组与数据结构测试 | 未新增真实 Codex 容量结论 |
+| 媒体证据关联 | 通过 | `e2e://v0/deterministic`；精确来源 ID 断言 | 仅使用公开测试样例 |
+| 管理员调试脱敏与重试门禁 | 通过 | `tests://v0/admin`；`npm run lint`；`npm run build` | 这是运维调试界面，不是普通用户阅读界面 |
+| 确定性恢复 | 通过 | `e2e://v0/deterministic`；7 个测试 | 使用内存控制面，未验证已部署 HTTP |
+| 仓库脱敏 | 通过 | `checks://v0/redaction`；`bash scripts/v0/redact-check.sh` | 检查凭据形态值，不替代语义审查 |
+| 已授权真实 Discord 增量 | 有条件 | `preflight://v0/real-discord` | 尚未提供浏览器配置档/来源授权 |
+| 已部署 V0 HTTP/认证/恢复 | 有条件 | `deploy://v0/pending` | 缺少隔离的 Supabase/Vercel 目标与凭据 |
 
-## Implemented delivery
+## 已交付内容
 
-- Contract schemas and loaders under `contracts/v0`.
-- Next.js/Supabase control plane with role-bound admin APIs, task/lease RPC integration and redacted admin pages.
-- Python 3.11+ Worker with owner-only config/credential storage, recovery states, Active Adapter, Canonical mapping, checkpoint guard and local evidence.
-- Mock/Codex CLI Provider boundary with read-only/ephemeral invocation, bounded process-group timeout cleanup, retry policy and strict structured/media-source validation.
-- Deterministic E2E harness, real-page preflight gate, redaction check and V0 environment template.
+- `contracts/v0` 下的契约数据结构与加载器。
+- 基于 Next.js/Supabase 的控制面，包含按角色约束的管理员 API、任务/租约 RPC 集成和脱敏管理员页面。
+- Python 3.11+ Worker，包含仅所有者可访问的配置/凭据存储、恢复状态、Active Adapter、Canonical 映射、检查点守卫和本地证据。
+- Mock/Codex CLI 提供方边界，包含只读/临时调用、有界进程组超时清理、重试策略，以及严格的结构化输出/媒体来源校验。
+- 确定性端到端测试框架、真实页面预检门禁、脱敏检查和 V0 环境模板。
 
-## Known limits and V1 gate
+## 已知限制与 V1 门禁
 
-V0 不交付普通用户正式阅读页、不接入 X、不提供多来源运营、不实现 GLM 或自动 fallback。真实 Discord 运行必须由管理员明确提供已登录专用 Profile 和有权限来源，并在仓库外保存 evidence；远程部署必须使用隔离的 V0 项目和不含真实生产数据的凭据。V1 Spec 只有在这两项 conditional 验收补齐、并重新确认 Codex c100/c5/240 秒/最多 3 次运行行为后才能开始。
+V0 不交付普通用户正式阅读页、不接入 X、不提供多来源运营、不实现 GLM 或自动回退。真实 Discord 运行必须由管理员明确提供已登录专用浏览器配置档和有权限来源，并在仓库外保存证据；远程部署必须使用隔离的 V0 项目和不含真实生产数据的凭据。只有在这两项有条件验收补齐、并重新确认 Codex c100/c5/240 秒/最多 3 次运行行为后，才能开始 V1 规格文档。
 
-## Sensitive-data statement
+## 敏感数据声明
 
-本报告不包含 Discord/X 正文、真实 URL、Profile 路径、Cookie、Token、邀请码、Prompt 正文、完整模型响应或本地 evidence 内容；报告中的 evidence ref 均为逻辑标识。
-
+本报告不包含 Discord/X 正文、真实 URL、浏览器配置档路径、Cookie、Token、邀请码、提示词正文、完整模型响应或本地证据内容；报告中的证据引用均为逻辑标识。
