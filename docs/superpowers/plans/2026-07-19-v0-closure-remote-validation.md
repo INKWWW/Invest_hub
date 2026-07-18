@@ -112,7 +112,8 @@
 
 - [x] 实现最小管理员表单；不收集频道 URL、Profile 或 Prompt。
 - [x] 在本地控制面运行全部 lint、测试与生产构建。
-- [ ] 部署后仅对 Vercel Preview 执行应用级 HTTP 验收；当前被 Vercel SSO 保护层阻断，需已登录会话。
+- [x] 部署后仅对 Vercel 预览执行核心工作节点应用级 HTTP 验收：合成注册 → 心跳 → 领取 → 持久化 → 回报结果通过；Vercel 受保护部署通道抵达应用，未使用或记录真实 Discord 内容。
+- [ ] 补测远程普通用户管理员阻断和 lease/checkpoint 恢复；它们不由核心合成链路替代。
 - [x] 提交：`feat: add v0 admin source and task entry forms`。
 
 ### Task 5：部署收口、真实运行门禁与文档更新
@@ -131,7 +132,7 @@
 - 真实 Discord 命令必须先通过预检，并需要用户提供仓库外的专用配置档、授权来源、OpenCLI 合同、Prompt 和一次性 Worker 邀请码；缺任一项时保持有条件通过。
 
 - [x] 部署 Preview，检查部署日志不含密钥、Profile、Prompt 或正文。
-- [x] 运行全部可执行的确定性测试、redaction 检查和 diff 检查；远程 HTTP E2E 因 Vercel SSO 未抵达应用。
+- [x] 运行全部可执行的确定性测试、redaction 检查和 diff 检查；远程核心 HTTP E2E 已通过，部署期契约文件路径缺陷已修复并新增同源一致性测试。
 - [ ] 在显式授权条件满足后运行一次真实 Discord 增量；本次没有授权来源配置，保持门禁状态。
 - [x] 根据实际证据更新工程日志、决策报告和项目状态；保持“有条件通过”。
 - [ ] 提交：`docs: record v0 closure validation`。
