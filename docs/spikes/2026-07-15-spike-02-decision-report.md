@@ -4,7 +4,7 @@
 
 - 日期：2026-07-15；最近更新：2026-07-18
 - 结论：**未验证（unverified）**
-- 执行内容：本地确定性 harness、Mock 规模对照、Codex CLI 小批次真实运行、人工质量复核和有界并发容量验证
+- 执行内容：本地确定性 harness、Mock 规模对照、Codex CLI 小批次真实运行、重复容量验证、人工质量复核和有界并发容量验证
 - 真实 Provider：本机已登录的 Codex CLI；没有直接调用 GLM 或其他外部模型 API
 - 本报告不批准 V0/V1 生产实现，也不批准自动 fallback
 
@@ -64,9 +64,9 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 - 500 条 synthetic fixture：5 个 chunk、`chunk-size 100`、`max-concurrency 2`；5/5 首次及最终成功，0 重试，JSON/Schema 率 100%，P50/P95 为 127,935/129,800 ms，批次墙钟 321,965 ms，`max_active_requests=2`。
 - 与同一 500 条、`chunk-size 100` 串行基线的请求耗时合计 645,827 ms 相比，本轮观测 speedup 约 2.006x；并发 evidence 的 5 条 request、5 条 result 和 5 个 raw response 均完整，所有 Provider 状态为 `success`。
 - 追加 5 并发探针：同样的 500 条 synthetic fixture、5 个 chunk、`chunk-size 100`；5/5 首次及最终成功，0 重试，P50/P95 为 112,947/129,807 ms，批次墙钟 129,814 ms，`max_active_requests=5`。相对串行约 4.975x、相对 2 并发约 2.480x；evidence 的 5 条 request、5 条 result 和 5 个 raw response 均完整。
-- 追加稳定性验证时，Repeat-1 通过；Repeat-2 的 5 个 chunk 中有 1 个在 240,018 ms timeout（退出码 -9），随后重试成功。本轮最终成功率为 100%，但首次成功率 80%、请求数 6、重试数 1、P50/P95 为 127,522/240,018 ms，因此未满足零重试稳定性门槛，按计划停止 Repeat-3 和 1000 条测试。
+- 追加稳定性验证时，Repeat-1 通过；Repeat-2 的 5 个 chunk 中有 1 个在 240,018 ms timeout（退出码 -9），随后重试成功。本轮最终成功率为 100%，但首次成功率 80%、请求数 6、重试数 1、P50/P95 为 127,522/240,018 ms，因此按当时的零重试门槛暂停后续测试；后续完整 1000 条重复验证见 4.6。
 
-该结果验证了“独立 chunk 的有界并发”可以缩短 synthetic capacity 的批次耗时，但 5 并发的重复稳定性尚未通过：一次探针全成功，后续重复出现 timeout 后重试。它不代表限流边界或生产安全性，也不代表业务质量提升或 1000 条容量的重复稳定性已经通过。
+该结果验证了“独立 chunk 的有界并发”可以缩短 synthetic capacity 的批次耗时，但当时的 500 条重复运行出现 timeout 后重试。它不代表限流边界或生产安全性，也不代表业务质量提升；后续 1000 条重复运行结果见 4.6。
 
 ### 4.5 1000 条 5/10 并发容量对比
 
@@ -79,6 +79,17 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 
 10 并发相对 5 并发的批次墙钟减少 121,680 ms，观测 speedup 约 1.92x；两轮都只有一次真实容量探针，不能据此固化 10 并发为生产默认值。synthetic fixture 也不能证明业务摘要质量。
 
+### 4.6 完整验证：重复容量与新鲜质量
+
+在同一 1000 条 synthetic、`chunk-size 100`、240 秒 timeout 和最多 3 次尝试边界下，c5 和 c10 各追加两轮，合并既有首轮后各有 3 个样本。六轮均为 10/10 chunk 最终成功、首次成功率 100%、最终成功率 100%、JSON/Schema 率 100%、重试数 0，requests/results/raw response 数量完整，实际并发没有超过配置值。
+
+| 配置 | 三轮批次墙钟 | 三轮 P50/P95 | 三轮重试 | 三轮最终成功率 | 容量分类 |
+| --- | --- | --- | ---: | --- | --- |
+| c5 | 253,921 / 304,162 / 264,062 ms | 119,898/129,648；122,831/188,732；125,138/138,903 ms | 0 | 100% / 100% / 100% | `capacity_stable_pass` |
+| c10 | 132,241 / 139,351 / 144,374 ms | 123,711/132,231；126,464/139,341；120,682/144,362 ms | 0 | 100% / 100% / 100% | `capacity_stable_pass` |
+
+随后使用 `public_small.json` 做一轮新鲜质量复核：1/1 chunk 成功、JSON/Schema 率 100%、6 个 claims 中 5 个 covered、5 个 grounded，人工复核未发现严重归因错误或媒体臆测。失败点是 `public-008`：输出设置了全局 `media_unparsed=true` 并给出未解析图片 warning，但没有在 topic 中引用 `public-008`，因此没有满足可追溯的 coverage/grounding 门槛。
+
 ## 5. 当前结论
 
 结论为 **未验证**：
@@ -86,18 +97,19 @@ Evidence：本地 `/private/tmp/invest-hub-spike-02-evidence/codex-single-long`�
 1. Codex CLI 可以在受限的非交互进程边界下返回符合 Schema 的结构化结果；
 2. 当前公开小 fixture 的归因、来源 ID 和未解析媒体边界通过人工复核；
 3. 120 秒不足以覆盖本机 Codex CLI 的完整进程生命周期，240 秒应作为当前 Spike 默认窗口；
-4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；500 条在 `chunk-size 100` 的串行、2 并发和 5 并发运行中均完成；1000 条 c100 的 5/10 并发单轮也均完成，但重复稳定性和可接受生产边界尚未验证；
-5. 500 条的 2 并发和 5 并发分别将观测墙钟降至约 322.0 秒和 129.8 秒；1000 条单轮中，10 并发相对 5 并发约快 1.92x，但两档都尚无重复运行证据；
-6. 按增量 Spec 分类，1000 条 c100 的 5 并发和 10 并发单轮均为 `capacity_probe_pass`；Spike-02 总体仍为 `unverified`，因为重复稳定性、业务质量复核和生产边界尚未完成；
-7. 不能据此批准 Codex CLI 进入 V0/V1 生产架构，也不能把 5 或 10 并发写成生产默认值。
+4. `chunk-size 500` 和 `chunk-size 250` 已实测超时；1000 条 c100 的 c5/c10 各 3 轮均最终成功且无 retry，重复容量稳定性通过；
+5. 1000 条 c10 三轮批次墙钟为 132.2–144.4 秒，c5 三轮为 253.9–304.2 秒；在本次 synthetic 观测中 c10 明显更快，但不等于生产限流上限；
+6. 新鲜公开质量复核只有 5/6 claims covered/grounded，原因是 `public-008` 未进入 topic source IDs；严重归因错误和媒体臆测为 0，但质量门槛未通过；
+7. 因质量门槛未通过，Spike-02 总体仍为 `unverified`；需要先修复未解析媒体的 source linkage/grounding，再重新进行新鲜质量复核；
+8. 不能据此批准 Codex CLI 进入 V0/V1 生产架构，也不能把 5 或 10 并发写成生产默认值。
 
 ## 6. 下一阶段门槛
 
-后续需要在同一受保护环境、优先使用 chunk size 100 或更小，重复 1000 条 5/10 并发运行或执行更长批次验证，同时记录：
+后续需要在同一受保护环境，先解决 `public-008` 未解析媒体的 source linkage/grounding 缺口，再重新运行公开质量复核，同时记录：
 
 - 全部 chunk 的首次/最终成功率、JSON/Schema 率、重试率和 P50/P95；
 - timeout、provider failure、empty response、invalid JSON/Schema 的分类；
 - 真实总耗时、并发间 speedup 和可接受的运行边界；
-- 小 fixture 的人工质量复核是否在新的 Prompt/模型配置下保持通过。
+- 小 fixture 的人工质量复核是否达到 6/6 coverage、grounding 和正确归因，且媒体臆测为 0。
 
 在这些证据齐全、正式 Spec 和 implementation plan 另行批准前，不启动 V0/V1 生产实现。

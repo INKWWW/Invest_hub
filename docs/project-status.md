@@ -4,9 +4,9 @@ Last updated: 2026-07-18
 
 ## Current phase
 
-**Discovery / Spike-01 已完成，Spike-02 Codex CLI harness、并发验证、小批次验证和 1000 条单轮容量对比已完成，但总体结论未完成**
+**Discovery / Spike-01 已完成，Spike-02 Codex CLI harness、并发验证、小批次验证和 1000 条重复容量验证已完成，但质量门槛未通过，总体仍未验证**
 
-项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理、小批次质量验证、有界并发验证和 1000 条 c100 的 5/10 并发单轮容量对比已完成，但重复稳定性、业务质量复核和生产边界仍未验证。
+项目仍处于 Discovery，不代表已经进入 V0/V1 生产实现。Spike-01 已完成真实网页轨验证；Spike-02 harness、进程超时清理、小批次质量验证、有界并发验证和 1000 条 c100 的 5/10 并发重复容量验证已完成，但新鲜质量复核未达到 grounding/可追溯门槛，生产边界仍未验证。
 
 ## Approval status
 
@@ -54,6 +54,8 @@ Last updated: 2026-07-18
 - 追加一次 5 并发探针：500 条 `chunk-size 100` synthetic run 为 5/5 成功、0 次重试、批次墙钟 129,814 ms、P50/P95 为 112,947/129,807 ms，较串行约快 4.975x、较 2 并发约快 2.480x；该结果只有一次运行，暂不把 5 并发列为安全或生产配置；
 - 5 并发重复验证已执行两轮：Repeat-1 通过；Repeat-2 有 1 个 chunk 在 240,018 ms timeout 后重试成功，最终成功率 100% 但首次成功率 80%、重试数 1；按门槛停止 Repeat-3 和 1000 条测试，5 并发稳定性仍未验证；
 - 在接受“最多 3 次尝试内恢复成功属于可恢复事件”的增量口径后，完成 1000 条、`chunk-size 100` 的单轮容量对比：5 并发为 10/10 最终成功、0 重试、JSON/Schema 率 100%、P50/P95 为 119,898/129,648 ms、批次墙钟 253,921 ms；10 并发为 10/10 最终成功、0 重试、JSON/Schema 率 100%、P50/P95 为 123,711/132,231 ms、批次墙钟 132,241 ms；实际最大并发分别为 5 和 10，evidence 均完整，按增量 Spec 两档均为 `capacity_probe_pass`，但只代表单轮 synthetic 容量证据；
+- 完整验证追加 1000 条 c100 重复运行：5 并发三轮批次墙钟为 253,921/304,162/264,062 ms，10 并发三轮为 132,241/139,351/144,374 ms；六轮均 10/10 最终成功、首次成功率和 JSON/Schema 率均为 100%、重试数均为 0、实际最大并发符合配置，容量重复稳定性通过；
+- 完整验证新增公开 fixture 质量运行：1/1 chunk 成功、JSON/Schema 率 100%，但 6 个 claims 中只有 5 个被覆盖且 grounded。`public-008` 的未解析图片被设置为全局 `media_unparsed` 并写入 warning，却没有进入 topic 的 `source_message_ids`，因此质量门槛未通过；严重归因错误 0，媒体臆测 0；
 - Codex timeout 清理回归测试、EvidenceStore 并发写入保护和 runner 并发/重试隔离测试已加入，完整确定性测试为 40/40；
 - 脱敏决策报告：[Spike-02 决策报告](spikes/2026-07-15-spike-02-decision-report.md)。
 
@@ -61,7 +63,7 @@ Last updated: 2026-07-18
 
 ## Next gate
 
-下一阶段补做 1000 条 5/10 并发的重复稳定性或更长批次验证，继续记录 timeout/retry 代价；随后完成业务质量复核和生产边界判断，根据证据更新 Spike-02 总体结论。单轮 `capacity_probe_pass` 不等同于生产并发批准。
+下一阶段先针对 `public-008` 的未解析媒体 source linkage/grounding 缺口制定并批准新的 Spec/Plan，再重新执行新鲜质量复核；容量重复稳定性暂不需要继续扩大。质量门槛修复前，Spike-02 保持 `unverified`，不启动 V0/V1 生产实现。
 
 在真实容量结论明确、后续正式 Spec 和 plan 获得批准前：
 
