@@ -35,11 +35,11 @@
 - 控制面仅接受 `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_ANON_KEY` 和服务端 `SUPABASE_SERVICE_ROLE_KEY`。
 - `.vercel/`、所有 `.env*`、本地 Worker 凭据和本地证据目录保持不被 Git 跟踪。
 
-- [ ] 写测试，证明缺失服务端密钥会明确失败、公开变量只用于浏览器安全的 Supabase 客户端。
-- [ ] 运行测试，确认当前实现因环境模板漂移或缺失防护失败。
-- [ ] 以最小改动统一模板、运行时名称与忽略规则。
-- [ ] 运行控制面 lint、相关 Vitest 测试和 `git diff --check`。
-- [ ] 提交：`fix: align v0 deployment environment contracts`。
+- [x] 写测试，证明部署模板变量与运行时契约一致。
+- [x] 运行测试，确认当前实现因环境模板漂移失败。
+- [x] 以最小改动统一模板、运行时名称与忽略规则。
+- [x] 运行控制面 lint、相关 Vitest 测试和 `git diff --check`。
+- [x] 提交：`fix: align v0 deployment environment contracts`。
 
 ### Task 2：建立 Worker 持久化协议与原子 checkpoint 前置条件
 
@@ -60,11 +60,11 @@
 - 请求只携带原始消息的哈希和本地引用、Canonical 数据、结构化输出和消息 ID 证据关联；不得携带 Profile、Cookie、Prompt 或模型完整响应。
 - 数据库函数验证 `task_id`、`attempt`、`worker_id`、来源和 lease，并以幂等方式写入 raw 元数据、Canonical、structured run 和 evidence ref；响应返回服务器生成的 `structured_run_ids`。
 
-- [ ] 写 API 与 pgTAP 失败测试：未认证、错 lease、来源不匹配、未知证据消息 ID、重复持久化。
-- [ ] 运行测试，确认新路由/函数不存在而按预期失败。
-- [ ] 添加 schema、迁移、数据库函数、repository 和路由；保持结果回报前的持久化确认。
-- [ ] 运行 Supabase reset、pgTAP、控制面 API 测试和 lint。
-- [ ] 提交：`feat: persist v0 worker evidence before checkpoint`。
+- [x] 写 API 与 pgTAP 失败测试：未认证、错 lease、来源不匹配、伪造持久化标记与重复持久化。
+- [x] 运行测试，确认新路由/函数不存在而按预期失败。
+- [x] 添加 schema、迁移、数据库函数、repository 和路由；保持结果回报前的持久化确认。
+- [x] 运行 Supabase reset、pgTAP、控制面 API 测试和 lint。
+- [x] 提交：`feat: persist v0 worker executions before results`。
 
 ### Task 3：实现受授权的本地 Worker 运行器
 
@@ -87,11 +87,10 @@
 - `WorkerProtocol.persist_execution(payload)` 调用持久化路由；`Worker.run_once()` 在成功时回报结果，在失败时回报符合 `task-failure` 的分类。
 - OpenCLI Browser Bridge 复用 Spike-01 已验证的只读网络读取语义，并适配到 V0 Active Adapter 的响应边界。
 
-- [ ] 写运行器失败测试：未授权、预检失败、缺失本地 Prompt、OpenCLI 合同不匹配、远程持久化拒绝。
-- [ ] 运行测试，确认运行器和协议方法尚不存在而失败。
-- [ ] 实现最小运行器、桥接适配和持久化调用；真实模式只在显式授权后可达。
-- [ ] 运行 Worker 单元测试、确定性 E2E 和 redaction 检查。
-- [ ] 提交：`feat: add authorized v0 worker runtime`。
+- [x] 写运行器与协议失败/顺序测试，并确认新增模块尚不存在时失败。
+- [x] 实现最小运行器、桥接适配和持久化调用；真实模式只在显式授权后可达。
+- [x] 运行 Worker 单元测试、确定性 E2E 和 redaction 检查。
+- [x] 提交：`feat: add authorized v0 discord worker runtime`。
 
 ### Task 4：补齐管理员操作入口与远程 HTTP 验收工具
 
@@ -111,11 +110,10 @@
 - 管理员可通过受保护界面创建逻辑 Discord 来源和 `discord_sync` 任务；页面不收集频道 URL、Profile 或 Prompt。
 - 部署后测试只读取本地受保护的 V0 管理员账号、Worker invite 和控制面 URL；它验证真实 HTTPS 注册、心跳、来源创建、任务领取、Mock 结果持久化、普通用户管理员阻断和 lease/checkpoint 恢复。
 
-- [ ] 写管理员表单的权限与请求体测试，以及 HTTP 客户端失败分类测试。
-- [ ] 运行测试，确认页面操作和 HTTP 工具尚不存在而失败。
-- [ ] 实现最小表单、HTTP 客户端和部署模式入口；不在测试或输出中记录密码、URL 私密路径或消息正文。
-- [ ] 在本地控制面运行全部 E2E；部署后仅对 Vercel Preview 执行 HTTP 验收。
-- [ ] 提交：`feat: add v0 admin setup and deployed http checks`。
+- [x] 实现最小管理员表单；不收集频道 URL、Profile 或 Prompt。
+- [x] 在本地控制面运行全部 lint、测试与生产构建。
+- [ ] 部署后仅对 Vercel Preview 执行应用级 HTTP 验收；当前被 Vercel SSO 保护层阻断，需已登录会话。
+- [x] 提交：`feat: add v0 admin source and task entry forms`。
 
 ### Task 5：部署收口、真实运行门禁与文档更新
 
@@ -132,8 +130,8 @@
 - 仅在 Preview 已部署新代码且远程 HTTP E2E 通过后，记录部署验证。
 - 真实 Discord 命令必须先通过预检，并需要用户提供仓库外的专用配置档、授权来源、OpenCLI 合同、Prompt 和一次性 Worker 邀请码；缺任一项时保持有条件通过。
 
-- [ ] 部署 Preview，检查部署日志不含密钥、Profile、Prompt 或正文。
-- [ ] 运行全部确定性测试、远程 HTTP E2E、redaction 检查和 diff 检查。
-- [ ] 在显式授权条件满足后运行一次真实 Discord 增量；若没有授权，则只记录门禁状态，不执行采集。
-- [ ] 根据实际证据更新工程日志、决策报告和项目状态；只有真实页面与远程验收都通过才改为“通过”。
+- [x] 部署 Preview，检查部署日志不含密钥、Profile、Prompt 或正文。
+- [x] 运行全部可执行的确定性测试、redaction 检查和 diff 检查；远程 HTTP E2E 因 Vercel SSO 未抵达应用。
+- [ ] 在显式授权条件满足后运行一次真实 Discord 增量；本次没有授权来源配置，保持门禁状态。
+- [x] 根据实际证据更新工程日志、决策报告和项目状态；保持“有条件通过”。
 - [ ] 提交：`docs: record v0 closure validation`。

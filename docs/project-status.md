@@ -1,12 +1,12 @@
 # Project Status
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Current phase
 
-**V0 确定性基础设施验证有条件通过；真实页面和远程部署验收待补证据**
+**V0 确定性与隔离远程部署已通过；真实 Discord 页面与受保护 HTTPS 应用验收待补证据**
 
-Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python Worker、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。确定性测试、恢复不变量和 redaction check 均通过，但本次没有可授权的真实 Discord 专用 Profile/source，也没有隔离 V0 Supabase/Vercel 部署目标，因此 V0 结论不是生产发布批准。
+Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python Worker、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel Preview、应用远程迁移并部署新控制面；但真实 Discord 专用 Profile/source 尚未授权，且 Vercel SSO 保护阻断无会话 HTTP 探针，故仍不是生产发布批准。
 
 ## Approval status
 
@@ -23,7 +23,8 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
   - [Spike-02 有界并发计划](superpowers/plans/2026-07-18-spike-02-bounded-concurrency-plan.md)
   - [Spike-02 未解析媒体来源链路计划](superpowers/plans/2026-07-18-spike-02-media-source-linkage-plan.md)
   - [V0 基础设施与技术验证计划](superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)
-- V0 implementation status：已完成确定性实现与验证，结论为 conditional pass；真实页面/远程部署仍是退出门槛。
+  - [V0 收口与远程验收实施计划](superpowers/plans/2026-07-19-v0-closure-remote-validation.md)
+- V0 implementation status：已完成确定性实现、远程持久化与隔离 Preview 部署，结论仍为 conditional pass；真实页面及受保护应用的 HTTPS 验收仍是退出门槛。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
@@ -38,7 +39,7 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
 
 ## Repository state
 
-当前仓库包含项目治理文档、Spike harness、V0 控制面/Worker 验证实现、确定性 E2E harness 和管理员调试面。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git；V0 真实页面与远程部署仍未执行。
+当前仓库包含项目治理文档、Spike harness、V0 控制面/Worker 验证实现、确定性 E2E harness 和管理员调试面。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git；隔离远程数据库迁移和 Preview 部署已执行，但真实页面与受保护应用会话验收仍未执行。
 
 ## Spike-01 result
 
@@ -79,11 +80,13 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
 
 ## V0 result
 
-- 确定性验收：通过。控制面 28 个测试、Worker 40 个测试、Spike 回归 78 个测试、V0 E2E 7 个测试和 Supabase pgTAP 44 assertions 均通过。
+- 确定性验收：通过。控制面 30 个测试、Worker 44 个测试、Spike 回归 78 个测试、V0 E2E 7 个测试和 Supabase pgTAP 55 assertions 均通过。
+- 持久化收据：通过。Worker 必须先写入远程持久化收据；结果中的消息计数和结构化运行 ID 与收据不一致、或只有伪造的 `persisted` 标记时，数据库拒绝推进 checkpoint。
+- 隔离远程部署：部分通过。已将第 002 号迁移应用至隔离 Supabase，新的 Vercel Preview 构建状态为 Ready；无认证 HTTPS 请求被 Vercel SSO 拦截在应用之前，因此尚未完成应用级 HTTP 验收。
 - 安全与恢复：通过。邀请码单次消费、普通用户 403、lease 竞争、raw/Canonical/structured 持久化失败、Provider timeout、媒体来源精确链路和 checkpoint 不前移均有证据。
 - 管理调试面：通过。状态区分 `no_new_data`、`retryable_failed`、`failed`、`succeeded_with_unresolved`、`succeeded`；Credential、Prompt、Profile reference 和完整模型响应不进入调试视图。
 - 真实页面：条件通过。已提供 preflight 和显式授权门禁，但本次没有运行真实 Discord 页面。
-- 远程部署：条件通过。已提供 Vercel/Supabase 配置边界，但没有执行隔离 V0 环境部署或 post-deploy HTTP 验收。
+- 远程部署：条件通过。隔离 V0 环境已部署，但尚未在已登录的 Vercel 会话中完成应用级 post-deploy HTTP 验收。
 
 完整证据见 [V0 Engineering Journal](engineering-journal/2026-07-18-v0.md) 和 [V0 Final Report](spikes/2026-07-18-v0-decision-report.md)。
 
@@ -92,6 +95,6 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
 进入 V1 Spec 前必须补齐两项 conditional 证据：
 
 - 在用户明确授权的专用 Profile 和 Discord 来源上完成至少一次真实增量页，保留仓库外 evidence，并验证登录失效、权限失败、freshness 和 checkpoint 恢复；
-- 部署到隔离的 V0 Supabase/Vercel 环境，完成真实 HTTP `enrol → heartbeat → claim → result`、普通用户 admin 阻断和 lease/checkpoint 恢复验收。
+- 在已登录的 Vercel 会话中访问新的 Preview，完成真实 HTTP `enrol → heartbeat → claim → persist → result`、普通用户 admin 阻断和 lease/checkpoint 恢复验收。
 
 在上述证据补齐并重新审阅 Final Report 前，不把 V0 conditional pass 写成生产 SLA，不启动 V1 实现，不实现 X、多来源运营、正式阅读页、GLM 或自动 fallback。
