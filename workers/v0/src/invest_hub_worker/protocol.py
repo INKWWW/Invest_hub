@@ -159,6 +159,9 @@ class WorkerProtocol:
 
     def _request(self, method: str, path: str, body: object | None, *, authenticated: bool = True) -> tuple[int, object | None]:
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        bypass = os.environ.get("V0_VERCEL_PROTECTION_BYPASS", "").strip()
+        if bypass:
+            headers["x-vercel-protection-bypass"] = bypass
         if authenticated:
             headers["Authorization"] = f"Bearer {self._require_credential().device_secret}"
         status, value = self.transport(method, urljoin(self.base_url, path), body, headers, self.timeout)

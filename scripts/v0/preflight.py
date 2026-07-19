@@ -108,7 +108,11 @@ def _reachable(url: str) -> bool:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return False
     try:
-        request = urllib.request.Request(url, method="HEAD")
+        headers: dict[str, str] = {}
+        bypass = os.environ.get("V0_VERCEL_PROTECTION_BYPASS", "").strip()
+        if bypass:
+            headers["x-vercel-protection-bypass"] = bypass
+        request = urllib.request.Request(url, headers=headers, method="HEAD")
         with urllib.request.urlopen(request, timeout=5):
             return True
     except (urllib.error.URLError, TimeoutError, OSError):
@@ -130,4 +134,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
