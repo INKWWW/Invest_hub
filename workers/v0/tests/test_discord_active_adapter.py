@@ -68,6 +68,26 @@ class DiscordActiveAdapterTests(unittest.TestCase):
         self.assertEqual(pages[0].cursor_after, "cursor-1")
         self.assertEqual(invoker.calls[0]["channel_url"], "https://discord.com/channels/server/channel")
 
+    def test_real_run_batch_stops_after_one_fresh_page(self) -> None:
+        invoker = FakeInvoker(
+            response(network=[{
+                "request_key": "request-1",
+                "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+                "messages": [{"id": "message-1", "content": "first"}],
+            }], cursor_after="cursor-1"),
+            response(network=[{
+                "request_key": "request-1",
+                "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+                "messages": [{"id": "message-2", "content": "second"}],
+            }]),
+        )
+
+        pages = list(DiscordActiveAdapter(invoker).collect(source_config(), checkpoint=None))
+
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(pages[0].cursor_after, "cursor-1")
+        self.assertEqual(len(invoker.calls), 1)
+
     def test_missing_network_response_reopens_once_then_returns_typed_failure(self) -> None:
         invoker = FakeInvoker(response(network=[]), response(network=[]))
         with self.assertRaises(ConnectorError) as caught:
