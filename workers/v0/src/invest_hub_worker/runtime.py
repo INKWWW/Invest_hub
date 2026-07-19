@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from .canonical import CanonicalMessage, Canonicalizer
-from .config import LocalWorkerConfig
+from .config import LocalWorkerConfig, LocalWorkerConfigSet
 from .connectors.base import ConnectorError, RawPage
 from .connectors.discord_active_adapter import DiscordActiveAdapter, normalize_channel_url
 from .evidence import LocalEvidenceStore
@@ -19,6 +20,25 @@ class RuntimeExecutionError(RuntimeError):
     def __init__(self, failure_class: str, message: str) -> None:
         super().__init__(message)
         self.failure_class = failure_class
+
+
+@dataclass(frozen=True)
+class TaskScope:
+    mode: str
+    max_pages: int
+
+    @classmethod
+    def from_claim(cls, claim: Mapping[str, Any]) -> "TaskScope":
+        scope = claim.get("collection_scope")
+        if not isinstance(scope, Mapping):
+            raise ValueError("task collection_scope is required")
+        mode = scope.get("mode")
+        max_pages = scope.get("max_pages")
+        if mode not in {"incremental", "history"} or isinstance(max_pages, bool) or not isinstance(max_pages, int):
+            raise ValueError("task collection_scope is invalid")
+        if not 1 <= max_pages <= 25 or (mode == "incremental" and max_pages > 5):
+            raise ValueError("task collection_scope is out of range")
+        return cls(mode=mode, max_pages=max_pages)
 
 
 class BrowserBridgeRuntimeInvoker:
@@ -107,14 +127,14 @@ class AuthorizedDiscordRuntime:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def execute(self, claim: dict[str, Any]) -> dict[str, Any]:
-        self._validate_claim(claim)
+        scope, target_author_ids = self._validate_claim(claim)
         raw_messages: list[dict[str, Any]] = []
         canonical_by_id: dict[str, CanonicalMessage] = {}
         checkpoints: list[str | None] = [claim.get("safe_checkpoint")]
         duplicate_count = 0
 
         try:
-            for page in self.connector.collect(self.config, claim.get("safe_checkpoint")):
+            for page in self.connector.collect(self.config, claim.get("safe_checkpoint"), max_pages=scope.max_pages):
                 self.evidence.persist_raw(page)
                 mapped = self.canonicalizer.map(page)
                 local_counts = self.evidence.persist_canonical(mapped)
@@ -132,7 +152,7 @@ class AuthorizedDiscordRuntime:
             raise RuntimeExecutionError("persistence_failure", "local evidence persistence failed") from exc
 
         canonical_messages = list(canonical_by_id.values())
-        structured_runs, retry_count, elapsed_ms = self._structured_runs(claim, canonical_messages)
+        structured_runs, retry_count, elapsed_ms = self._structured_runs(claim, canonical_messages, target_author_ids)
         unresolved_count = sum(1 for message in canonical_messages if message.unresolved)
         unparsed_media_count = sum(1 for message in canonical_messages if message.attachments)
         persistence = {
@@ -164,16 +184,33 @@ class AuthorizedDiscordRuntime:
         }
         return {"persistence": persistence, "result": result}
 
-    def _validate_claim(self, claim: Mapping[str, Any]) -> None:
+    def _validate_claim(self, claim: Mapping[str, Any]) -> tuple[TaskScope, frozenset[str]]:
         if claim.get("source_id") != self.config.source_id:
             raise RuntimeExecutionError("unauthorized", "task source does not match the local authorized source")
         if claim.get("parameter_version") != self.config.parameter_version:
             raise RuntimeExecutionError("preflight", "task parameter version does not match local worker config")
+        try:
+            scope = TaskScope.from_claim(claim)
+            snapshot = claim.get("rule_snapshot")
+            if not isinstance(snapshot, Mapping):
+                raise ValueError("task rule_snapshot is required")
+            version = snapshot.get("version")
+            target_author_ids = snapshot.get("target_author_ids")
+            if isinstance(version, bool) or not isinstance(version, int) or version < 0:
+                raise ValueError("task rule_snapshot version is invalid")
+            if not isinstance(target_author_ids, list) or any(not isinstance(author_id, str) or not author_id for author_id in target_author_ids):
+                raise ValueError("task rule_snapshot target authors are invalid")
+            if len(set(target_author_ids)) != len(target_author_ids):
+                raise ValueError("task rule_snapshot target authors are duplicated")
+        except ValueError as exc:
+            raise RuntimeExecutionError("preflight", str(exc)) from exc
+        return scope, frozenset(target_author_ids)
 
     def _structured_runs(
         self,
         claim: Mapping[str, Any],
         messages: list[CanonicalMessage],
+        target_author_ids: frozenset[str],
     ) -> tuple[list[dict[str, Any]], int, int]:
         runs: list[dict[str, Any]] = []
         retries = 0
@@ -189,6 +226,7 @@ class AuthorizedDiscordRuntime:
                 prompt_text=self._prompt_for(chunk),
                 input_message_ids=frozenset(message_ids),
                 unparsed_media_message_ids=frozenset(media_ids),
+                target_author_ids=target_author_ids,
             )
             response = self.retry_policy.execute(self.provider, chunk, context)
             retries += max(0, response.attempt - 1)
@@ -250,6 +288,19 @@ class AuthorizedDiscordRuntime:
         }
 
 
+class AuthorizedDiscordRuntimeSet:
+    """Route each claim to exactly one owner-configured local source."""
+
+    def __init__(self, runtimes: Mapping[str, AuthorizedDiscordRuntime]) -> None:
+        self._runtimes = dict(runtimes)
+
+    def execute(self, claim: dict[str, Any]) -> dict[str, Any]:
+        source_id = claim.get("source_id")
+        if not isinstance(source_id, str) or source_id not in self._runtimes:
+            raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
+        return self._runtimes[source_id].execute(claim)
+
+
 def build_authorized_discord_runtime(
     *,
     config: LocalWorkerConfig,
@@ -268,6 +319,27 @@ def build_authorized_discord_runtime(
         provider=_codex_provider(evidence_dir),
         prompt_template=prompt_template,
     )
+
+
+def build_authorized_discord_runtime_set(
+    *,
+    config: LocalWorkerConfigSet,
+    evidence_dir: Path,
+    prompt_path: Path,
+    opencli_contract_path: Path,
+    opencli_executable: str | None = None,
+) -> AuthorizedDiscordRuntimeSet:
+    runtimes = {
+        source.source_id: build_authorized_discord_runtime(
+            config=source,
+            evidence_dir=Path(evidence_dir) / source.source_id,
+            prompt_path=prompt_path,
+            opencli_contract_path=opencli_contract_path,
+            opencli_executable=opencli_executable,
+        )
+        for source in config.sources
+    }
+    return AuthorizedDiscordRuntimeSet(runtimes)
 
 
 def _codex_provider(evidence_dir: Path) -> Provider:

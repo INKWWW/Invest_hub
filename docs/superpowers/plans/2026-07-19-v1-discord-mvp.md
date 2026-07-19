@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–2 已完成。
+**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–3 已完成。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -162,15 +162,13 @@
 
 - Modify: `workers/v0/src/invest_hub_worker/config.py`
 - Create: `workers/v0/src/invest_hub_worker/scheduler.py`
+- Modify: `workers/v0/src/invest_hub_worker/cli.py`
 - Modify: `workers/v0/src/invest_hub_worker/runtime.py`
 - Modify: `workers/v0/src/invest_hub_worker/connectors/discord_active_adapter.py`
-- Modify: `workers/v0/src/invest_hub_worker/worker.py`
-- Modify: `workers/v0/src/invest_hub_worker/protocol.py`
 - Modify: `workers/v0/tests/test_config.py`
 - Create: `workers/v0/tests/test_scheduler.py`
 - Modify: `workers/v0/tests/test_discord_active_adapter.py`
 - Modify: `workers/v0/tests/test_authorized_runtime.py`
-- Modify: `workers/v0/tests/test_worker_recovery.py`
 
 **Interfaces:**
 
@@ -179,32 +177,32 @@
 - `DiscordActiveAdapter.collect(source, checkpoint, *, max_pages: int) -> Iterable[RawPage]`：最多请求 `max_pages` 个通过 freshness 验证的页面；任一错误立即抛出原有分类。
 - `should_enqueue(now_utc: datetime, last_seen_window: str | None) -> str | None`：返回一次性的 `YYYY-MM-DDT08:00+08:00` 或 `...20:50+08:00` 窗口 key，不重复触发。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
   `test_config.py` 添加两个不同 source 的合法 owner-only config、重复 source ID、宽权限和遗留单来源配置迁移失败样例。`test_discord_active_adapter.py` 添加三页 fresh response：`max_pages=2` 只请求两页并保留第二页 cursor；`max_pages=1` 复现 V0 单页边界；第二页 stale 时仍抛 `opencli_stale`，不返回部分成功。
 
   `test_authorized_runtime.py` 断言 claim 的 `rule_snapshot.target_author_ids` 被传给 `ProviderContext.target_author_ids`，而规则快照与 scope 缺失会作为 `preflight` 失败。`test_scheduler.py` 断言两个窗口各触发一次、离线跨过窗口后不会伪造空成功而是创建一次补采 tick。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `PYTHONPATH=workers/v0/src python3.11 -m unittest workers/v0/tests/test_config.py workers/v0/tests/test_scheduler.py workers/v0/tests/test_discord_active_adapter.py workers/v0/tests/test_authorized_runtime.py -v`
 
   Expected: FAIL，因为当前 Worker 只接受一个来源且 Adapter 无 `max_pages`。
 
-- [ ] **Step 3: 实现多来源运行与有限分页**
+- [x] **Step 3: 实现多来源运行与有限分页**
 
   1. 用 `LocalWorkerConfigSet` 替换运行器入口的单来源选择逻辑，但保留 `LocalWorkerConfig.redacted()` 只输出 source ID 和版本，不输出 URL/Profile。
   2. `Worker.run_once()` 在 claim 后按 `source_id` 查找本地 source；未授权 source、版本不符或 scope 非法时调用既有 failure route，`safe_checkpoint` 不变。
   3. Adapter 以 `for page_index in range(max_pages)` 驱动分页。每页保留现有 90 秒 deadline、request URL 匹配、freshness 与 cursor 验证；达到上限后返回最后已验证页面，不再请求下一页。
   4. 在 runtime 构造 `ProviderContext` 时传入冻结的 target author ID 集合；不从云端读取真实 URL、Profile 或 Prompt。
 
-- [ ] **Step 4: 验证 Worker 回归**
+- [x] **Step 4: 验证 Worker 回归**
 
   Run: `PYTHONPATH=workers/v0/src:spikes python3.11 -m unittest discover -s workers/v0/tests -p 'test_*.py' -v`
 
   Expected: PASS；单来源 V0 回归继续通过，多来源选择、scope 上限、规则归因和 stale 失败新增通过。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add workers/v0/src/invest_hub_worker workers/v0/tests
