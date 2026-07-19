@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–4 已完成。
+**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–5 已完成。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -272,6 +272,7 @@
 - Modify: `apps/control-plane/src/app/admin/sources/page.tsx`
 - Modify: `apps/control-plane/src/components/admin/SourceCreateForm.tsx`
 - Create: `apps/control-plane/src/components/admin/SourceRuleForm.tsx`
+- Create: `apps/control-plane/src/components/admin/SourceAdministrationForm.tsx`
 - Modify: `apps/control-plane/src/app/admin/tasks/page.tsx`
 - Modify: `apps/control-plane/src/components/admin/TaskCreateForm.tsx`
 - Modify: `apps/control-plane/src/app/admin/admin-ui.test.tsx`
@@ -283,29 +284,29 @@
 - `TaskCreateForm` 的增量任务隐藏上限并提交默认 5；历史任务必须显式选择 1–25 页，提交前显示“有界补采”提示。
 - 来源表展示 enable 状态、授权 Worker、当前规则版本和安全 checkpoint 的安全摘要，不展示任务原始 payload。
 
-- [ ] **Step 1: 写组件失败测试**
+- [x] **Step 1: 写组件失败测试**
 
   为 SourceRuleForm 断言空 author ID、target/exclude 冲突和非管理员 API 错误会在页面显示可理解错误；断言 DOM 中没有 `channel_url`、`profile_ref`、`cookie` 或 `prompt` 输入。为 TaskCreateForm 断言 history 未选页数不能提交、`26` 被拒绝、增量提交固定为 `max_pages:5`。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `cd apps/control-plane && npm test -- --run src/components/admin/source-rule-form.test.tsx src/app/admin/admin-ui.test.tsx`
 
   Expected: FAIL，因为规则编辑器、worker binding 和 history scope UI 尚不存在。
 
-- [ ] **Step 3: 实现最小管理体验**
+- [x] **Step 3: 实现最小管理体验**
 
   1. 来源页从安全 repository 读取 workers、规则摘要和 checkpoint 摘要；允许管理员启停、绑定已激活 Worker。
   2. 规则表单将 global target、source target、source exclude 分开显示，并在提交成功后刷新版本号；不渲染任何私密配置字段。
   3. 任务页将手动增量和有界 history 明确分开。history 只创建一项带 scope 的任务，失败后使用现有 retry 流程，不新建隐式无限任务。
 
-- [ ] **Step 4: 验证 UI 与构建**
+- [x] **Step 4: 验证 UI 与构建**
 
   Run: `cd apps/control-plane && npm test -- --run src/components/admin/source-rule-form.test.tsx src/app/admin/admin-ui.test.tsx && npm run lint && npm run build`
 
   Expected: PASS；页面可构建，管理员操作不要求或泄露本地浏览器信息。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add apps/control-plane/src/app/admin apps/control-plane/src/components/admin
