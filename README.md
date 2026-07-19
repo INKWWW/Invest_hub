@@ -6,9 +6,9 @@ Invest Hub 是面向个人及少量受邀用户的投资信息与投资决策工
 
 ## 当前状态
 
-V0「基础设施与技术验证」的确定性实现与回归已完成，结论为有条件通过：控制面、工作节点、Active Adapter、Provider 边界、管理员调试页、RLS 和恢复测试框架均已验证。隔离 Supabase 迁移和 Vercel 预览已部署；合成任务已完成远程注册 → 心跳 → 领取 → 持久化 → 回报结果并确认检查点落库，普通用户管理员阻断与租约恢复也已补测。真实 Discord 页面尚未执行，因此这不是生产发布批准。
+V0「基础设施与技术验证」已通过：控制面、工作节点、Active Adapter、Provider 边界、管理员调试页、RLS 和恢复测试框架均已验证。隔离 Supabase 迁移和 Vercel 预览已部署；合成任务已完成远程注册 → 心跳 → 领取 → 持久化 → 回报结果并确认检查点落库，普通用户管理员阻断与租约恢复也已补测。2026-07-19 已完成用户明确授权的真实 Discord 有界单页任务：首次超时未推进检查点，第 2 次完成采集、结构化、远程持久化、结果回报与非空安全检查点确认。该结论不是生产发布批准，也不外推为历史回填或持续运营能力。
 
-仓库现在包含 V0 验证实现和脱敏 E2E harness，但不包含真实内容、凭据、Prompt、完整响应或本地 evidence。进入 V1 前必须补齐授权真实页面和远程部署验收。
+仓库现在包含 V0 验证实现和脱敏 E2E harness，但不包含真实内容、凭据、Prompt、完整响应或本地 evidence。V0 的真实页面和远程部署验收已完成；进入 V1 必须独立编写并批准 V1 Spec 与 implementation plan。
 
 详见 [docs/project-status.md](docs/project-status.md)。
 
@@ -21,10 +21,12 @@ V0「基础设施与技术验证」的确定性实现与回归已完成，结论
 - [docs/superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md](docs/superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)：V0 已批准 implementation plan。
 - [docs/engineering-journal/2026-07-18-v0.md](docs/engineering-journal/2026-07-18-v0.md)：V0 执行记录与验证证据。
 - [docs/spikes/2026-07-18-v0-decision-report.md](docs/spikes/2026-07-18-v0-decision-report.md)：V0 脱敏 Final Report。
+- [docs/superpowers/specs/2026-07-19-v1-discord-mvp-design.md](docs/superpowers/specs/2026-07-19-v1-discord-mvp-design.md)：V1 Discord 正式可用 MVP Spec（已批准）。
+- [docs/superpowers/plans/2026-07-19-v1-discord-mvp.md](docs/superpowers/plans/2026-07-19-v1-discord-mvp.md)：V1 implementation plan（已批准）。
 
 ## 后续推进方向
 
-下一步先补齐 V0 conditional gate：授权真实 Discord 增量页；通过后再为 V1 Discord 编写独立 Spec 和 implementation plan。V2 X、V3 收敛以及模块 2–4 仍不在当前范围。
+V1 Spec 与 implementation plan 已批准，下一步选择执行方式后启动 V1 实现。V2 X、V3 收敛以及模块 2–4 仍不在当前范围。
 
 ## 安全边界
 
