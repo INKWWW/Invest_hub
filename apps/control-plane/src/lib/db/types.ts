@@ -105,6 +105,7 @@ export interface Database {
           parameter_version: string;
           enabled: boolean;
           authorized_worker_id: string | null;
+          author_rules_version: number;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -117,6 +118,7 @@ export interface Database {
           parameter_version: string;
           enabled?: boolean;
           authorized_worker_id?: string | null;
+          author_rules_version?: number;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -431,6 +433,20 @@ export interface Database {
       };
       persist_worker_execution: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
+        Returns: Json;
+      };
+      replace_source_author_rules: {
+        Args: {
+          p_source_id: string;
+          p_global_target_author_ids: string[];
+          p_source_target_author_ids: string[];
+          p_source_excluded_author_ids: string[];
+          p_actor_id: string;
+        };
+        Returns: Json;
+      };
+      create_discord_sync_task: {
+        Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_scope: Json };
         Returns: Json;
       };
       record_task_failure: {

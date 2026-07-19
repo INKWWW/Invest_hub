@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1 已完成。
+**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–2 已完成。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -29,6 +29,8 @@
 | --- | --- |
 | `supabase/migrations/003_v1_discord_mvp.sql` | 来源授权、规则快照、任务范围、批次/日累计摘要版本、RLS 和原子持久化函数扩展。 |
 | `supabase/tests/003_v1_discord_mvp.sql` | pgTAP：权限、规则快照、摘要/证据原子性、来源隔离与幂等。 |
+| `supabase/migrations/004_v1_rule_tasks.sql` | 规则集版本与管理员驱动的原子规则替换、任务快照创建函数。 |
+| `supabase/tests/004_v1_rule_tasks.sql` | pgTAP：规则优先级、版本递增、任务快照和函数权限。 |
 | `contracts/v0/task-claim.schema.json` | 在既有 Worker 协议中加入不可变的 `rule_snapshot` 与有界 `collection_scope`。 |
 | `contracts/v0/worker-persistence.schema.json` | 在既有持久化 payload 中加入批次摘要及其证据范围。 |
 | `apps/control-plane/src/lib/db/repositories/{sources,rules,summaries,tasks}.ts` | 管理来源/规则、生成任务快照和安全阅读模型查询。 |
@@ -107,6 +109,8 @@
 **Files:**
 
 - Create: `apps/control-plane/src/lib/db/repositories/rules.ts`
+- Create: `supabase/migrations/004_v1_rule_tasks.sql`
+- Create: `supabase/tests/004_v1_rule_tasks.sql`
 - Modify: `apps/control-plane/src/lib/db/repositories/sources.ts`
 - Modify: `apps/control-plane/src/lib/db/repositories/tasks.ts`
 - Create: `apps/control-plane/src/app/api/admin/rules/route.ts`
@@ -114,6 +118,7 @@
 - Modify: `apps/control-plane/src/app/api/admin/tasks/route.ts`
 - Modify: `apps/control-plane/src/app/api/api.integration.test.ts`
 - Test: `apps/control-plane/src/lib/db/repositories/rules.test.ts`
+- Test: `apps/control-plane/src/lib/db/repositories/sources.test.ts`
 
 **Interfaces:**
 
@@ -121,30 +126,30 @@
 - `createDiscordSyncTask(input: { sourceId: string; parameterVersion: string; requestedBy: string; scope: { mode: "incremental" | "history"; maxPages: number } })`：在单事务内读取当前规则、写 `rule_snapshot` 和 `collection_scope` 后入队。
 - `PATCH /api/admin/sources`：只接受 `source_id`、`enabled`、`authorized_worker_id|null`；不得接受 URL、Profile、Cookie 或 Prompt。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
   为 `rules.test.ts` 写入全局 target、来源 target 和来源 exclude 的组合，断言 exclude 胜出、输入去重/排序且 version 递增。为 API 集成测试加入：普通用户对 rules、source binding 和 history task 返回 403；`max_pages` 不在 1–25 返回 422；任务记录的快照不随随后规则更新改变。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `cd apps/control-plane && npm test -- --run src/lib/db/repositories/rules.test.ts src/app/api/api.integration.test.ts`
 
   Expected: FAIL，因为 repository、规则路由和有界 scope 验证尚未存在。
 
-- [ ] **Step 3: 实现最小管理接口**
+- [x] **Step 3: 实现最小管理接口**
 
   1. `rules.ts` 只用 service-role repository 写入规则，读取时永不返回 `created_by` 之外的认证信息；写入后计算并返回快照。
   2. `sources.ts` 扩展 list/upsert/update，返回授权 Worker 的显示安全字段；拒绝不存在或 revoked Worker 的 binding。
   3. `tasks.ts` 在创建任务时调用 rules snapshot 函数，把 `scope`、`rule_snapshot` 与来源 parameter version 一起写入，默认增量 scope 为 `{mode:'incremental',maxPages:5}`。
   4. 管理 API 只在 `requireRole('admin')` 成功后调用上述 repository。history 请求必须显式传 `{mode:'history',max_pages}`；不得有“无限历史”开关。
 
-- [ ] **Step 4: 验证 API 行为**
+- [x] **Step 4: 验证 API 行为**
 
   Run: `cd apps/control-plane && npm test -- --run src/lib/db/repositories/rules.test.ts src/app/api/api.integration.test.ts`
 
   Expected: PASS；所有管理变更由管理员执行，任务带有不可变的规则/范围快照。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add apps/control-plane/src/lib/db/repositories/rules.ts apps/control-plane/src/lib/db/repositories/sources.ts apps/control-plane/src/lib/db/repositories/tasks.ts apps/control-plane/src/app/api/admin apps/control-plane/src/app/api/api.integration.test.ts apps/control-plane/src/lib/db/repositories/rules.test.ts

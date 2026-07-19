@@ -18,9 +18,19 @@ const workerRepositoryMocks = vi.hoisted(() => ({
 }));
 const taskMocks = vi.hoisted(() => ({
   acceptTaskResult: vi.fn(),
+  createDiscordSyncTask: vi.fn(),
   getTaskDetail: vi.fn(),
+  listRecentTasks: vi.fn(),
   persistWorkerExecution: vi.fn(),
   recordTaskFailure: vi.fn(),
+}));
+const sourceMocks = vi.hoisted(() => ({
+  listSources: vi.fn(),
+  updateSourceAdministration: vi.fn(),
+  upsertDiscordSource: vi.fn(),
+}));
+const ruleMocks = vi.hoisted(() => ({
+  replaceSourceRules: vi.fn(),
 }));
 const loginMocks = vi.hoisted(() => ({
   loginWithPassword: vi.fn(),
@@ -32,6 +42,8 @@ vi.mock("../../lib/auth/worker", () => workerMocks);
 vi.mock("../../lib/auth/login", () => loginMocks);
 vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
+vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
+vi.mock("../../lib/db/repositories/rules", () => ruleMocks);
 
 import { POST as postAdminInvite } from "./admin/invites/route";
 import { POST as postLogin } from "./auth/login/route";
@@ -40,6 +52,9 @@ import { POST as postHeartbeat } from "./worker/heartbeat/route";
 import { POST as postPersist } from "./worker/tasks/[taskId]/persist/route";
 import { POST as postResult } from "./worker/tasks/[taskId]/result/route";
 import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
+import { PATCH as patchAdminSource } from "./admin/sources/route";
+import { POST as postAdminRule } from "./admin/rules/route";
+import { POST as postAdminTask } from "./admin/tasks/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${path}`, {
@@ -121,6 +136,71 @@ describe("v0 control-plane API authorization", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden" });
     expect(taskMocks.getTaskDetail).not.toHaveBeenCalled();
+  });
+
+  it("blocks ordinary users from changing rules, source bindings, and history scopes", async () => {
+    const rule = await postAdminRule(jsonRequest("/api/admin/rules", {
+      source_id: "source-1",
+      global_target_author_ids: [],
+      source_target_author_ids: [],
+      source_excluded_author_ids: [],
+    }));
+    const source = await patchAdminSource(jsonRequest("/api/admin/sources", {
+      source_id: "source-1",
+      enabled: true,
+      authorized_worker_id: "worker-1",
+    }));
+    const task = await postAdminTask(jsonRequest("/api/admin/tasks", {
+      source_id: "source-1",
+      parameter_version: "v1-source-1",
+      scope: { mode: "history", max_pages: 9 },
+    }));
+
+    expect(rule.status).toBe(403);
+    expect(source.status).toBe(403);
+    expect(task.status).toBe(403);
+    expect(ruleMocks.replaceSourceRules).not.toHaveBeenCalled();
+    expect(sourceMocks.updateSourceAdministration).not.toHaveBeenCalled();
+    expect(taskMocks.createDiscordSyncTask).not.toHaveBeenCalled();
+  });
+
+  it("validates finite task scopes and creates regular tasks with the five-page default", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    taskMocks.createDiscordSyncTask.mockResolvedValue({ id: "task-1", collection_scope: { mode: "incremental", max_pages: 5 } });
+
+    const invalid = await postAdminTask(jsonRequest("/api/admin/tasks", {
+      source_id: "source-1",
+      parameter_version: "v1-source-1",
+      scope: { mode: "history", max_pages: 0 },
+    }));
+    expect(invalid.status).toBe(422);
+
+    const created = await postAdminTask(jsonRequest("/api/admin/tasks", {
+      source_id: "source-1",
+      parameter_version: "v1-source-1",
+    }));
+    expect(created.status).toBe(201);
+    expect(taskMocks.createDiscordSyncTask).toHaveBeenCalledWith({
+      sourceId: "source-1",
+      parameterVersion: "v1-source-1",
+      requestedBy: "admin-1",
+      scope: { mode: "incremental", maxPages: 5 },
+    });
+  });
+
+  it("rejects source administration payloads that try to include collection secrets or URLs", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+
+    const response = await patchAdminSource(jsonRequest("/api/admin/sources", {
+      source_id: "source-1",
+      enabled: true,
+      authorized_worker_id: "worker-1",
+      channel_url: "https://discord.example.invalid/channels/private",
+    }));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_source_administration" });
+    expect(sourceMocks.updateSourceAdministration).not.toHaveBeenCalled();
   });
 
   it("returns a one-time invite code only to an admin", async () => {
