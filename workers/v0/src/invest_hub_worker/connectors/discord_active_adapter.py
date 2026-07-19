@@ -70,9 +70,7 @@ class DiscordActiveAdapter:
                 raw_payload_ref=f"local://discord/{page_id}",
                 telemetry={"network_attempts": network_attempts, "match_state": "matched_new"},
             )
-            if cursor_after is None:
-                return
-            cursor = str(cursor_after)
+            return
 
     def _fetch(self, source: LocalWorkerConfig, cursor: str | None, cache_buster: str | None) -> Mapping[str, object]:
         try:
