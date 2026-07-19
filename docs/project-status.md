@@ -17,6 +17,7 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
   - [Spike-02 有界并发设计](superpowers/specs/2026-07-18-spike-02-bounded-concurrency-design.md)
   - [Spike-02 未解析媒体来源链路设计](superpowers/specs/2026-07-18-spike-02-media-source-linkage-design.md)
   - [V0 基础设施与技术验证设计](superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md)
+  - [V1 Discord 正式可用 MVP 设计](superpowers/specs/2026-07-19-v1-discord-mvp-design.md)
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
@@ -25,6 +26,7 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
   - [V0 基础设施与技术验证计划](superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)
   - [V0 收口与远程验收实施计划](superpowers/plans/2026-07-19-v0-closure-remote-validation.md)
   - [V0 真实运行有界批次恢复计划](superpowers/plans/2026-07-19-v0-real-run-bounded-batch-recovery.md)
+  - [V1 Discord 正式可用 MVP 计划](superpowers/plans/2026-07-19-v1-discord-mvp.md)
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
@@ -93,4 +95,4 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
 
 ## Next gate
 
-V0 的条件证据已补齐。进入 V1 前必须独立编写并批准 V1 Spec 与 Plan；在此之前不启动 V1 实现，不实现 X、多来源运营、正式阅读页、GLM 或自动 fallback。V0 的单页真实验收不是生产 SLA，也不替代未来的历史回填、持续增量和长期稳定性验证。
+V0 的条件证据已补齐，V1 Spec 与 implementation plan 均已获批准。下一步等待用户选择执行方式；选择后才启动 V1 实现。在此之前不实现 X、GLM 或自动 fallback。V0 的单页真实验收不是生产 SLA，也不替代 V1 对历史回填、持续增量和长期稳定性验收的要求。
