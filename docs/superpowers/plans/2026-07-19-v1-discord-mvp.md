@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 已批准（用户确认 2026-07-19）；等待执行方式选择。
+**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1 已完成。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -59,15 +59,15 @@
 - `summary_batches(task_id, natural_date, source_id, input_message_ids, structured_run_ids, output, coverage, created_at)`：`unique(task_id,natural_date)`。
 - `daily_summaries(source_id, natural_date, version, is_current, batch_ids, output, coverage, created_at)`：`unique(source_id,natural_date,version)`，同一来源/日期最多一条 `is_current=true`。
 
-- [ ] **Step 1: 写 pgTAP 失败断言与契约测试**
+- [x] **Step 1: 写 pgTAP 失败断言与契约测试**
 
   在 `003_v1_discord_mvp.sql` 的对应测试中写入：未授权 Worker 无法领取绑定来源；创建任务后再修改规则不会改变其 `rule_snapshot`；伪造不存在 Structured Run、跨来源消息 ID 或未匹配日期的 batch summary 被拒绝；相同任务/日期重复 persist 不生成第二个 batch 或 daily version；普通用户不能读取规则、任务、Worker、raw local ref 或管理诊断。
 
   在 `contracts.test.ts` 添加最小合法 claim 和 persistence 样例；断言 `collection_scope.max_pages=0`、未知 scope、重复 `target_author_ids`、空 `input_message_ids` 和跨字段缺失均被拒绝。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
-  Run: `supabase test db --file supabase/tests/003_v1_discord_mvp.sql`
+  Run: `supabase test db supabase/tests/003_v1_discord_mvp.sql`
 
   Expected: FAIL，因为迁移、摘要表和 V1 字段尚不存在。
 
@@ -75,7 +75,7 @@
 
   Expected: FAIL，因为现有 JSON Schema 不接受新的规则快照、任务范围与 batch summaries。
 
-- [ ] **Step 3: 实现迁移和校验函数**
+- [x] **Step 3: 实现迁移和校验函数**
 
   在 `003_v1_discord_mvp.sql` 中：
 
@@ -85,7 +85,7 @@
   4. 为 `summary_batches`、`daily_summaries` 启用 RLS。普通 `authenticated` 只可 select 安全阅读列所依赖的内容；规则、任务、Worker、checkpoint 和 local raw refs 仍只限管理员/服务角色。
   5. 更新 `Database` 的行、Insert、Update 和 Function 类型；`parseContract` 继续加载 `contracts/v0`，但对扩展字段进行严格验证。
 
-- [ ] **Step 4: 验证数据库和契约**
+- [x] **Step 4: 验证数据库和契约**
 
   Run: `supabase db reset && supabase test db`
 
@@ -95,7 +95,7 @@
 
   Expected: PASS；部署包仍包含所需 V0 契约，扩展 payload 没有放宽未知字段。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add supabase/migrations/003_v1_discord_mvp.sql supabase/tests/003_v1_discord_mvp.sql contracts/v0 apps/control-plane/src/lib/db/types.ts apps/control-plane/src/lib/contracts.ts apps/control-plane/src/lib/contracts.test.ts
