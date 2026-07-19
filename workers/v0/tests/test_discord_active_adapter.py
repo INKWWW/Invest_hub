@@ -88,6 +88,47 @@ class DiscordActiveAdapterTests(unittest.TestCase):
         self.assertEqual(pages[0].cursor_after, "cursor-1")
         self.assertEqual(len(invoker.calls), 1)
 
+    def test_limited_pagination_uses_at_most_the_claimed_page_budget_and_keeps_the_final_cursor(self) -> None:
+        invoker = FakeInvoker(
+            response(network=[{
+                "request_key": "request-1",
+                "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+                "messages": [{"id": "message-1", "content": "first"}],
+            }], cursor_after="cursor-1"),
+            response(network=[{
+                "request_key": "request-1",
+                "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+                "messages": [{"id": "message-2", "content": "second"}],
+            }], cursor_after="cursor-2"),
+            response(network=[{
+                "request_key": "request-1",
+                "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+                "messages": [{"id": "message-3", "content": "third"}],
+            }], cursor_after="cursor-3"),
+        )
+
+        pages = list(DiscordActiveAdapter(invoker).collect(source_config(), checkpoint=None, max_pages=2))
+
+        self.assertEqual([page.cursor_after for page in pages], ["cursor-1", "cursor-2"])
+        self.assertEqual([call["cursor"] for call in invoker.calls], [None, "cursor-1"])
+
+    def test_second_page_stale_failure_does_not_return_a_partial_success(self) -> None:
+        invoker = FakeInvoker(
+            response(network=[{
+                "request_key": "request-1",
+                "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+                "messages": [{"id": "message-1", "content": "first"}],
+            }], cursor_after="cursor-1"),
+            response(network=[{"request_key": "old", "request_url": "https://discord.com/api/v9/old", "messages": []}]),
+            response(network=[{"request_key": "old", "request_url": "https://discord.com/api/v9/old", "messages": []}]),
+        )
+
+        with self.assertRaises(ConnectorError) as caught:
+            list(DiscordActiveAdapter(invoker).collect(source_config(), checkpoint=None, max_pages=2))
+
+        self.assertEqual(caught.exception.code, "opencli_stale")
+        self.assertEqual(len(invoker.calls), 3)
+
     def test_missing_network_response_reopens_once_then_returns_typed_failure(self) -> None:
         invoker = FakeInvoker(response(network=[]), response(network=[]))
         with self.assertRaises(ConnectorError) as caught:

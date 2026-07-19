@@ -37,10 +37,12 @@ class DiscordActiveAdapter:
         self.page_timeout_seconds = page_timeout_seconds
         self.clock = clock
 
-    def collect(self, source: LocalWorkerConfig, checkpoint: str | None) -> Iterable[RawPage]:
-        started = self.clock()
+    def collect(self, source: LocalWorkerConfig, checkpoint: str | None, *, max_pages: int = 1) -> Iterable[RawPage]:
+        if max_pages < 1:
+            raise ConnectorError("Discord page limit must be positive", code="preflight")
         cursor = checkpoint
-        while True:
+        for _page_index in range(max_pages):
+            started = self.clock()
             self._check_deadline(started)
             response = self._fetch(source, cursor, cache_buster=None)
             self._check_deadline(started)
@@ -70,7 +72,9 @@ class DiscordActiveAdapter:
                 raw_payload_ref=f"local://discord/{page_id}",
                 telemetry={"network_attempts": network_attempts, "match_state": "matched_new"},
             )
-            return
+            if cursor_after is None:
+                return
+            cursor = str(cursor_after)
 
     def _fetch(self, source: LocalWorkerConfig, cursor: str | None, cache_buster: str | None) -> Mapping[str, object]:
         try:

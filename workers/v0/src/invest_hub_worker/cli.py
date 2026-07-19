@@ -6,9 +6,9 @@ import os
 import stat
 from pathlib import Path
 
-from .config import LocalWorkerConfig
+from .config import LocalWorkerConfigSet
 from .protocol import WorkerProtocol
-from .runtime import build_authorized_discord_runtime
+from .runtime import build_authorized_discord_runtime_set
 from .worker import Worker
 
 
@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "refused", "reason": "real_discord_requires_explicit_authorization"}))
         return 2
 
-    config = LocalWorkerConfig.load(Path(args.config))
+    config = LocalWorkerConfigSet.load(Path(args.config))
     credential_path = Path(args.credential)
     protocol = WorkerProtocol(config.control_plane_url, credential_path, worker_name=args.worker_name)
     if protocol.credential is None:
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     evidence_dir = Path(args.evidence_dir)
     evidence_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(evidence_dir, 0o700)
-    runtime = build_authorized_discord_runtime(
+    runtime = build_authorized_discord_runtime_set(
         config=config,
         evidence_dir=evidence_dir,
         prompt_path=Path(args.prompt_path),
