@@ -108,7 +108,7 @@ git commit -m "fix(v0): bound real discord run to one fresh page"
 - Consumes: 管理员将现有 `retryable_failed` 任务点击为 queued；本地 owner-only Worker 配置、凭据、Prompt、OpenCLI 合同和 Vercel 绕过密钥。
 - Produces: 一次真实任务 `succeeded`、至少一页 raw/Canonical、至少一条结构化运行、远程 evidence 关系和非空安全 checkpoint；所有真实内容仍只存在于本地 protected evidence。
 
-- [ ] **Step 1: 执行完整非真实回归和泄露扫描**
+- [x] **Step 1: 执行完整非真实回归和泄露扫描**
 
 Run:
 
@@ -121,11 +121,11 @@ bash scripts/v0/redact-check.sh
 
 Expected: 所有测试和泄露扫描通过；不得把私密目录作为扫描或提交目标。
 
-- [ ] **Step 2: 管理员点击一次“重试任务”**
+- [x] **Step 2: 管理员点击一次“重试任务”**
 
 在受保护 Preview 的任务详情页确认状态为 `retryable_failed` 后，只点击一次“重试任务”。确认列表状态变为 `queued`；不得新建第二个来源或第二个任务。
 
-- [ ] **Step 3: 启动单次真实 Worker，并将完整输出仅写入 owner-only 私密日志**
+- [x] **Step 3: 启动单次真实 Worker，并将完整输出仅写入 owner-only 私密日志**
 
 Run（所有路径为仓库外私密文件，不得贴入 Git）：
 
@@ -144,11 +144,11 @@ bash scripts/v0/run-e2e.sh --mode real-discord --provider codex \
 
 Expected: Worker 输出脱敏 `succeeded`；日志、raw、Prompt 和模型完整输出只保留在 owner-only 本地目录。
 
-- [ ] **Step 4: 在管理员详情页验证远程闭环**
+- [x] **Step 4: 在管理员详情页验证远程闭环**
 
 确认：任务为 `succeeded`；Attempt 2 为成功；Raw、Canonical、Structured run、evidence refs 与 checkpoint 均存在；Provider 为 `codex_cli`；普通用户仍无管理员访问权限。只记录计数、状态和逻辑证据引用，不记录正文、URL、作者或秘密。
 
-- [ ] **Step 5: 记录结论并提交文档**
+- [x] **Step 5: 记录结论并提交文档**
 
 仅当 Step 4 全部满足时，更新决策报告、工程日志和项目状态为“V0 通过（有界单页真实验证）”。若任一项失败，记录失败类与安全 checkpoint，保留“有条件通过”，不得写为通过。
 

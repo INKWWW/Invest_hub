@@ -4,9 +4,9 @@ Last updated: 2026-07-19
 
 ## Current phase
 
-**V0 确定性与远程验收已通过；真实 Discord 页面待补证据**
+**V0 通过（有界单页真实 Discord 验证完成）**
 
-Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。真实 Discord 专用 Profile/source 与其仓库外运行配置尚未提供，故仍不是生产发布批准。
+Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
 ## Approval status
 
@@ -24,7 +24,8 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
   - [Spike-02 未解析媒体来源链路计划](superpowers/plans/2026-07-18-spike-02-media-source-linkage-plan.md)
   - [V0 基础设施与技术验证计划](superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)
   - [V0 收口与远程验收实施计划](superpowers/plans/2026-07-19-v0-closure-remote-validation.md)
-- V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS 和远程角色/恢复验收，结论仍为有条件通过；真实页面验收仍是退出门槛。
+  - [V0 真实运行有界批次恢复计划](superpowers/plans/2026-07-19-v0-real-run-bounded-batch-recovery.md)
+- V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
@@ -39,7 +40,7 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
 
 ## Repository state
 
-当前仓库包含项目治理文档、Spike harness、V0 控制面/Worker 验证实现、确定性 E2E harness 和管理员调试面。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git；隔离远程数据库迁移、Preview 部署、合成核心 HTTP、普通用户阻断和租约恢复验收均已执行，真实页面尚未执行。
+当前仓库包含项目治理文档、Spike harness、V0 控制面/Worker 验证实现、确定性 E2E harness 和管理员调试面。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git；隔离远程数据库迁移、Preview 部署、合成核心 HTTP、普通用户阻断、租约恢复和真实有界单页验收均已执行。
 
 ## Spike-01 result
 
@@ -80,20 +81,16 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
 
 ## V0 result
 
-- 确定性验收：通过。控制面 30 个测试、Worker 44 个测试、Spike 回归 78 个测试、V0 E2E 7 个测试和 Supabase pgTAP 55 assertions 均通过。
+- 确定性验收：通过。控制面 30 个测试、Worker 46 个测试、Spike 回归 33 个测试、V0 E2E 8 个测试和 Supabase pgTAP 55 assertions 均通过。
 - 持久化收据：通过。Worker 必须先写入远程持久化收据；结果中的消息计数和结构化运行 ID 与收据不一致、或只有伪造的 `persisted` 标记时，数据库拒绝推进 checkpoint。
 - 隔离远程部署：核心链路通过。已将第 002 号迁移应用至隔离 Supabase，最新 Vercel 预览为 Ready；通过受保护部署通道完成合成注册 → 心跳 → 领取 → 持久化 → 回报结果，并确认回执与检查点已落库。
 - 安全与恢复：通过。邀请码单次消费、普通用户 403、lease 竞争、raw/Canonical/structured 持久化失败、Provider timeout、媒体来源精确链路和 checkpoint 不前移均有证据。
 - 管理调试面：通过。状态区分 `no_new_data`、`retryable_failed`、`failed`、`succeeded_with_unresolved`、`succeeded`；Credential、Prompt、Profile reference 和完整模型响应不进入调试视图。
-- 真实页面：条件通过。已提供 preflight 和显式授权门禁，但本次没有运行真实 Discord 页面。
+- 真实页面：通过。用户明确授权的专用浏览器配置档在第 2 次尝试完成一页真实 Discord 采集、Codex 结构化、远程持久化、证据关联和安全检查点回报；第 1 次超时被保留为可恢复失败。该证据只覆盖有界单页，不外推为历史回填或持续运营能力。
 - 远程部署：通过。核心工作节点 HTTP、普通用户管理员阻断和租约/检查点恢复均已验收；不含真实 Discord 内容。
 
 完整证据见 [V0 Engineering Journal](engineering-journal/2026-07-18-v0.md) 和 [V0 Final Report](spikes/2026-07-18-v0-decision-report.md)。
 
 ## Next gate
 
-进入 V1 Spec 前必须补齐一项 conditional 证据：
-
-- 在用户明确授权的专用 Profile 和 Discord 来源上完成至少一次真实增量页，保留仓库外 evidence，并验证登录失效、权限失败、freshness 和 checkpoint 恢复；
-
-在上述证据补齐并重新审阅 Final Report 前，不把 V0 conditional pass 写成生产 SLA，不启动 V1 实现，不实现 X、多来源运营、正式阅读页、GLM 或自动 fallback。
+V0 的条件证据已补齐。进入 V1 前必须独立编写并批准 V1 Spec 与 Plan；在此之前不启动 V1 实现，不实现 X、多来源运营、正式阅读页、GLM 或自动 fallback。V0 的单页真实验收不是生产 SLA，也不替代未来的历史回填、持续增量和长期稳定性验证。
