@@ -150,9 +150,10 @@ describe("v0 control-plane API authorization", () => {
     readerMocks.readDiscordDay.mockResolvedValue([{
       source: { sourceKey: "source-1", displayName: "Fixture source" },
       naturalDate: "2099-01-01",
-      dailySummary: { id: "daily-1", version: 1, output: { topics: [] }, coverage: {} },
+      status: "succeeded",
+      dailySummary: { id: "daily-1", version: 1, output: { topics: [] }, coverage: {}, history: [] },
       batches: [],
-      messages: [{ externalMessageId: "message-1", occurredAt: "2099-01-01T00:00:00Z", authorDisplay: "Author", content: "fixture", hasUnparsedMedia: false, unresolved: false }],
+      messages: [{ externalMessageId: "message-1", occurredAt: "2099-01-01T00:00:00Z", authorDisplay: "Author", content: "fixture", hasUnparsedMedia: false, unresolved: false, evidenceExpired: false }],
     }]);
     const response = await getDiscordReader(new Request("http://localhost/api/reader/discord?source=source-1&date=2099-01-01"));
 
