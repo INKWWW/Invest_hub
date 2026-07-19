@@ -35,6 +35,9 @@ const ruleMocks = vi.hoisted(() => ({
 const loginMocks = vi.hoisted(() => ({
   loginWithPassword: vi.fn(),
 }));
+const readerMocks = vi.hoisted(() => ({
+  readDiscordDay: vi.fn(),
+}));
 
 vi.mock("../../lib/auth/current-user", () => authMocks);
 vi.mock("../../lib/auth/invites", () => inviteMocks);
@@ -44,6 +47,7 @@ vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
 vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
 vi.mock("../../lib/db/repositories/rules", () => ruleMocks);
+vi.mock("../../lib/db/repositories/reader", () => readerMocks);
 
 import { POST as postAdminInvite } from "./admin/invites/route";
 import { POST as postLogin } from "./auth/login/route";
@@ -55,6 +59,7 @@ import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
 import { PATCH as patchAdminSource } from "./admin/sources/route";
 import { POST as postAdminRule } from "./admin/rules/route";
 import { POST as postAdminTask } from "./admin/tasks/route";
+import { GET as getDiscordReader } from "./reader/discord/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${path}`, {
@@ -136,6 +141,23 @@ describe("v0 control-plane API authorization", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden" });
     expect(taskMocks.getTaskDetail).not.toHaveBeenCalled();
+  });
+
+  it("allows an authenticated ordinary user to read only the safe Discord reader DTO", async () => {
+    readerMocks.readDiscordDay.mockResolvedValue([{
+      source: { sourceKey: "source-1", displayName: "Fixture source" },
+      naturalDate: "2099-01-01",
+      dailySummary: { id: "daily-1", version: 1, output: { topics: [] }, coverage: {} },
+      batches: [],
+      messages: [{ externalMessageId: "message-1", occurredAt: "2099-01-01T00:00:00Z", authorDisplay: "Author", content: "fixture", hasUnparsedMedia: false, unresolved: false }],
+    }]);
+    const response = await getDiscordReader(new Request("http://localhost/api/reader/discord?source=source-1&date=2099-01-01"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.days[0].messages[0].content).toBe("fixture");
+    expect(JSON.stringify(body)).not.toContain("local_raw_ref");
+    expect(JSON.stringify(body)).not.toContain("device_secret_hash");
   });
 
   it("blocks ordinary users from changing rules, source bindings, and history scopes", async () => {
