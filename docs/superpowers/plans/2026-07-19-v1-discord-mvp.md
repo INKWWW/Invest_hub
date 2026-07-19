@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–5 已完成。
+**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–6 已完成。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -333,32 +333,32 @@
 - `GET /api/reader/discord?source=<source_key>&date=<YYYY-MM-DD>`：任何已认证角色可调用；未认证 401；无数据返回 `{status:'no_data',days:[]}`，而非 404。
 - `DiscordReader`：桌面为频道侧栏+内容区；窄屏为日期/频道顶部选择与单列内容；显示 `processing`、`partial_failure`、`retryable_failed`、`failed`、`succeeded` 和 evidence expired。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
   为 reader repository 使用两个来源、两天、两版 daily summary、一个过期 raw reference 和一个失败任务 fixture。断言默认只返回 current version，历史版本按需展开，来源/日期过滤不可跨源混合。API 集成测试断言普通用户读取 summary 成功但请求 `/api/admin/*` 仍为 403，响应 JSON 不含 `local_raw_ref`、`device_secret_hash`、`prompt_text`、`task_events`。
 
   组件测试断言普通用户在 375px 和 1280px viewport 都能选择频道/日期、展开 batch 和证据；ReaderStatus 不会把失败显示成 `no_new_data`。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `cd apps/control-plane && npm test -- --run src/components/reader/discord-reader.test.tsx src/app/api/api.integration.test.ts`
 
   Expected: FAIL，因为 reader repository、API 和 `/discord` 页面尚不存在。
 
-- [ ] **Step 3: 实现只读数据形状和页面**
+- [x] **Step 3: 实现只读数据形状和页面**
 
   1. reader repository 通过服务端受控查询读取已经生成的 summary/batch/evidence，不暴露管理表、local refs 或完整运行诊断；查询在 source/date 无效时返回安全空集合。
   2. reader route 先调用 `getCurrentUser()`，再序列化显式 allowlist DTO；不接受任意表名、task ID 或 raw ref 参数。
   3. `/discord` 要求登录，未登录重定向 `/login?next=%2Fdiscord`；首页将登录用户导向 `/discord`，管理员保留 `/admin` 导航。
   4. 组件按照“日累计 → 批次 → 原始证据/历史版本”的顺序渲染，状态和 Provider 版本置于次级区域；过期证据只显示过期标识，不形成失效链接。
 
-- [ ] **Step 4: 验证阅读体验与权限**
+- [x] **Step 4: 验证阅读体验与权限**
 
   Run: `cd apps/control-plane && npm test -- --run src/components/reader/discord-reader.test.tsx src/app/api/api.integration.test.ts && npm run lint && npm run build`
 
   Expected: PASS；普通用户可以读取共享内容但无法获得管理或本地敏感数据。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add apps/control-plane/src/lib/db/repositories/reader.ts apps/control-plane/src/app/api/reader apps/control-plane/src/app/discord apps/control-plane/src/components/reader apps/control-plane/src/app/page.tsx apps/control-plane/src/app/layout.tsx apps/control-plane/src/app/api/api.integration.test.ts
