@@ -18,11 +18,11 @@ V0 的最小闭环已在公开测试样例、Mock 提供方、本地 Supabase �
 | Supabase 数据结构、RLS、邀请码单次使用 | 通过 | `db://v0/rls/001-002`；`supabase test db`——55 条断言 | 远程仅确认迁移版本，不含真实数据 |
 | 管理员/普通用户 API 与任务状态 | 通过 | `tests://v0/control-plane`；30 个 Vitest 测试；`deploy://v0/remote-role-recovery-20260719` | 远程补测使用临时普通用户，已删除 |
 | Worker 注册/心跳/领取/持久化/结果 | 通过 | `tests://v0/worker`；46 个单元测试 | 仅覆盖确定性传输与模拟时钟边界 |
-| Active Adapter 新鲜度/截止时间 | 通过 | `tests://v0/active-adapter` | 本报告未包含真实浏览器页面 |
+| Active Adapter 新鲜度/截止时间 | 通过 | `tests://v0/active-adapter` | 本项仅为确定性 Active Adapter 测试证据；真实浏览器页面结果见“已授权真实 Discord 有界单页”行 |
 | Mock/Codex 提供方边界 | 通过 | `tests://v0/provider`；进程组与数据结构测试 | 未新增真实 Codex 容量结论 |
 | 媒体证据关联 | 通过 | `e2e://v0/deterministic`；精确来源 ID 断言 | 仅使用公开测试样例 |
 | 管理员调试脱敏与重试门禁 | 通过 | `tests://v0/admin`；`npm run lint`；`npm run build` | 这是运维调试界面，不是普通用户阅读界面 |
-| 确定性恢复 | 通过 | `e2e://v0/deterministic`；7 个测试 | 使用内存控制面，未验证已部署 HTTP |
+| 确定性恢复 | 通过 | `e2e://v0/deterministic`；V0 E2E 8 个测试 | 使用内存控制面，未验证已部署 HTTP |
 | 仓库脱敏 | 通过 | `checks://v0/redaction`；`bash scripts/v0/redact-check.sh` | 检查凭据形态值，不替代语义审查 |
 | 已授权真实 Discord 有界单页 | 通过 | `deploy://v0/real-discord-bounded-batch-20260719`；第 1 次超时后第 2 次成功 | 只验证一个新鲜页面；不代表历史回填或持续运营能力 |
 | 隔离 Supabase 迁移与 Vercel Preview 构建 | 通过 | `deploy://v0/preview-ready`；远程迁移 `001/002`、Preview Ready | 不含生产数据或真实内容 |
