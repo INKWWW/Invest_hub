@@ -81,7 +81,7 @@ Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex C
 
 ## V0 result
 
-- 确定性验收：通过。控制面 30 个测试、Worker 46 个测试、Spike 回归 33 个测试、V0 E2E 8 个测试和 Supabase pgTAP 55 assertions 均通过。
+- 确定性验收：通过。控制面 30 个测试、Worker 46 个测试、Spike-01 回归 35 个测试、V0 E2E 8 个测试和 Supabase pgTAP 55 条断言均通过。
 - 持久化收据：通过。Worker 必须先写入远程持久化收据；结果中的消息计数和结构化运行 ID 与收据不一致、或只有伪造的 `persisted` 标记时，数据库拒绝推进 checkpoint。
 - 隔离远程部署：核心链路通过。已将第 002 号迁移应用至隔离 Supabase，最新 Vercel 预览为 Ready；通过受保护部署通道完成合成注册 → 心跳 → 领取 → 持久化 → 回报结果，并确认回执与检查点已落库。
 - 安全与恢复：通过。邀请码单次消费、普通用户 403、lease 竞争、raw/Canonical/structured 持久化失败、Provider timeout、媒体来源精确链路和 checkpoint 不前移均有证据。
