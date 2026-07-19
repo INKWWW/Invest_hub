@@ -1,26 +1,37 @@
 import { createSupabaseAdminClient } from "../supabase-server";
 import type { Database, Json } from "../types";
 
-type TaskInsert = Database["public"]["Tables"]["sync_tasks"]["Insert"];
+export type TaskScope = {
+  mode: "incremental" | "history";
+  maxPages: number;
+};
+
+export class TaskScopeError extends Error {}
+
+function assertTaskScope(scope: TaskScope): void {
+  if (!Number.isInteger(scope.maxPages) || scope.maxPages < 1 || scope.maxPages > 25
+    || (scope.mode === "incremental" && scope.maxPages > 5)) {
+    throw new TaskScopeError("invalid_collection_scope");
+  }
+}
 
 export async function createDiscordSyncTask(input: {
   sourceId: string;
   parameterVersion: string;
   requestedBy: string;
+  scope: TaskScope;
 }) {
-  const row: TaskInsert = {
-    task_type: "discord_sync",
-    source_id: input.sourceId,
-    parameter_version: input.parameterVersion,
-    requested_by: input.requestedBy,
-  };
+  assertTaskScope(input.scope);
   const { data, error } = await createSupabaseAdminClient()
-    .from("sync_tasks")
-    .insert(row)
-    .select()
-    .single();
+    .rpc("create_discord_sync_task", {
+      p_source_id: input.sourceId,
+      p_parameter_version: input.parameterVersion,
+      p_requested_by: input.requestedBy,
+      p_scope: { mode: input.scope.mode, max_pages: input.scope.maxPages },
+    });
   if (error) throw error;
-  return data;
+  if (!data || typeof data !== "object") throw new Error("invalid_created_task");
+  return data as Database["public"]["Tables"]["sync_tasks"]["Row"];
 }
 
 export async function listRecentTasks(limit = 50) {
