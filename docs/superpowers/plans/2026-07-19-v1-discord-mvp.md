@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–6 已完成。
+**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–7 已完成。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -31,6 +31,8 @@
 | `supabase/tests/003_v1_discord_mvp.sql` | pgTAP：权限、规则快照、摘要/证据原子性、来源隔离与幂等。 |
 | `supabase/migrations/004_v1_rule_tasks.sql` | 规则集版本与管理员驱动的原子规则替换、任务快照创建函数。 |
 | `supabase/tests/004_v1_rule_tasks.sql` | pgTAP：规则优先级、版本递增、任务快照和函数权限。 |
+| `supabase/migrations/006_v1_scheduled_sync.sql` | 定时窗口的数据库幂等键和按 Worker 绑定来源投递的原子函数。 |
+| `supabase/tests/006_v1_scheduled_sync.sql` | pgTAP：定时窗口重复投递、来源绑定和无效窗口拒绝。 |
 | `contracts/v0/task-claim.schema.json` | 在既有 Worker 协议中加入不可变的 `rule_snapshot` 与有界 `collection_scope`。 |
 | `contracts/v0/worker-persistence.schema.json` | 在既有持久化 payload 中加入批次摘要及其证据范围。 |
 | `apps/control-plane/src/lib/db/repositories/{sources,rules,summaries,tasks}.ts` | 管理来源/规则、生成任务快照和安全阅读模型查询。 |
@@ -370,6 +372,8 @@
 **Files:**
 
 - Create: `apps/control-plane/src/app/api/worker/schedule/tick/route.ts`
+- Create: `supabase/migrations/006_v1_scheduled_sync.sql`
+- Create: `supabase/tests/006_v1_scheduled_sync.sql`
 - Modify: `apps/control-plane/src/lib/db/repositories/tasks.ts`
 - Modify: `workers/v0/src/invest_hub_worker/cli.py`
 - Modify: `workers/v0/src/invest_hub_worker/protocol.py`
@@ -378,6 +382,7 @@
 - Create: `tests/e2e/v1/test_multi_source_reader_flow.py`
 - Create: `tests/e2e/v1/test_schedule_and_recovery.py`
 - Create: `scripts/v1/run-e2e.sh`
+- Create: `scripts/v1/preflight.py`
 - Test: `apps/control-plane/src/app/api/api.integration.test.ts`
 
 **Interfaces:**
@@ -386,25 +391,25 @@
 - `WorkerProtocol.schedule_tick(window_key: str) -> dict[str, Any]`：只在 `should_enqueue` 返回新窗口后调用。
 - `scripts/v1/run-e2e.sh --mode deterministic|real-discord`：real 模式必须同时检查 `V1_REAL_DISCORD_ACK=authorized`、owner-only 多来源 config、私有 Prompt、OpenCLI contract、protected evidence 目录和一次性 Worker 凭据；缺项即失败且不创建成功结果。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
   API 集成测试覆盖重复 window tick 的幂等返回、未认证/错误 Worker 401、绑定 Worker 只产生其来源任务。`test_schedule_and_recovery.py` 构造两个来源：来源 A 的 Provider 失败保持 checkpoint，来源 B 成功推进并生成 reader summary；Worker 离线跨窗口后只创建每个遗漏窗口一次补采任务。
 
   `test_multi_source_reader_flow.py` 用公开 fixture 验证完整路径：管理员配置两个来源/规则 → Worker 领取不同来源任务 → raw/Canonical/Structured/summary receipt → 日累计版本 → 普通用户阅读 → 权限拒绝 → 失败来源局部重试。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `PYTHONPATH=workers/v0/src:. python3.11 -m unittest discover -s tests/e2e/v1 -p 'test_*.py' -v`
 
   Expected: FAIL，因为 schedule tick、V1 fixture 和多来源端到端路径尚不存在。
 
-- [ ] **Step 3: 实现最小调度闭环**
+- [x] **Step 3: 实现最小调度闭环**
 
   1. tasks repository 以数据库唯一键处理 window-key 幂等，而非用内存时间戳；它仅为启用且授权给当前 Worker 的来源创建默认 `max_pages:5` 增量任务。
   2. Worker CLI 在启动和每分钟循环中调用 scheduler；离线恢复将尚未观察到的 08:00/20:50 window 逐一 tick，最多补最近 48 小时的 4 个窗口，超出范围记录脱敏 warning 并等待管理员显式 history task。
   3. `run-e2e.sh` 的 deterministic 模式只使用公开 fixture/Mock；real 模式不能从环境或 stdout 回显私密路径和值，并将完整输出写入 owner-only evidence 日志。
 
-- [ ] **Step 4: 验证全链路**
+- [x] **Step 4: 验证全链路**
 
   Run: `PYTHONPATH=workers/v0/src:. python3.11 -m unittest discover -s tests/e2e/v1 -p 'test_*.py' -v`
 
@@ -414,7 +419,7 @@
 
   Expected: PASS；V0 回归与 V1 新增测试共同通过。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add apps/control-plane/src/app/api/worker/schedule apps/control-plane/src/lib/db/repositories/tasks.ts workers/v0/src/invest_hub_worker tests/e2e/v1 scripts/v1 apps/control-plane/src/app/api/api.integration.test.ts

@@ -122,6 +122,23 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertTrue(acknowledgement["persisted"])
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-1/persist"))
 
+    def test_schedule_tick_is_authenticated_and_uses_a_bounded_window_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"window_key": "2099-01-01T08:00+08:00", "tasks": [{"id": "task-1", "idempotent": False}]}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            response = protocol.schedule_tick("2099-01-01T08:00+08:00")
+
+            self.assertEqual(response["window_key"], "2099-01-01T08:00+08:00")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/schedule/tick"))
+            self.assertEqual(transport.calls[1]["body"], {"window_key": "2099-01-01T08:00+08:00"})
+            with self.assertRaises(ProtocolError):
+                protocol.schedule_tick("bad-window")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,7 @@ from urllib.parse import urljoin
 from .contracts import ContractError, load_contract
 from .errors import AlreadyEnrolled, ProtocolError, RemoteConflict
 from .heartbeat import build_heartbeat
+from .scheduler import is_schedule_window_key
 
 
 Transport = Callable[[str, str, object | None, dict[str, str], float], tuple[int, object | None]]
@@ -106,6 +107,13 @@ class WorkerProtocol:
             return load_contract("task-claim", value)
         except ContractError as exc:
             raise ProtocolError("invalid task claim response") from exc
+
+    def schedule_tick(self, window_key: str) -> dict[str, Any]:
+        self._require_credential()
+        if not is_schedule_window_key(window_key):
+            raise ProtocolError("invalid schedule window key")
+        _, value = self._request("POST", "api/worker/schedule/tick", {"window_key": window_key})
+        return self._object(value, "invalid schedule tick response")
 
     def renew(self, task_id: str, attempt: int) -> dict[str, Any]:
         self._require_credential()

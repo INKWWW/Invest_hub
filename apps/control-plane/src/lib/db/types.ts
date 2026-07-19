@@ -212,6 +212,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["checkpoints"]["Insert"]>;
         Relationships: [];
       };
+      scheduled_sync_windows: {
+        Row: {
+          id: string;
+          source_id: string;
+          window_key: string;
+          worker_id: string;
+          task_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          window_key: string;
+          worker_id: string;
+          task_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scheduled_sync_windows"]["Insert"]>;
+        Relationships: [];
+      };
       raw_messages: {
         Row: {
           id: string;
@@ -447,6 +467,10 @@ export interface Database {
       };
       create_discord_sync_task: {
         Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_scope: Json };
+        Returns: Json;
+      };
+      enqueue_scheduled_discord_tasks: {
+        Args: { p_worker_id: string; p_window_key: string };
         Returns: Json;
       };
       record_task_failure: {

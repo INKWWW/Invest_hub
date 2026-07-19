@@ -75,6 +75,11 @@ class Worker:
             self._report_failure(claim, exc)
             return self._recover(task_id, exc)
 
+    def schedule_tick(self, window_key: str) -> dict[str, Any]:
+        """Request an idempotent control-plane schedule window before claiming."""
+
+        return self.protocol.schedule_tick(window_key)
+
     def stop(self) -> None:
         self.state = WorkerState.STOPPED
 
