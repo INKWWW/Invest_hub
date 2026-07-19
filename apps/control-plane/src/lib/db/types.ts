@@ -104,6 +104,7 @@ export interface Database {
           display_name: string;
           parameter_version: string;
           enabled: boolean;
+          authorized_worker_id: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -115,6 +116,7 @@ export interface Database {
           display_name: string;
           parameter_version: string;
           enabled?: boolean;
+          authorized_worker_id?: string | null;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -134,6 +136,8 @@ export interface Database {
           lease_owner: string | null;
           lease_expires_at: string | null;
           last_checkpoint: string | null;
+          rule_snapshot: Json;
+          collection_scope: Json;
           created_at: string;
           updated_at: string;
         };
@@ -148,6 +152,8 @@ export interface Database {
           lease_owner?: string | null;
           lease_expires_at?: string | null;
           last_checkpoint?: string | null;
+          rule_snapshot?: Json;
+          collection_scope?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -320,6 +326,86 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["task_events"]["Insert"]>;
+        Relationships: [];
+      };
+      source_author_rules: {
+        Row: {
+          id: string;
+          author_id: string;
+          scope: "global" | "source";
+          source_id: string | null;
+          policy: "target" | "exclude";
+          enabled: boolean;
+          version: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          author_id: string;
+          scope: "global" | "source";
+          source_id?: string | null;
+          policy: "target" | "exclude";
+          enabled?: boolean;
+          version: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["source_author_rules"]["Insert"]>;
+        Relationships: [];
+      };
+      summary_batches: {
+        Row: {
+          id: string;
+          task_id: string;
+          source_id: string;
+          natural_date: string;
+          input_message_ids: Json;
+          structured_run_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          source_id: string;
+          natural_date: string;
+          input_message_ids: Json;
+          structured_run_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["summary_batches"]["Insert"]>;
+        Relationships: [];
+      };
+      daily_summaries: {
+        Row: {
+          id: string;
+          source_id: string;
+          natural_date: string;
+          version: number;
+          is_current: boolean;
+          batch_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          natural_date: string;
+          version: number;
+          is_current?: boolean;
+          batch_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["daily_summaries"]["Insert"]>;
         Relationships: [];
       };
     };
