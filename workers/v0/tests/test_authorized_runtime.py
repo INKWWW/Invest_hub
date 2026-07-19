@@ -98,6 +98,8 @@ class AuthorizedRuntimeTests(unittest.TestCase):
         self.assertEqual(bundle["result"]["unparsed_media_count"], 1)
         self.assertEqual(payload["raw_messages"][0]["local_raw_ref"], "local://discord/page-1")
         self.assertEqual(payload["structured_runs"][0]["media_source_message_ids"], ["message-1"])
+        self.assertEqual(payload["batch_summaries"][0]["natural_date"], "2099-01-01")
+        self.assertNotIn("local://", str(payload["batch_summaries"]))
         self.assertEqual(provider.contexts[0].target_author_ids, frozenset({"author-1", "author-2"}))
         self.assertNotIn("profile_ref", str(payload))
         self.assertNotIn("private prompt template", str(payload))

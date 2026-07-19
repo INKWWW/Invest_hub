@@ -278,6 +278,8 @@ describe("v0 control-plane API authorization", () => {
     taskMocks.persistWorkerExecution.mockResolvedValue({
       persisted: true,
       structured_run_ids: ["run-1"],
+      summary_batch_ids: ["batch-1"],
+      daily_summary_ids: ["daily-1"],
     });
 
     const response = await postPersist(
@@ -286,7 +288,12 @@ describe("v0 control-plane API authorization", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ persisted: true, structured_run_ids: ["run-1"] });
+    expect(await response.json()).toEqual({
+      persisted: true,
+      structured_run_ids: ["run-1"],
+      summary_batch_ids: ["batch-1"],
+      daily_summary_ids: ["daily-1"],
+    });
     expect(taskMocks.persistWorkerExecution).toHaveBeenCalledWith("task-1", 1, "worker-1", validPersistencePayload);
   });
 
@@ -299,6 +306,21 @@ describe("v0 control-plane API authorization", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "conflicting_duplicate_result" });
+  });
+
+  it("refuses a result whose summary receipt IDs do not match persisted evidence", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.acceptTaskResult.mockRejectedValue({ code: "55000", message: "summary_receipt_mismatch" });
+    const response = await postResult(
+      jsonRequest("/api/worker/tasks/task-1/result", {
+        ...validTaskResult,
+        summary_batch_ids: ["wrong-batch"],
+        daily_summary_ids: ["wrong-daily"],
+      }, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "summary_receipt_mismatch" });
   });
 
   it("does not expose a device secret or prompt in a successful result response", async () => {

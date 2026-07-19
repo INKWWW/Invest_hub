@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–3 已完成。
+**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–4 已完成。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -214,6 +214,8 @@
 **Files:**
 
 - Create: `workers/v0/src/invest_hub_worker/summaries.py`
+- Create: `supabase/migrations/005_v1_summary_receipts.sql`
+- Create: `supabase/tests/005_v1_summary_receipts.sql`
 - Modify: `workers/v0/src/invest_hub_worker/runtime.py`
 - Modify: `workers/v0/src/invest_hub_worker/protocol.py`
 - Modify: `contracts/v0/worker-persistence.schema.json`
@@ -229,24 +231,24 @@
 - `build_daily_summary(existing: Sequence[BatchSummaryPayload], incoming: BatchSummaryPayload) -> DailySummaryPayload`：按日、来源、证据 ID 去重，输出仅由 batch outputs 与 coverage 构成，不读取 raw local ref。
 - Worker persistence payload 新增 `batch_summaries`，result 新增 `summary_batch_ids` 与 `daily_summary_ids`；控制面只在 returned receipt 的摘要 ID 与 result 一致时接受成功。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
   `test_summaries.py` 覆盖同一天两个 chunk、跨天消息、重复 Canonical ID、target/topic/channel 三种 author scope、unparsed media warning 和没有有效消息的拒绝。API 集成测试断言：持久化返回的 summary IDs 不匹配 result、batch 引用别的 task 的 run、daily output 引用不存在 message 时均返回 422/不推进 checkpoint。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `PYTHONPATH=workers/v0/src python3.11 -m unittest workers/v0/tests/test_summaries.py workers/v0/tests/test_authorized_runtime.py -v`
 
   Expected: FAIL，因为摘要构建器和 persistence 字段尚不存在。
 
-- [ ] **Step 3: 实现摘要构建与持久化顺序**
+- [x] **Step 3: 实现摘要构建与持久化顺序**
 
   1. `summaries.py` 只把已通过 `validate_structured_output` 的 topics、warnings、media 标记和证据 ID 组成摘要；不得重新解释原始文本或解析媒体。
   2. runtime 先完成每 chunk 的结构化验证，再生成按自然日 batch summaries；将 batch payload 与结构化运行一起交给 persistence。
   3. persist route 对扩展 schema 做严格校验，并把数据库返回的 batch/daily IDs 放入 receipt；result route 比对这些 IDs 后才调用 `accept_task_result`。
   4. 保持所有摘要版本 append-only。重复 persist 返回同一 receipt，不能生成新的 daily version；新的成功任务才生成递增版本并替换 current 指针。
 
-- [ ] **Step 4: 验证摘要与 checkpoint**
+- [x] **Step 4: 验证摘要与 checkpoint**
 
   Run: `PYTHONPATH=workers/v0/src python3.11 -m unittest workers/v0/tests/test_summaries.py workers/v0/tests/test_authorized_runtime.py workers/v0/tests/test_checkpoint_order.py -v`
 
@@ -256,7 +258,7 @@
 
   Expected: PASS；Worker API 拒绝非法摘要 payload 并接受完整原子闭环。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add workers/v0/src/invest_hub_worker/summaries.py workers/v0/src/invest_hub_worker/runtime.py workers/v0/src/invest_hub_worker/protocol.py workers/v0/tests contracts/v0/worker-persistence.schema.json apps/control-plane/src/app/api/worker apps/control-plane/src/app/api/api.integration.test.ts

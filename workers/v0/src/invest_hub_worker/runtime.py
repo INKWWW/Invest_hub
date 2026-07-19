@@ -14,6 +14,7 @@ from .connectors.discord_active_adapter import DiscordActiveAdapter, normalize_c
 from .evidence import LocalEvidenceStore
 from .providers.base import Provider, ProviderContext
 from .retry import RetryPolicy
+from .summaries import SummaryError, build_batch_summaries
 
 
 class RuntimeExecutionError(RuntimeError):
@@ -153,6 +154,10 @@ class AuthorizedDiscordRuntime:
 
         canonical_messages = list(canonical_by_id.values())
         structured_runs, retry_count, elapsed_ms = self._structured_runs(claim, canonical_messages, target_author_ids)
+        try:
+            batch_summaries = build_batch_summaries(canonical_messages, structured_runs) if canonical_messages else []
+        except SummaryError as exc:
+            raise RuntimeExecutionError("schema_error", "structured output cannot form a batch summary") from exc
         unresolved_count = sum(1 for message in canonical_messages if message.unresolved)
         unparsed_media_count = sum(1 for message in canonical_messages if message.attachments)
         persistence = {
@@ -163,6 +168,7 @@ class AuthorizedDiscordRuntime:
             "raw_messages": raw_messages,
             "canonical_messages": [self._canonical_message(message) for message in canonical_messages],
             "structured_runs": structured_runs,
+            "batch_summaries": batch_summaries,
         }
         result = {
             "contract_version": "v0",

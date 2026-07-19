@@ -13,6 +13,7 @@ type WorkerPersistencePayload = {
   raw_messages: unknown[];
   canonical_messages: unknown[];
   structured_runs: unknown[];
+  batch_summaries?: unknown[];
 };
 
 export async function POST(

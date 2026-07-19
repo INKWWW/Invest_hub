@@ -16,6 +16,8 @@ type TaskResult = {
   unresolved_count: number;
   unparsed_media_count: number;
   structured_run_ids: string[];
+  summary_batch_ids?: string[];
+  daily_summary_ids?: string[];
   telemetry: { elapsed_ms: number; retry_count: number; failure_class: string | null };
 };
 
@@ -39,7 +41,10 @@ export async function POST(
     const code = typeof error === "object" && error && "code" in error ? error.code : undefined;
     if (code === "40001") return NextResponse.json({ error: "lease_mismatch" }, { status: 409 });
     if (code === "23505") return NextResponse.json({ error: "conflicting_duplicate_result" }, { status: 409 });
-    if (code === "55000") return NextResponse.json({ error: "persistence_not_confirmed" }, { status: 422 });
+    if (code === "55000") {
+      const message = typeof error === "object" && error && "message" in error ? String(error.message) : "";
+      return NextResponse.json({ error: message.includes("summary_receipt_mismatch") ? "summary_receipt_mismatch" : "persistence_not_confirmed" }, { status: 422 });
+    }
     return NextResponse.json({ error: "result_rejected" }, { status: 503 });
   }
 }
