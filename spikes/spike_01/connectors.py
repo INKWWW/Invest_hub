@@ -296,11 +296,17 @@ class BrowserBridgeOpenCLIInvoker:
             phase_ms["detail_ms"] = self._elapsed_ms(phase_started_ns)
             messages = self._message_body(detail)
             if cursor is not None:
-                messages = [
+                older_messages = [
                     message
                     for message in messages
                     if self._is_older(str(message.get("id") or ""), cursor)
                 ]
+                if messages and not older_messages:
+                    raise ConnectorError(
+                        "Discord message response did not advance cursor",
+                        code="cursor_not_advanced",
+                    )
+                messages = older_messages
 
             phase_started_ns = time.monotonic_ns()
             messages = [
@@ -312,13 +318,9 @@ class BrowserBridgeOpenCLIInvoker:
             ids = [str(message.get("id") or "") for message in messages]
             ids = [message_id for message_id in ids if message_id]
             cursor_after = min(ids, key=self._numeric_or_text) if ids else None
-            # The network entry has already been proven fresh and cursor-scoped
-            # above.  An empty filtered body therefore means that the cursor is
-            # at the retained-history boundary, not that a stale page was
-            # mistaken for progress.  Returning a terminal empty page lets the
-            # caller finish without advancing a checkpoint past unpersisted
-            # data.  Missing, stale and wrong-cursor entries still fail before
-            # this point.
+            # A genuinely empty cursor-scoped response is the retained-history
+            # boundary. A nonempty response with no older messages is rejected
+            # above: it is not pagination progress.
             page_id = f"discord-{channel_id}-{cursor_after or 'initial'}"
             self.last_timing = {
                 "elapsed_ms": self._elapsed_ms(started_ns),
@@ -546,10 +548,11 @@ class BrowserBridgeOpenCLIInvoker:
                 continue
             if cursor is not None:
                 query = parse_qs(urlparse(url).query)
+                if cursor in query.get("after", []):
+                    saw_wrong_cursor = True
+                    continue
                 cursor_values = set(
-                    query.get("around", [])
-                    + query.get("before", [])
-                    + query.get("after", [])
+                    query.get("around", []) + query.get("before", [])
                 )
                 if cursor not in cursor_values:
                     saw_wrong_cursor = True

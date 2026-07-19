@@ -491,6 +491,86 @@ class OpenCLIConnectorTests(unittest.TestCase):
                     cursor="200",
                 )
 
+    def test_browser_bridge_rejects_fresh_after_cursor_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fresh = {
+                "key": "GET discord.com/api/v9/channels/123/messages?after=200&fresh=1",
+                "status": 200,
+                "url": "https://discord.com/api/v9/channels/123/messages?limit=30&after=200&fresh=1",
+            }
+
+            class BrowserRunner(FakeRunner):
+                def __init__(self):
+                    super().__init__(version="1.8.6")
+                    self.network_calls = 0
+
+                def __call__(self, args, **kwargs):
+                    self.calls.append(list(args))
+                    if args[1] == "--version":
+                        return CompletedProcess(args, 0, "1.8.6\n", "")
+                    if args[1:3] == ["browser", "spike01"]:
+                        if args[3] == "network":
+                            self.network_calls += 1
+                            entries = [] if self.network_calls == 1 else [fresh]
+                            return CompletedProcess(
+                                args, 0, json.dumps({"entries": entries}), ""
+                            )
+                        return CompletedProcess(args, 0, "{}", "")
+                    return CompletedProcess(args, 0, "{}", "")
+
+            invoker = BrowserBridgeOpenCLIInvoker(
+                Path(write_browser_contract(directory)), runner=BrowserRunner()
+            )
+            with self.assertRaises(ConnectorError) as raised:
+                invoker.fetch_page(
+                    channel_url="https://discord.com/channels/1/123",
+                    profile_path=Path("browser-bridge:spike01"),
+                    cursor="200",
+                )
+            self.assertEqual(raised.exception.code, "cursor_not_advanced")
+
+    def test_browser_bridge_rejects_nonadvancing_fresh_around_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fresh = {
+                "key": "GET discord.com/api/v9/channels/123/messages?around=200&fresh=1",
+                "status": 200,
+                "url": "https://discord.com/api/v9/channels/123/messages?limit=30&around=200&fresh=1",
+            }
+            detail = {"body": json.dumps([{"id": "300"}, {"id": "200"}])}
+
+            class BrowserRunner(FakeRunner):
+                def __init__(self):
+                    super().__init__(version="1.8.6")
+                    self.network_calls = 0
+
+                def __call__(self, args, **kwargs):
+                    self.calls.append(list(args))
+                    if args[1] == "--version":
+                        return CompletedProcess(args, 0, "1.8.6\n", "")
+                    if args[1:3] == ["browser", "spike01"]:
+                        if args[3] in {"open", "wait"}:
+                            return CompletedProcess(args, 0, "{}", "")
+                        if args[3] == "network" and "--detail" in args:
+                            return CompletedProcess(args, 0, json.dumps(detail), "")
+                        if args[3] == "network":
+                            self.network_calls += 1
+                            entries = [] if self.network_calls == 1 else [fresh]
+                            return CompletedProcess(
+                                args, 0, json.dumps({"entries": entries}), ""
+                            )
+                    return CompletedProcess(args, 0, "{}", "")
+
+            invoker = BrowserBridgeOpenCLIInvoker(
+                Path(write_browser_contract(directory)), runner=BrowserRunner()
+            )
+            with self.assertRaises(ConnectorError) as raised:
+                invoker.fetch_page(
+                    channel_url="https://discord.com/channels/1/123",
+                    profile_path=Path("browser-bridge:spike01"),
+                    cursor="200",
+                )
+            self.assertEqual(raised.exception.code, "cursor_not_advanced")
+
     def test_browser_bridge_treats_a_fresh_empty_cursor_response_as_history_boundary(self):
         with tempfile.TemporaryDirectory() as directory:
             fresh = {
