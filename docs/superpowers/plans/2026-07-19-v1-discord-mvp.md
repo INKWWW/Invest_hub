@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 执行中（用户确认 Inline Execution，2026-07-19）；Task 1–7 已完成。
+**Plan status:** 实现与本地确定性验证已完成（Task 1–7、Task 8 的本地收口）；隔离部署与真实 Discord 验收待外部目标和明确授权。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -441,7 +441,7 @@
 - 只部署到专用 V1 Supabase/Vercel 环境；真实来源、真实正文、Cookie、Profile、邀请码、Prompt 和完整响应不进入云端日志或 Git。
 - V1 Final Report 对 Spec 的 12 项验收逐项写 `pass`、`conditional` 或 `fail`，每项只引用脱敏 evidence key、命令、计数和限制。
 
-- [ ] **Step 1: 运行部署前验证**
+- [x] **Step 1: 运行部署前验证**
 
   Run: `supabase db reset && supabase test db`
 
@@ -467,13 +467,13 @@
 
   Expected: 至少两个用户已授权来源各完成一次增量同步；随后一来源执行有限 history task，普通用户在正式网页读取日累计、批次与原始证据；人为制造或保留一个来源失败，确认另一来源继续运行且失败来源 checkpoint 不前移。真实 evidence 仅保存于受保护本地目录。
 
-- [ ] **Step 4: 运行收口安全检查并写报告**
+- [x] **Step 4: 运行收口安全检查并写报告**
 
   Run: `bash scripts/v0/redact-check.sh && git diff --check`
 
   Expected: `redaction_check: pass` 且无空白/冲突 diff。工程日志记录实际测试计数、真实运行状态、失败分类和恢复动作；Final Report 记录各验收项结论，不写正文、URL、Profile、Cookie、Token、Prompt 或完整响应。
 
-- [ ] **Step 5: 更新状态、审阅并提交**
+- [x] **Step 5: 更新状态、审阅并提交**
 
   将 V1 Final Report、工程日志、README、docs README 和 `project-status.md` 更新为实际结果。只有 Task 8 的真实验收与 Spec 12 项门槛均通过时，才能标记 V1 为“Discord 正式可用 MVP”；否则保留条件/失败结论和下一项补证据门槛。
 
