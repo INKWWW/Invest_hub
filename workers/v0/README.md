@@ -20,6 +20,8 @@ V0_PYTHON_BIN=python3.11 bash scripts/v0/run-e2e.sh --mode deterministic --provi
 
 执行真实 Discord 前，必须先用 Python 3.11+ 运行 `python3.11 scripts/v0/preflight.py`（或将同一解释器路径放入 `V0_PYTHON_BIN` 后通过 `run-e2e.sh` 调用）。真实模式要求显式设置 `V0_REAL_DISCORD_ACK=authorized`，并使用 Codex CLI；没有用户明确授权的专用 Profile 和已登录来源时，脚本会拒绝启动，不会把缺失配置当作空数据成功。
 
+若控制面使用 Vercel Preview 的部署保护，管理员应在 Vercel 为该项目创建仅用于本次 V0 验收的自动化绕过密钥，并把它只保存到本机 owner-only 文件。运行前由本机 Shell 读取该文件并设置 `V0_VERCEL_PROTECTION_BYPASS`；Worker 和 preflight 仅将该值作为 `x-vercel-protection-bypass` 请求头发送，绝不写入 Worker 配置、设备凭据、证据、日志或 Git。不要把该值粘贴到终端历史、聊天或 Vercel 环境变量。
+
 真实执行使用下列本地路径参数，不会把它们写入任务 payload、日志或 Git：
 
 ```bash

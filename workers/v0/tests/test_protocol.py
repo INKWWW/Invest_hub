@@ -73,6 +73,23 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(transport.calls[1]["headers"].get("Authorization"), f"Bearer {enrolment_response()['device_secret']}")
             self.assertEqual(transport.calls[1]["body"]["contract_version"], "v0")
 
+    def test_optional_local_vercel_bypass_is_forwarded_without_persisting_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()))
+            previous = os.environ.get("V0_VERCEL_PROTECTION_BYPASS")
+            os.environ["V0_VERCEL_PROTECTION_BYPASS"] = "local-only-bypass-secret"
+            try:
+                protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+                protocol.enrol("one-time-enrolment-code")
+            finally:
+                if previous is None:
+                    os.environ.pop("V0_VERCEL_PROTECTION_BYPASS", None)
+                else:
+                    os.environ["V0_VERCEL_PROTECTION_BYPASS"] = previous
+
+            self.assertEqual(transport.calls[0]["headers"].get("x-vercel-protection-bypass"), "local-only-bypass-secret")
+            self.assertNotIn("local-only-bypass-secret", (Path(directory) / "credentials.json").read_text(encoding="utf-8"))
+
     def test_empty_claim_is_none_and_invalid_response_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()), (204, None), (200, {"unexpected": True}))

@@ -5,9 +5,10 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from invest_hub_worker.config import LocalWorkerConfig
-from scripts.v0.preflight import run_preflight
+from scripts.v0.preflight import _reachable, run_preflight
 
 
 class RealDiscordPreflightTests(unittest.TestCase):
@@ -50,6 +51,33 @@ class RealDiscordPreflightTests(unittest.TestCase):
 
             self.assertEqual(result["status"], "fail")
             self.assertIn("profile_missing", result["failures"])
+
+    def test_preflight_uses_only_the_local_bypass_header_when_supplied(self) -> None:
+        captured: dict[str, str | None] = {}
+
+        class Response:
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *_: object) -> None:
+                return None
+
+        def urlopen(request: object, timeout: float) -> Response:
+            captured["header"] = request.get_header("X-vercel-protection-bypass")  # type: ignore[attr-defined]
+            return Response()
+
+        previous = os.environ.get("V0_VERCEL_PROTECTION_BYPASS")
+        os.environ["V0_VERCEL_PROTECTION_BYPASS"] = "local-only-bypass-secret"
+        try:
+            with patch("scripts.v0.preflight.urllib.request.urlopen", side_effect=urlopen):
+                self.assertTrue(_reachable("https://control.example.invalid"))
+        finally:
+            if previous is None:
+                os.environ.pop("V0_VERCEL_PROTECTION_BYPASS", None)
+            else:
+                os.environ["V0_VERCEL_PROTECTION_BYPASS"] = previous
+
+        self.assertEqual(captured["header"], "local-only-bypass-secret")
 
 
 if __name__ == "__main__":
