@@ -491,6 +491,50 @@ class OpenCLIConnectorTests(unittest.TestCase):
                     cursor="200",
                 )
 
+    def test_browser_bridge_treats_a_fresh_empty_cursor_response_as_history_boundary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fresh = {
+                "key": "GET discord.com/api/v9/channels/123/messages?before=100&fresh=1",
+                "status": 200,
+                "url": "https://discord.com/api/v9/channels/123/messages?limit=30&before=100&fresh=1",
+            }
+            detail = {"body": "[]"}
+
+            class BrowserRunner(FakeRunner):
+                def __init__(self):
+                    super().__init__(version="1.8.6")
+                    self.network_calls = 0
+
+                def __call__(self, args, **kwargs):
+                    self.calls.append(list(args))
+                    if args[1] == "--version":
+                        return CompletedProcess(args, 0, "1.8.6\n", "")
+                    if args[1:3] == ["browser", "spike01"]:
+                        if args[3] in {"open", "wait"}:
+                            return CompletedProcess(args, 0, "{}", "")
+                        if args[3] == "network" and "--detail" in args:
+                            return CompletedProcess(args, 0, json.dumps(detail), "")
+                        if args[3] == "network":
+                            self.network_calls += 1
+                            entries = [] if self.network_calls == 1 else [fresh]
+                            return CompletedProcess(args, 0, json.dumps({"entries": entries}), "")
+                    return CompletedProcess(args, 0, "{}", "")
+
+            invoker = BrowserBridgeOpenCLIInvoker(
+                Path(write_browser_contract(directory)),
+                runner=BrowserRunner(),
+            )
+
+            payload = invoker.fetch_page(
+                channel_url="https://discord.com/channels/1/123",
+                profile_path=Path("browser-bridge:spike01"),
+                cursor="100",
+            )
+
+            self.assertEqual(payload["messages"], [])
+            self.assertIsNone(payload["cursor_after"])
+            self.assertEqual(payload["_telemetry"]["match_state"], "matched_new")
+
     def test_browser_bridge_converts_subprocess_timeout_to_typed_error(self):
         with tempfile.TemporaryDirectory() as directory:
             class BrowserRunner(FakeRunner):
