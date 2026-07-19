@@ -59,7 +59,12 @@ class FakeProtocol:
 
     def persist(self, payload: dict[str, object]) -> dict[str, object]:
         self.persisted_payloads.append(payload)
-        return {"persisted": True, "structured_run_ids": ["run-1"]}
+        return {
+            "persisted": True,
+            "structured_run_ids": ["run-1"],
+            "summary_batch_ids": [],
+            "daily_summary_ids": [],
+        }
 
     def report_failure(self, failure: dict[str, object]) -> dict[str, object]:
         self.reported_failures.append(failure)

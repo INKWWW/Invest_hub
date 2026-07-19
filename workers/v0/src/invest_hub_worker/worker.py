@@ -103,8 +103,16 @@ class Worker:
         run_ids = acknowledgement.get("structured_run_ids")
         if not isinstance(run_ids, list) or not all(isinstance(run_id, str) and run_id for run_id in run_ids):
             raise LeaseUncertain("control plane returned invalid structured run IDs")
+        summary_batch_ids = acknowledgement.get("summary_batch_ids")
+        daily_summary_ids = acknowledgement.get("daily_summary_ids")
+        if not isinstance(summary_batch_ids, list) or not all(isinstance(summary_id, str) and summary_id for summary_id in summary_batch_ids):
+            raise LeaseUncertain("control plane returned invalid summary batch IDs")
+        if not isinstance(daily_summary_ids, list) or not all(isinstance(summary_id, str) and summary_id for summary_id in daily_summary_ids):
+            raise LeaseUncertain("control plane returned invalid daily summary IDs")
         result = dict(nested_result)
         result["structured_run_ids"] = run_ids
+        result["summary_batch_ids"] = summary_batch_ids
+        result["daily_summary_ids"] = daily_summary_ids
         return result
 
     def _report_failure(self, claim: Mapping[str, Any], error: Exception) -> None:
