@@ -375,6 +375,9 @@ class OpenCLIConnectorTests(unittest.TestCase):
             ]
             self.assertEqual(len(open_calls), 2)
             self.assertNotEqual(open_calls[0][4], open_calls[1][4])
+            self.assertTrue(
+                any(call[3:5] == ["keys", "CTRL+R"] for call in runner.calls)
+            )
 
     def test_browser_bridge_ignores_stale_entry_and_matches_current_cursor(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -382,11 +385,13 @@ class OpenCLIConnectorTests(unittest.TestCase):
                 "key": "GET discord.com/api/v9/channels/123/messages",
                 "status": 200,
                 "url": "https://discord.com/api/v9/channels/123/messages?limit=30&around=200",
+                "timestamp": "2000-01-01T00:00:00Z",
             }
             fresh = {
                 "key": "GET discord.com/api/v9/channels/123/messages",
                 "status": 200,
                 "url": "https://discord.com/api/v9/channels/123/messages?limit=30&around=200&fresh=1",
+                "timestamp": "2099-01-01T00:00:00Z",
             }
             detail = {
                 "body": json.dumps(
@@ -449,6 +454,49 @@ class OpenCLIConnectorTests(unittest.TestCase):
                     for call in runner.calls
                 )
             )
+
+    def test_browser_bridge_accepts_a_refreshed_request_with_the_same_key_and_url(self):
+        with tempfile.TemporaryDirectory() as directory:
+            initial = {
+                "key": "GET discord.com/api/v9/channels/123/messages",
+                "status": 200,
+                "url": "https://discord.com/api/v9/channels/123/messages?limit=30",
+                "timestamp": "2000-01-01T00:00:00Z",
+            }
+            refreshed = {**initial, "timestamp": "2099-01-01T00:00:05Z"}
+            detail = {"body": json.dumps([{"id": "300"}])}
+
+            class BrowserRunner(FakeRunner):
+                def __init__(self):
+                    super().__init__(version="1.8.6")
+                    self.network_calls = 0
+
+                def __call__(self, args, **kwargs):
+                    self.calls.append(list(args))
+                    if args[1] == "--version":
+                        return CompletedProcess(args, 0, "1.8.6\n", "")
+                    if args[1:3] == ["browser", "spike01"]:
+                        if args[3] in {"open", "wait", "keys"}:
+                            return CompletedProcess(args, 0, "{}", "")
+                        if args[3] == "network" and "--detail" in args:
+                            return CompletedProcess(args, 0, json.dumps(detail), "")
+                        if args[3] == "network":
+                            self.network_calls += 1
+                            entries = [initial] if self.network_calls == 1 else [refreshed]
+                            return CompletedProcess(
+                                args, 0, json.dumps({"entries": entries}), ""
+                            )
+                    return CompletedProcess(args, 0, "{}", "")
+
+            payload = BrowserBridgeOpenCLIInvoker(
+                Path(write_browser_contract(directory)), runner=BrowserRunner()
+            ).fetch_page(
+                channel_url="https://discord.com/channels/1/123",
+                profile_path=Path("browser-bridge:spike01"),
+                cursor=None,
+            )
+
+            self.assertEqual([message["id"] for message in payload["messages"]], ["300"])
 
     def test_browser_bridge_rejects_response_for_wrong_cursor(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -518,8 +566,9 @@ class OpenCLIConnectorTests(unittest.TestCase):
                         return CompletedProcess(args, 0, "{}", "")
                     return CompletedProcess(args, 0, "{}", "")
 
+            runner = BrowserRunner()
             invoker = BrowserBridgeOpenCLIInvoker(
-                Path(write_browser_contract(directory)), runner=BrowserRunner()
+                Path(write_browser_contract(directory)), runner=runner
             )
             with self.assertRaises(ConnectorError) as raised:
                 invoker.fetch_page(
@@ -535,6 +584,53 @@ class OpenCLIConnectorTests(unittest.TestCase):
                 "key": "GET discord.com/api/v9/channels/123/messages?after=200&fresh=1",
                 "status": 200,
                 "url": "https://discord.com/api/v9/channels/123/messages?limit=30&after=200&fresh=1",
+            }
+            detail = {"body": json.dumps([{"id": "300"}, {"id": "200"}])}
+
+            class BrowserRunner(FakeRunner):
+                def __init__(self):
+                    super().__init__(version="1.8.6")
+                    self.network_calls = 0
+
+                def __call__(self, args, **kwargs):
+                    self.calls.append(list(args))
+                    if args[1] == "--version":
+                        return CompletedProcess(args, 0, "1.8.6\n", "")
+                    if args[1:3] == ["browser", "spike01"]:
+                        if args[3] in {"open", "wait"}:
+                            return CompletedProcess(args, 0, "{}", "")
+                        if args[3] == "network" and "--detail" in args:
+                            return CompletedProcess(args, 0, json.dumps(detail), "")
+                        if args[3] == "network":
+                            self.network_calls += 1
+                            entries = [] if self.network_calls == 1 else [fresh]
+                            return CompletedProcess(
+                                args, 0, json.dumps({"entries": entries}), ""
+                            )
+                    return CompletedProcess(args, 0, "{}", "")
+
+            runner = BrowserRunner()
+            invoker = BrowserBridgeOpenCLIInvoker(
+                Path(write_browser_contract(directory)), runner=runner
+            )
+            payload = invoker.fetch_page(
+                channel_url="https://discord.com/channels/1/123",
+                profile_path=Path("browser-bridge:spike01"),
+                cursor="200",
+                cursor_mode="incremental",
+            )
+
+            self.assertEqual([message["id"] for message in payload["messages"]], ["300"])
+            self.assertEqual(payload["cursor_after"], "300")
+            open_calls = [call for call in runner.calls if len(call) > 4 and call[3] == "open"]
+            self.assertEqual(open_calls[0][4], "https://discord.com/channels/1/123")
+
+    def test_browser_bridge_accepts_fresh_unbounded_response_for_incremental_sync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fresh = {
+                "key": "GET discord.com/api/v9/channels/123/messages?fresh=1",
+                "status": 200,
+                "url": "https://discord.com/api/v9/channels/123/messages?limit=30&fresh=1",
             }
             detail = {"body": json.dumps([{"id": "300"}, {"id": "200"}])}
 
