@@ -68,6 +68,7 @@ class BrowserBridgeRuntimeInvoker:
         profile_ref: str,
         cursor: str | None,
         cache_buster: str | None,
+        collection_mode: str = "history",
     ) -> Mapping[str, object]:
         del cache_buster
         try:
@@ -75,6 +76,7 @@ class BrowserBridgeRuntimeInvoker:
                 channel_url=channel_url,
                 profile_path=Path(profile_ref),
                 cursor=cursor,
+                cursor_mode=collection_mode,
             )
         except Exception as exc:
             code = getattr(exc, "code", "opencli_contract")
@@ -135,7 +137,12 @@ class AuthorizedDiscordRuntime:
         duplicate_count = 0
 
         try:
-            for page in self.connector.collect(self.config, claim.get("safe_checkpoint"), max_pages=scope.max_pages):
+            for page in self.connector.collect(
+                self.config,
+                claim.get("safe_checkpoint"),
+                max_pages=scope.max_pages,
+                collection_mode=scope.mode,
+            ):
                 self.evidence.persist_raw(page)
                 mapped = self.canonicalizer.map(page)
                 local_counts = self.evidence.persist_canonical(mapped)
@@ -146,7 +153,7 @@ class AuthorizedDiscordRuntime:
                         continue
                     canonical_by_id[message.external_message_id] = message
                     raw_messages.append(self._raw_message(page, message.external_message_id))
-                checkpoints.append(page.cursor_after)
+                checkpoints.append(page.cursor_after if page.cursor_after is not None else checkpoints[-1])
         except ConnectorError as exc:
             raise RuntimeExecutionError(str(exc.code), "Discord collection failed") from exc
         except Exception as exc:
