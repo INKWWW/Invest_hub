@@ -1,7 +1,9 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { readerDateOptions, readerSourceOptions } from "./DiscordReader";
+import { DiscordReader, readerDateOptions, readerSourceOptions } from "./DiscordReader";
 import { readerStatusLabel } from "./ReaderStatus";
+import type { ReaderDay } from "../../lib/db/repositories/reader";
 
 const days = [
   { source: { sourceKey: "source-b", displayName: "Source B" }, naturalDate: "2099-01-02" },
@@ -23,5 +25,66 @@ describe("DiscordReader", () => {
     expect(readerStatusLabel("partial_failure")).toContain("Partial failure");
     expect(readerStatusLabel("retryable_failed")).toContain("Retryable failure");
     expect(readerStatusLabel("failed")).toContain("Failed");
+  });
+
+  it("renders evidence-backed topics without serializing summary JSON", () => {
+    const renderedDays: ReaderDay[] = [{
+      source: { sourceKey: "source-a", displayName: "Source A" },
+      naturalDate: "2099-01-02",
+      status: "succeeded",
+      dailySummary: {
+        id: "daily-1",
+        version: 1,
+        output: {
+          topics: [{
+            title: "Earnings",
+            summary: "Guidance changed.",
+            source_message_ids: ["message-1", "message-2"],
+            author_scope: "target",
+            tickers: ["ABC"],
+          }],
+          warnings: ["Unparsed attachment"],
+          local_raw_ref: "local://must-not-render",
+        },
+        coverage: { unparsed_media: true },
+        history: [],
+      },
+      batches: [{
+        id: "batch-1",
+        inputMessageIds: ["message-1", "message-2"],
+        structuredRunIds: ["run-1"],
+        output: {
+          topics: [{
+            title: "Earnings",
+            summary: "Guidance changed.",
+            source_message_ids: ["message-1", "message-2"],
+            author_scope: "target",
+          }],
+          warnings: [],
+        },
+        coverage: { unparsed_media: true },
+      }],
+      messages: [{
+        externalMessageId: "message-1",
+        occurredAt: "2099-01-02T09:00:00.000Z",
+        authorDisplay: "Fixture Author",
+        content: "Public fixture message.",
+        hasUnparsedMedia: true,
+        unresolved: false,
+        evidenceExpired: false,
+      }],
+    }];
+
+    const html = renderToStaticMarkup(<DiscordReader days={renderedDays} />);
+
+    expect(html).toContain("Earnings");
+    expect(html).toContain("2 evidence messages");
+    expect(html).toContain("Unparsed media");
+    expect(html).toContain("Batch summaries");
+    expect(html).toContain("Evidence-backed messages");
+    expect(html).toContain("Channel");
+    expect(html).toContain("Date");
+    expect(html).not.toContain("source_message_ids");
+    expect(html).not.toContain("local://");
   });
 });
