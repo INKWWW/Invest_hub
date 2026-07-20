@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AdminShell } from "../../../components/admin/AdminShell";
 import { StatusBadge } from "../../../components/admin/StatusBadge";
 import { buildTaskViewModel, canRetryTask } from "../../../lib/admin/view-model";
 import { listRecentTasks } from "../../../lib/db/repositories/tasks";
@@ -8,7 +9,7 @@ import { TaskCreateForm } from "../../../components/admin/TaskCreateForm";
 
 export default async function AdminTasksPage() {
   const [tasks, sources] = await Promise.all([listRecentTasks(50), listSources()]);
-  return (
+  return <AdminShell active="tasks">
     <section>
       <h1>Tasks</h1>
       <p>Task state, lease ownership and safe checkpoint are shown without raw prompt or model response data.</p>
@@ -34,5 +35,5 @@ export default async function AdminTasksPage() {
         </table>
       ) : <p>No tasks created.</p>}
     </section>
-  );
+  </AdminShell>;
 }

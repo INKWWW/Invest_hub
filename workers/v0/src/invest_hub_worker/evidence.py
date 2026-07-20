@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -17,8 +18,9 @@ class EvidenceError(RuntimeError):
 class LocalEvidenceStore:
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._ensure_private_directory(root)
         for name in ("raw", "canonical", "validation", "metrics"):
-            (root / name).mkdir(parents=True, exist_ok=True)
+            self._ensure_private_directory(root / name)
 
     def persist_raw(self, page: RawPage) -> None:
         self._write_json(self.root / "raw" / f"{page.page_id}.json", asdict(page))
@@ -30,6 +32,7 @@ class LocalEvidenceStore:
         duplicate_count = 0
         try:
             with target.open("a", encoding="utf-8") as stream:
+                self._restrict_file(target)
                 for message in messages:
                     key = f"{message.source_id}:{message.external_message_id}"
                     if key in existing:
@@ -51,6 +54,7 @@ class LocalEvidenceStore:
     def _write_json(target: Path, payload: object) -> None:
         try:
             with target.open("w", encoding="utf-8") as stream:
+                LocalEvidenceStore._restrict_file(target)
                 json.dump(payload, stream, ensure_ascii=False, sort_keys=True)
                 stream.write("\n")
                 stream.flush()
@@ -62,11 +66,31 @@ class LocalEvidenceStore:
     def _append_jsonl(target: Path, payload: object) -> None:
         try:
             with target.open("a", encoding="utf-8") as stream:
+                LocalEvidenceStore._restrict_file(target)
                 stream.write(json.dumps(asdict(payload) if is_dataclass(payload) else payload, ensure_ascii=False, sort_keys=True) + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
         except OSError as exc:
             raise EvidenceError("validation persistence failed") from exc
+
+    @staticmethod
+    def _ensure_private_directory(path: Path) -> None:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            os.chmod(path, 0o700)
+            if stat.S_IMODE(path.stat().st_mode) & 0o077:
+                raise OSError("evidence directory permissions are too broad")
+        except OSError as exc:
+            raise EvidenceError("evidence directory must be owner-only") from exc
+
+    @staticmethod
+    def _restrict_file(path: Path) -> None:
+        try:
+            os.chmod(path, 0o600)
+            if stat.S_IMODE(path.stat().st_mode) & 0o077:
+                raise OSError("evidence file permissions are too broad")
+        except OSError as exc:
+            raise EvidenceError("evidence file must be owner-only") from exc
 
     @staticmethod
     def _existing_ids(target: Path) -> set[str]:

@@ -41,6 +41,7 @@ __pycache__/
 *.py[cod]
 node_modules/
 .next/
+.vercel/
 *.tsbuildinfo
 supabase/.temp/
 supabase/.branches/

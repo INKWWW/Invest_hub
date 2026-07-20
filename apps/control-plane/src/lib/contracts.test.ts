@@ -59,4 +59,79 @@ describe("v0 contracts", () => {
       })
     ).toThrow(/invalid task-result contract/);
   });
+
+  it("accepts a bounded claim with an immutable rule snapshot", () => {
+    const claim = parseContract<{
+      rule_snapshot: { version: number; target_author_ids: string[] };
+      collection_scope: { mode: string; max_pages: number };
+    }>("task-claim", {
+      contract_version: "v0",
+      task_id: "task-001",
+      attempt: 1,
+      task_type: "discord_sync",
+      source_id: "discord-source-001",
+      parameter_version: "v1-test-1",
+      lease_expires_at: "2026-07-19T12:00:00Z",
+      safe_checkpoint: null,
+      rule_snapshot: { version: 3, target_author_ids: ["author-1", "author-2"] },
+      collection_scope: { mode: "history", max_pages: 2 },
+    });
+
+    expect(claim.rule_snapshot.target_author_ids).toEqual(["author-1", "author-2"]);
+    expect(claim.collection_scope).toEqual({ mode: "history", max_pages: 2 });
+  });
+
+  it("rejects an invalid V1 task scope or duplicated target author", () => {
+    const base = {
+      contract_version: "v0",
+      task_id: "task-001",
+      attempt: 1,
+      task_type: "discord_sync",
+      source_id: "discord-source-001",
+      parameter_version: "v1-test-1",
+      lease_expires_at: "2026-07-19T12:00:00Z",
+      safe_checkpoint: null,
+      rule_snapshot: { version: 3, target_author_ids: ["author-1"] },
+      collection_scope: { mode: "incremental", max_pages: 5 },
+    };
+
+    expect(() => parseContract("task-claim", { ...base, collection_scope: { mode: "history", max_pages: 0 } })).toThrow(/invalid task-claim contract/);
+    expect(() => parseContract("task-claim", { ...base, collection_scope: { mode: "unbounded", max_pages: 5 } })).toThrow(/invalid task-claim contract/);
+    expect(() => parseContract("task-claim", { ...base, rule_snapshot: { version: 3, target_author_ids: ["author-1", "author-1"] } })).toThrow(/invalid task-claim contract/);
+  });
+
+  it("rejects a batch summary without message or structured-run evidence", () => {
+    expect(() => parseContract("worker-persistence", {
+      contract_version: "v0",
+      task_id: "task-001",
+      attempt: 1,
+      source_id: "discord-source-001",
+      raw_messages: [],
+      canonical_messages: [],
+      structured_runs: [],
+      batch_summaries: [{
+        natural_date: "2026-07-19",
+        input_message_ids: [],
+        structured_run_keys: [],
+        output: { topics: [] },
+        coverage: { unparsed_media: false },
+      }],
+    })).toThrow(/invalid worker-persistence contract/);
+
+    expect(() => parseContract("worker-persistence", {
+      contract_version: "v0",
+      task_id: "task-001",
+      attempt: 1,
+      source_id: "discord-source-001",
+      raw_messages: [],
+      canonical_messages: [],
+      structured_runs: [],
+      batch_summaries: [{
+        natural_date: "2026-07-19",
+        input_message_ids: ["message-001"],
+        structured_run_keys: ["chunk-001"],
+        output: { topics: [] },
+      }],
+    })).toThrow(/invalid worker-persistence contract/);
+  });
 });
