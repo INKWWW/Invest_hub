@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** Revision-01（2026-07-20）待用户审阅。Task 1–7 已完成；专用部署和真实双来源 `history/max_pages=1` 已通过，但本修订将剩余 MVP 退出门槛拆成阅读体验、部署、真实增量、失败隔离、普通用户与质量验收任务。未经本修订批准，不开始新增页面代码或新的真实 Discord 验收。
+**Plan status:** Revision-01（2026-07-20）已获用户批准。Task 1–10 已完成；专用部署和真实双来源 `history/max_pages=1` 已通过，但本修订将剩余 MVP 退出门槛拆成部署、真实增量、失败隔离、普通用户与质量验收任务。真实 Discord 验收仍须在相应任务开始前由用户明确授权。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -604,7 +604,7 @@ export function evidenceCount(value: unknown): number;
   git commit -m "feat(v1): present discord research summaries safely"
   ```
 
-### Task 10: 完成阅读页、认证页与管理员操作框架
+### Task 10: 完成阅读页、认证页与管理员操作框架（完成：2026-07-20）
 
 **Files:**
 
@@ -634,7 +634,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 - 桌面宽度 `>= 768px` 使用来源/日期侧栏；窄屏 `< 768px` 将两个选择器移到内容前方的单列工具栏，不能横向溢出。
 - 管理员页只呈现来源、任务、Worker 与安全状态；不增加普通用户可见的运行诊断，不显示 URL、Profile、Cookie、Prompt、raw 路径或完整响应。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
   在 `admin-shell.test.tsx` 使用已安装的 `react-dom/server`：
 
@@ -651,13 +651,13 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 
   在 `discord-reader.test.tsx` 用合法公开 `ReaderDay` fixture 调用 `renderToStaticMarkup(<DiscordReader days={days} />)`，断言初始 HTML 包含 topic 标题、`Batch summaries`、`Evidence-backed messages`、`Channel` 与 `Date`；断言不含 `local_raw_ref` 或 `source_message_ids`。
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `cd apps/control-plane && npm test -- --run src/components/admin/admin-shell.test.tsx src/components/reader/discord-reader.test.tsx`
 
   Expected: FAIL，因为 `AdminShell` 和新的 Reader markup 尚未存在。
 
-- [ ] **Step 3: 实现页面框架与响应式样式**
+- [x] **Step 3: 实现页面框架与响应式样式**
 
   1. `AdminShell` 固定链接 `Overview`、`Sources`、`Tasks`、`Workers`，当前 section 使用 `aria-current="page"`；各 admin page 传入当前 section。它不接收、查询或显示私有来源配置。
   2. `/discord` 增加 `reader-page-header`；topic 卡片只含标题、归因范围、ticker、摘要、不确定性与 “`N` evidence messages” 计数。用户点击 evidence `<details>` 后才显示 safe Canonical 消息正文。
@@ -665,7 +665,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
   4. `globals.css` 定义 `--ink`、`--surface`、`--muted`、`--line`、`--success`、`--warning`、`--danger` token；桌面 `reader-shell` 使用 `240px minmax(0, 1fr)`，手机为单列；键盘 focus 必须可见。
   5. 登录/邀请码页使用同一认证卡片、`label`、`role="alert"` 错误与明确动作文案；不改变认证 API 或邀请协议。
 
-- [ ] **Step 4: 验证构建与公开 fixture 视觉检查**
+- [x] **Step 4: 验证构建与公开 fixture 视觉检查**
 
   Run: `cd apps/control-plane && npm run lint && npm test && npm run build`
 
@@ -673,7 +673,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 
   在本地使用公开 fixture 数据检查 `1280px` 与 `375px`：来源/日期均可操作，topic 不横向溢出，batch/evidence 可展开，管理员导航不含敏感字段。截图只能使用公开 fixture，不能截取真实 Discord 内容。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add apps/control-plane/src/components/admin/AdminShell.tsx apps/control-plane/src/components/admin/admin-shell.test.tsx apps/control-plane/src/app/admin apps/control-plane/src/app/discord/page.tsx apps/control-plane/src/components/reader apps/control-plane/src/app/(auth) apps/control-plane/src/app/globals.css
