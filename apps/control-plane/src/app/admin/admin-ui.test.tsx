@@ -8,6 +8,7 @@ import {
   statusLabel,
 } from "../../lib/admin/view-model";
 import { parseWorkerInviteResponse } from "../../components/admin/worker-invite";
+import { parseUserInviteResponse } from "../../components/admin/user-invite";
 
 describe("admin debug view models", () => {
   it("distinguishes no-new-data, retryable, failed, unresolved success and success", () => {
@@ -75,5 +76,16 @@ describe("admin debug view models", () => {
       expires_at: "2099-01-01T00:00:00.000Z",
     })).toEqual({ code: "one-time-worker-code", expiresAt: "2099-01-01T00:00:00.000Z" });
     expect(parseWorkerInviteResponse({ purpose: "worker", device_secret: "must-not-display" })).toBeNull();
+  });
+
+  it("accepts only a one-time user invite response", () => {
+    expect(parseUserInviteResponse({
+      invite_id: "invite-2",
+      code: "one-time-user-code",
+      purpose: "user",
+      expires_at: "2099-01-01T00:00:00.000Z",
+    })).toEqual({ code: "one-time-user-code", expiresAt: "2099-01-01T00:00:00.000Z" });
+    expect(parseUserInviteResponse({ purpose: "worker", code: "worker-code", expires_at: "2099-01-01T00:00:00.000Z" })).toBeNull();
+    expect(parseUserInviteResponse({ purpose: "user", device_secret: "must-not-display" })).toBeNull();
   });
 });
