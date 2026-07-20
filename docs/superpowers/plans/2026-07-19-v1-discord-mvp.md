@@ -731,7 +731,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 - 只使用现有两个授权逻辑来源和 owner-only Worker 配置；不新增来源 URL、不读取未授权频道、不使用用户 Token 或直接 Discord REST API。
 - 每个真实任务为 `incremental`、`max_pages <= 5`；执行前后只记录每个来源的任务状态、attempt、Canonical 总数、重复数、checkpoint 是否前移和摘要/证据计数，不输出 ID、正文、URL 或 Prompt。
 
-- [ ] **Step 1: 创建第一轮双来源增量任务**
+- [x] **Step 1: 创建第一轮双来源增量任务**
 
   在 `/admin/tasks` 对两个已启用来源各创建一个 `incremental` 任务，确认 UI 显示 Incremental 而不是 History；不要在此阶段改变作者规则或 Worker binding。
 
@@ -747,17 +747,17 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 
   Expected: 两次运行均为 `succeeded`，或任一来源留下明确 retryable failure；不得把 missing/stale 解释为成功。
 
-- [ ] **Step 2: 执行第二轮增量并核验无重复**
+- [x] **Step 2: 执行第二轮增量并核验无重复**
 
   对同一两个来源再次创建 `incremental` 任务，并以同一受保护 Worker 运行两次。仅用 service-role 聚合查询或管理员任务页比较：第二轮新增 Canonical 数、duplicate count、每来源 checkpoint 是否只在 `succeeded` 后改变、daily summary version 与 structured run 数。
 
   Expected: 第二轮不产生重复 Canonical 行；若无新消息，结果可为安全零新增，但不得形成伪造 checkpoint 或失败成功状态。若有新消息，只允许新增唯一 external message ID。
 
-- [ ] **Step 3: 保存脱敏验收结论**
+- [x] **Step 3: 保存脱敏验收结论**
 
   在受保护本地 evidence 保存每轮计数快照；工程日志只记录 `source_coverage=2`、任务终态计数、重复是否为零、checkpoint 是否满足规则和摘要版本数量。不要把配置值、来源标识、正文或完整模型响应写入仓库。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add docs/engineering-journal/2026-07-19-v1.md docs/spikes/2026-07-19-v1-decision-report.md

@@ -15,7 +15,7 @@ V1 的本质不是“页面能构建”，而是受邀用户能够在隔离环�
 | 2 | 桌面与手机阅读流程 | conditional | 响应式频道/日期选择和单列样式已构建；人工公开 fixture 在 `1280px` 与 `375px` 通过来源/日期切换、无横向溢出与 batch/evidence 展开检查；尚未以普通用户在正式环境阅读真实内容。 |
 | 3 | 普通用户不能读取管理/敏感数据 | pass | API 授权测试、RLS pgTAP 和 reader allowlist 通过；响应不含 local raw ref、Worker 或密钥字段。 |
 | 4 | 管理两个来源与规则覆盖 | pass | 规则快照、来源绑定、管理 API/UI 和公开双来源 fixture 均通过。 |
-| 5 | 两来源真实授权增量与独立 checkpoint | conditional | 两个真实授权来源各完成一次 `history`、`max_pages=1` 任务，且均持久化成功；仍缺真实增量、第二次无重复和独立 checkpoint 推进证据。 |
+| 5 | 两来源真实授权增量与独立 checkpoint | pass | 两个真实授权来源完成两轮 `incremental`、`max_pages=1` 验收；共 4 个任务均在首次 attempt 成功。第一轮新增 30 条 Canonical，第二轮新增 19 条，Worker 重复计数均为 0，数据库重复 Canonical 行为 0；每轮两个 checkpoint 均只在成功后前移。 |
 | 6 | 有界 history 与离线恢复 | pass | 两个真实 `max_pages=1` history 任务通过；history scope 为 1–25 页，定时 E2E 验证四窗口有界补采与幂等。 |
 | 7 | 单来源失败不前移 checkpoint、不阻断其他来源 | conditional | 真实运行保留了一个 `retryable_failed` 后重试成功，另一个来源已独立成功；但该失败记录为 `unknown`，尚未完成一项预设、可操作分类的真实隔离验收。 |
 | 8 | 批次与日累计摘要可追溯且版本化 | pass | 迁移、摘要 receipt、pgTAP 和 Worker 摘要测试通过。 |
@@ -31,10 +31,10 @@ V1 的本质不是“页面能构建”，而是受邀用户能够在隔离环�
 - 正式阅读页 `/discord` 面向已认证用户，管理员仍进入 `/admin`；阅读 UI 与管理诊断隔离。
 - 阅读体验已发布到既有生产项目；发布前全量数据库、控制面、Worker 与 V1 E2E 回归通过，生产探针仅确认首页 `200` 与未认证 reader API `401`，未读取真实 reader 内容。
 - `scripts/v1/run-e2e.sh` 明确分离 deterministic 与 real-discord。real 模式同时要求授权标志、多来源私有配置、Prompt、OpenCLI contract、受保护 evidence 目录和一次性 Worker 凭据。
+- 真实双来源增量验收已完成两轮：两轮均为每来源 `incremental/max_pages=1`；四个任务全在首次 attempt 成功，第一轮新增 30 条、第二轮新增 19 条 Canonical，数据库未发现重复 Canonical 行。来源标识、URL、正文、Prompt 与本机 evidence 均未进入仓库。
 
 ## 阻断项与下一门槛
 
-1. 让两个真实来源各完成一次增量、再完成一次无重复的增量，并核验各自 checkpoint 只在成功后推进。
-2. 在一个来源上进行受控的、可操作分类的失败，同时确认另一个来源不受阻断；真实 evidence 继续只保存在仓库外受保护目录。
-3. 以普通用户完成正式阅读流程，并完成基于真实内容的桌面与手机端视觉验收。
-4. 对至少一次真实输出进行人工质量抽检，并独立审阅部署日志。第 1–11 项全部通过前，项目状态必须保持“条件验收”，不得称为正式可用或生产 SLA。
+1. 在一个来源上进行受控的、可操作分类的失败，同时确认另一个来源不受阻断；真实 evidence 继续只保存在仓库外受保护目录。
+2. 以普通用户完成正式阅读流程，并完成基于真实内容的桌面与手机端视觉验收。
+3. 对至少一次真实输出进行人工质量抽检，并独立审阅部署日志。第 1–11 项全部通过前，项目状态必须保持“条件验收”，不得称为正式可用或生产 SLA。
