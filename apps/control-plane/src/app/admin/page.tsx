@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AdminShell } from "../../components/admin/AdminShell";
 import { StatusBadge } from "../../components/admin/StatusBadge";
 import { WorkerCard } from "../../components/admin/WorkerCard";
 import { buildTaskViewModel } from "../../lib/admin/view-model";
@@ -9,11 +10,11 @@ import { listWorkers } from "../../lib/db/repositories/workers";
 
 export default async function AdminOverviewPage() {
   const [workers, sources, tasks] = await Promise.all([listWorkers(), listSources(), listRecentTasks(10)]);
-  return (
+  return <AdminShell active="overview">
     <>
       <section>
         <h1>Admin overview</h1>
-        <p>Operational state and recovery evidence for the V0 control plane.</p>
+        <p>Operational state and recovery evidence for the V1 control plane.</p>
         <p><Link href="/admin/tasks">Inspect all tasks</Link></p>
       </section>
       <section>
@@ -38,5 +39,5 @@ export default async function AdminOverviewPage() {
         ) : <p>No tasks created.</p>}
       </section>
     </>
-  );
+  </AdminShell>;
 }

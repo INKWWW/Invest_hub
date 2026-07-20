@@ -6,5 +6,13 @@ import { readDiscordDay } from "../../lib/db/repositories/reader";
 
 export default async function DiscordPage() {
   if (!await getCurrentUser()) redirect("/login?next=%2Fdiscord");
-  return <main><h1>Discord research</h1><p>Generated summaries and their permitted evidence. Local raw files and Worker diagnostics are never shown here.</p><DiscordReader days={await readDiscordDay()} /></main>;
+  return <main className="reader-page">
+    <header className="reader-page-header">
+      <a className="product-mark" href="/">Invest Hub</a>
+      <p className="reader-kicker">Discord research</p>
+      <h1>Daily research, grounded in evidence.</h1>
+      <p>Generated summaries and their permitted evidence. Local raw files and Worker diagnostics are never shown here.</p>
+    </header>
+    <DiscordReader days={await readDiscordDay()} />
+  </main>;
 }

@@ -21,24 +21,27 @@ export default function InvitePage() {
   }
 
   return (
-    <main>
-      <h1>Redeem invite</h1>
-      <form onSubmit={submit}>
-        <label>
-          Invite code
-          <input name="code" required />
-        </label>
-        <label>
-          Email
-          <input name="email" type="email" autoComplete="email" required />
-        </label>
-        <label>
-          Password
-          <input name="password" type="password" autoComplete="new-password" required />
-        </label>
-        <button type="submit">Create account</button>
-      </form>
-      {error ? <p role="alert">{error}</p> : null}
+    <main className="auth-page">
+      <section className="auth-card">
+        <p className="reader-kicker">Invest Hub</p>
+        <h1>Create your reading account</h1>
+        <form onSubmit={submit}>
+          <label>
+            Invite code
+            <input name="code" required />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" autoComplete="email" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autoComplete="new-password" required />
+          </label>
+          <button type="submit">Create account</button>
+        </form>
+        {error ? <p role="alert">{error}</p> : null}
+      </section>
     </main>
   );
 }

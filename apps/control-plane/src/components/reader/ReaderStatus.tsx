@@ -1,7 +1,7 @@
 import type { ReaderStatus as Status } from "../../lib/db/repositories/reader";
 
 const labels: Record<Status, string> = {
-  processing: "Processing: this source is still collecting or structuring new evidence.",
+  processing: "Processing: newer evidence is still being collected or structured; the last safe summary remains available.",
   partial_failure: "Partial failure: the available summary may not cover every expected item.",
   retryable_failed: "Retryable failure: the last safe summary remains available while this source can be retried.",
   failed: "Failed: the last safe summary remains available; contact an administrator for recovery.",

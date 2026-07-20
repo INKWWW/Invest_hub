@@ -21,20 +21,23 @@ export default function LoginPage() {
   }
 
   return (
-    <main>
-      <h1>Sign in</h1>
-      <form onSubmit={submit}>
-        <label>
-          Email
-          <input name="email" type="email" autoComplete="email" required />
-        </label>
-        <label>
-          Password
-          <input name="password" type="password" autoComplete="current-password" required />
-        </label>
-        <button type="submit">Sign in</button>
-      </form>
-      {error ? <p role="alert">{error}</p> : null}
+    <main className="auth-page">
+      <section className="auth-card">
+        <p className="reader-kicker">Invest Hub</p>
+        <h1>Sign in to your research workspace</h1>
+        <form onSubmit={submit}>
+          <label>
+            Email
+            <input name="email" type="email" autoComplete="email" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autoComplete="current-password" required />
+          </label>
+          <button type="submit">Sign in</button>
+        </form>
+        {error ? <p role="alert">{error}</p> : null}
+      </section>
     </main>
   );
 }

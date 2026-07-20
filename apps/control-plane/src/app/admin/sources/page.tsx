@@ -1,4 +1,5 @@
 import { listSources } from "../../../lib/db/repositories/sources";
+import { AdminShell } from "../../../components/admin/AdminShell";
 import { SourceCreateForm } from "../../../components/admin/SourceCreateForm";
 import { SourceRuleForm } from "../../../components/admin/SourceRuleForm";
 import { SourceAdministrationForm } from "../../../components/admin/SourceAdministrationForm";
@@ -6,7 +7,7 @@ import { listWorkers } from "../../../lib/db/repositories/workers";
 
 export default async function AdminSourcesPage() {
   const [sources, workers] = await Promise.all([listSources(), listWorkers()]);
-  return (
+  return <AdminShell active="sources">
     <section>
       <h1>Sources</h1>
       <p>Only logical source identifiers are shown. Channel URLs and Profile references remain on the Worker.</p>
@@ -29,5 +30,5 @@ export default async function AdminSourcesPage() {
         </table>
       ) : <p>No sources configured.</p>}
     </section>
-  );
+  </AdminShell>;
 }
