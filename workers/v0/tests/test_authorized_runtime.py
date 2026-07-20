@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -59,6 +60,32 @@ class FakeProvider:
 
 
 class AuthorizedRuntimeTests(unittest.TestCase):
+    def test_local_evidence_store_restricts_directories_and_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "evidence"
+            evidence = LocalEvidenceStore(root)
+            evidence.persist_raw(
+                RawPage(
+                    page_id="page-1",
+                    source_id="discord-source",
+                    cursor_before=None,
+                    cursor_after=None,
+                    messages=(),
+                    raw_payload_ref="local://discord/page-1",
+                )
+            )
+            evidence.persist_canonical(())
+            evidence.persist_validation({"status": "ok"})
+
+            for directory_path in (root, *(root / name for name in ("raw", "canonical", "validation", "metrics"))):
+                self.assertEqual(stat.S_IMODE(directory_path.stat().st_mode), 0o700)
+            for file_path in (
+                root / "raw" / "page-1.json",
+                root / "canonical" / "messages.jsonl",
+                root / "validation" / "reports.jsonl",
+            ):
+                self.assertEqual(stat.S_IMODE(file_path.stat().st_mode), 0o600)
+
     def test_execution_bundle_keeps_private_paths_local_and_is_ready_for_remote_persistence(self) -> None:
         config = LocalWorkerConfig.from_mapping(
             {
