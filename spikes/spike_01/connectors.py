@@ -244,8 +244,11 @@ class BrowserBridgeOpenCLIInvoker:
         channel_url: str,
         profile_path: Path,
         cursor: str | None,
+        cursor_mode: str = "history",
     ) -> Mapping[str, Any]:
         del profile_path
+        if cursor_mode not in {"history", "incremental"}:
+            raise ConnectorError("Browser Bridge cursor mode is invalid")
         started_ns = time.monotonic_ns()
         if self._page_timeout_seconds is not None:
             self._deadline_ns = started_ns + self._page_timeout_seconds * 1_000_000_000
@@ -284,6 +287,7 @@ class BrowserBridgeOpenCLIInvoker:
                 session,
                 channel_id,
                 cursor=cursor,
+                cursor_mode=cursor_mode,
                 baseline_keys=baseline_keys,
                 route=route,
             )
@@ -296,17 +300,21 @@ class BrowserBridgeOpenCLIInvoker:
             phase_ms["detail_ms"] = self._elapsed_ms(phase_started_ns)
             messages = self._message_body(detail)
             if cursor is not None:
-                older_messages = [
+                bounded_messages = [
                     message
                     for message in messages
-                    if self._is_older(str(message.get("id") or ""), cursor)
+                    if (
+                        self._is_newer(str(message.get("id") or ""), cursor)
+                        if cursor_mode == "incremental"
+                        else self._is_older(str(message.get("id") or ""), cursor)
+                    )
                 ]
-                if messages and not older_messages:
+                if messages and not bounded_messages:
                     raise ConnectorError(
                         "Discord message response did not advance cursor",
                         code="cursor_not_advanced",
                     )
-                messages = older_messages
+                messages = bounded_messages
 
             phase_started_ns = time.monotonic_ns()
             messages = [
@@ -317,7 +325,11 @@ class BrowserBridgeOpenCLIInvoker:
 
             ids = [str(message.get("id") or "") for message in messages]
             ids = [message_id for message_id in ids if message_id]
-            cursor_after = min(ids, key=self._numeric_or_text) if ids else None
+            cursor_after = (
+                (max(ids, key=self._numeric_or_text) if cursor_mode == "incremental" else min(ids, key=self._numeric_or_text))
+                if ids
+                else None
+            )
             # A genuinely empty cursor-scoped response is the retained-history
             # boundary. A nonempty response with no older messages is rejected
             # above: it is not pagination progress.
@@ -381,6 +393,7 @@ class BrowserBridgeOpenCLIInvoker:
         channel_id: str,
         *,
         cursor: str | None,
+        cursor_mode: str,
         baseline_keys: frozenset[tuple[str, str]],
         route: str,
     ) -> tuple[str, int, str]:
@@ -395,6 +408,7 @@ class BrowserBridgeOpenCLIInvoker:
                     network,
                     channel_id,
                     cursor=cursor,
+                    cursor_mode=cursor_mode,
                     baseline_keys=baseline_keys,
                 )
                 return key, attempt + 1, "matched_new"
@@ -521,6 +535,7 @@ class BrowserBridgeOpenCLIInvoker:
         channel_id: str,
         *,
         cursor: str | None,
+        cursor_mode: str,
         baseline_keys: frozenset[tuple[str, str]],
     ) -> str:
         entries = network.get("entries")
@@ -548,11 +563,10 @@ class BrowserBridgeOpenCLIInvoker:
                 continue
             if cursor is not None:
                 query = parse_qs(urlparse(url).query)
-                if cursor in query.get("after", []):
-                    saw_wrong_cursor = True
-                    continue
-                cursor_values = set(
-                    query.get("around", []) + query.get("before", [])
+                cursor_values = (
+                    set(query.get("after", []))
+                    if cursor_mode == "incremental"
+                    else set(query.get("around", []) + query.get("before", []))
                 )
                 if cursor not in cursor_values:
                     saw_wrong_cursor = True
@@ -658,6 +672,12 @@ class BrowserBridgeOpenCLIInvoker:
         message_key = cls._numeric_or_text(message_id)
         cursor_key = cls._numeric_or_text(cursor)
         return message_key < cursor_key
+
+    @classmethod
+    def _is_newer(cls, message_id: str, cursor: str) -> bool:
+        message_key = cls._numeric_or_text(message_id)
+        cursor_key = cls._numeric_or_text(cursor)
+        return message_key > cursor_key
 
 
 def build_opencli_invoker(

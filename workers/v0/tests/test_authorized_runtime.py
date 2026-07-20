@@ -14,9 +14,18 @@ from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscor
 
 
 class FakeConnector:
-    def collect(self, _source: object, _checkpoint: str | None, *, max_pages: int = 1):
+    def collect(
+        self,
+        _source: object,
+        _checkpoint: str | None,
+        *,
+        max_pages: int = 1,
+        collection_mode: str = "history",
+    ):
         if max_pages < 1:
             raise AssertionError("invalid page limit")
+        if collection_mode not in {"history", "incremental"}:
+            raise AssertionError("invalid collection mode")
         yield RawPage(
             page_id="page-1",
             source_id="discord-source",
@@ -161,6 +170,56 @@ class AuthorizedRuntimeTests(unittest.TestCase):
                 })
 
         self.assertEqual(caught.exception.failure_class, "preflight")
+
+    def test_empty_incremental_page_preserves_the_safe_checkpoint(self) -> None:
+        test_case = self
+
+        class EmptyConnector:
+            def collect(self, source: LocalWorkerConfig, checkpoint: str | None, *, max_pages: int, collection_mode: str):
+                test_case.assertEqual(source.source_id, "discord-source")
+                test_case.assertEqual(checkpoint, "checkpoint-1")
+                test_case.assertEqual(max_pages, 1)
+                test_case.assertEqual(collection_mode, "incremental")
+                yield RawPage(
+                    page_id="page-empty",
+                    source_id="discord-source",
+                    cursor_before="checkpoint-1",
+                    cursor_after=None,
+                    messages=(),
+                    raw_payload_ref="local://discord/page-empty",
+                )
+
+        config = LocalWorkerConfig.from_mapping(
+            {
+                "control_plane_url": "https://control.example.invalid",
+                "source_id": "discord-source",
+                "channel_url": "https://discord.com/channels/1/2",
+                "profile_ref": "/private/profile",
+                "opencli_contract_version": "v0",
+                "parameter_version": "v0-test-1",
+            }
+        )
+        claim = {
+            "task_id": "task-1",
+            "attempt": 1,
+            "source_id": "discord-source",
+            "parameter_version": "v0-test-1",
+            "safe_checkpoint": "checkpoint-1",
+            "rule_snapshot": {"version": 2, "target_author_ids": []},
+            "collection_scope": {"mode": "incremental", "max_pages": 1},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = AuthorizedDiscordRuntime(
+                config=config,
+                connector=EmptyConnector(),
+                evidence=LocalEvidenceStore(Path(directory) / "evidence"),
+                canonicalizer=Canonicalizer(),
+                provider=FakeProvider(),
+                prompt_template="private prompt template",
+            )
+            bundle = runtime.execute(claim)
+
+        self.assertEqual(bundle["result"]["safe_checkpoint"], "checkpoint-1")
 
     def test_runtime_set_routes_only_to_a_locally_authorized_source(self) -> None:
         class RecordingRuntime:

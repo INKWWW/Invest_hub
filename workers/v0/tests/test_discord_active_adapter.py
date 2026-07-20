@@ -15,8 +15,16 @@ class FakeInvoker:
         self.responses = list(responses)
         self.calls: list[dict[str, object]] = []
 
-    def fetch_page(self, *, channel_url: str, profile_ref: str, cursor: str | None, cache_buster: str | None = None) -> dict[str, object]:
-        self.calls.append({"channel_url": channel_url, "profile_ref": profile_ref, "cursor": cursor, "cache_buster": cache_buster})
+    def fetch_page(
+        self,
+        *,
+        channel_url: str,
+        profile_ref: str,
+        cursor: str | None,
+        cache_buster: str | None = None,
+        collection_mode: str = "history",
+    ) -> dict[str, object]:
+        self.calls.append({"channel_url": channel_url, "profile_ref": profile_ref, "cursor": cursor, "cache_buster": cache_buster, "collection_mode": collection_mode})
         if not self.responses:
             raise AssertionError("unexpected page request")
         return self.responses.pop(0)
@@ -87,6 +95,26 @@ class DiscordActiveAdapterTests(unittest.TestCase):
         self.assertEqual(len(pages), 1)
         self.assertEqual(pages[0].cursor_after, "cursor-1")
         self.assertEqual(len(invoker.calls), 1)
+
+    def test_incremental_scope_is_forwarded_to_the_browser_bridge(self) -> None:
+        invoker = FakeInvoker(
+            response(network=[{
+                "request_key": "request-1",
+                "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+                "messages": [{"id": "message-2", "content": "new"}],
+            }], cursor_after="cursor-2"),
+        )
+
+        pages = list(
+            DiscordActiveAdapter(invoker).collect(
+                source_config(),
+                checkpoint="cursor-1",
+                collection_mode="incremental",
+            )
+        )
+
+        self.assertEqual(len(pages), 1)
+        self.assertEqual(invoker.calls[0]["collection_mode"], "incremental")
 
     def test_limited_pagination_uses_at_most_the_claimed_page_budget_and_keeps_the_final_cursor(self) -> None:
         invoker = FakeInvoker(
