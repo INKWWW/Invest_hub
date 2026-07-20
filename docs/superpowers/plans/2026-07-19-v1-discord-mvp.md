@@ -525,11 +525,11 @@ export type SummaryPresentation = {
   mediaUnparsed: boolean;
 };
 
-export function presentSummary(output: unknown): SummaryPresentation;
+export function presentSummary(output: unknown, coverage: unknown): SummaryPresentation;
 export function evidenceCount(value: unknown): number;
 ```
 
-- `presentSummary` 只读取已经批准的 `topics`、`warnings`、`media_unparsed` 和 topic allowlist 字段；未知字段、raw reference、Prompt、Provider 诊断与异常 JSON 形状均不显示。
+- `presentSummary` 只读取已经批准的 `output.topics`、`output.warnings`、`coverage.unparsed_media` 和 topic allowlist 字段；未知字段、raw reference、Prompt、Provider 诊断与异常 JSON 形状均不显示。当前 batch/daily summary 的媒体状态属于 `coverage`，不得假设它存在于 `output`。
 - `evidenceCount` 只返回字符串数组长度；它不返回或拼接 message ID 内容。页面仍从 `ReaderDay.messages` 的安全 DTO 打开实际证据。
 
 - [ ] **Step 1: 写失败测试**
@@ -540,8 +540,8 @@ export function evidenceCount(value: unknown): number;
   it("projects only approved structured fields", () => {
     const result = presentSummary({
       topics: [{ title: "Earnings", summary: "Guidance changed.", source_message_ids: ["message-1", "message-2"], author_scope: "target", tickers: ["ABC"], hidden_note: "must not render" }],
-      warnings: ["Unparsed attachment"], media_unparsed: true, local_raw_ref: "local://must-not-render",
-    });
+      warnings: ["Unparsed attachment"], local_raw_ref: "local://must-not-render",
+    }, { unparsed_media: true });
     expect(result.topics[0]?.title).toBe("Earnings");
     expect(result.topics[0]?.sourceMessageIds).toEqual(["message-1", "message-2"]);
     expect(JSON.stringify(result)).not.toContain("local://");
@@ -550,7 +550,7 @@ export function evidenceCount(value: unknown): number;
   });
 
   it("fails closed for malformed output", () => {
-    expect(presentSummary({ topics: "not-an-array", warnings: [3] })).toEqual({ topics: [], warnings: [], mediaUnparsed: false });
+    expect(presentSummary({ topics: "not-an-array", warnings: [3] }, { unparsed_media: true })).toEqual({ topics: [], warnings: [], mediaUnparsed: false });
   });
   ```
 
@@ -574,21 +574,22 @@ export function evidenceCount(value: unknown): number;
 
   export function evidenceCount(value: unknown): number { return strings(value).length; }
 
-  export function presentSummary(output: unknown): SummaryPresentation {
+  export function presentSummary(output: unknown, coverage: unknown): SummaryPresentation {
     const root = record(output);
     if (!root || !Array.isArray(root.topics) || !Array.isArray(root.warnings)) return { topics: [], warnings: [], mediaUnparsed: false };
+    const coverageRecord = record(coverage);
     return {
       topics: root.topics.flatMap((value) => {
         const topic = record(value);
         if (!topic || typeof topic.title !== "string" || typeof topic.summary !== "string") return [];
         return [{ title: topic.title, summary: topic.summary, sourceMessageIds: strings(topic.source_message_ids), authorScope: topic.author_scope === "target" || topic.author_scope === "channel" ? topic.author_scope : null, tickers: strings(topic.tickers), operationTendency: typeof topic.operation_tendency === "string" ? topic.operation_tendency : null, uncertainty: typeof topic.uncertainty === "string" ? topic.uncertainty : null }];
       }),
-      warnings: strings(root.warnings), mediaUnparsed: root.media_unparsed === true,
+      warnings: strings(root.warnings), mediaUnparsed: coverageRecord?.unparsed_media === true,
     };
   }
   ```
 
-  修改 `DiscordReader`，以“日累计总结 → topic 卡片 → warnings/未解析媒体 → 批次 → 可展开 evidence → 历史版本”替换 `<pre>{JSON.stringify(...)}</pre>`。无可展示 topic 时显示 `No structured topics were generated for this batch.`，不输出原始 JSON 或 message ID。
+  修改 `DiscordReader`，以“日累计总结 → topic 卡片 → warnings/来自 coverage 的未解析媒体 → 批次 → 可展开 evidence → 历史版本”替换 `<pre>{JSON.stringify(...)}</pre>`。无可展示 topic 时显示 `No structured topics were generated for this batch.`，不输出原始 JSON 或 message ID。
 
 - [ ] **Step 4: 验证 Reader 内容边界**
 
