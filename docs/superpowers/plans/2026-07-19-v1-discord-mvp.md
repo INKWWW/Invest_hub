@@ -497,7 +497,7 @@
 
 本修订不改变 V1 Spec、数据库 schema、Worker 协议、RLS 角色或采集技术路线。它只把既有安全 Reader DTO 呈现为正式阅读界面，并用显式、有界、可复核的验收补齐 Spec 7.1–7.3。
 
-### Task 9: 把安全 Reader DTO 投影为可读的投研内容模型
+### Task 9: 把安全 Reader DTO 投影为可读的投研内容模型（完成：2026-07-20）
 
 **Files:**
 
@@ -532,7 +532,7 @@ export function evidenceCount(value: unknown): number;
 - `presentSummary` 只读取已经批准的 `output.topics`、`output.warnings`、`coverage.unparsed_media` 和 topic allowlist 字段；未知字段、raw reference、Prompt、Provider 诊断与异常 JSON 形状均不显示。当前 batch/daily summary 的媒体状态属于 `coverage`，不得假设它存在于 `output`。
 - `evidenceCount` 只返回字符串数组长度；它不返回或拼接 message ID 内容。页面仍从 `ReaderDay.messages` 的安全 DTO 打开实际证据。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
   在 `reader-presentation.test.ts` 添加公开 fixture；测试 safe projection 与 fail-closed 行为：
 
@@ -554,13 +554,13 @@ export function evidenceCount(value: unknown): number;
   });
   ```
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
   Run: `cd apps/control-plane && npm test -- --run src/components/reader/reader-presentation.test.ts`
 
   Expected: FAIL，因为 `reader-presentation.ts` 尚不存在。
 
-- [ ] **Step 3: 实现最小安全投影与阅读顺序**
+- [x] **Step 3: 实现最小安全投影与阅读顺序**
 
   在 `reader-presentation.ts` 使用运行时类型收窄，不得以 `as` 把未知 JSON 直接渲染：
 
@@ -591,13 +591,13 @@ export function evidenceCount(value: unknown): number;
 
   修改 `DiscordReader`，以“日累计总结 → topic 卡片 → warnings/来自 coverage 的未解析媒体 → 批次 → 可展开 evidence → 历史版本”替换 `<pre>{JSON.stringify(...)}</pre>`。无可展示 topic 时显示 `No structured topics were generated for this batch.`，不输出原始 JSON 或 message ID。
 
-- [ ] **Step 4: 验证 Reader 内容边界**
+- [x] **Step 4: 验证 Reader 内容边界**
 
   Run: `cd apps/control-plane && npm test -- --run src/components/reader/reader-presentation.test.ts src/components/reader/discord-reader.test.tsx src/app/api/api.integration.test.ts`
 
   Expected: PASS；安全 DTO、摘要呈现和普通用户 API allowlist 均继续通过。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add apps/control-plane/src/components/reader/reader-presentation.ts apps/control-plane/src/components/reader/reader-presentation.test.ts apps/control-plane/src/components/reader/DiscordReader.tsx apps/control-plane/src/components/reader/discord-reader.test.tsx
