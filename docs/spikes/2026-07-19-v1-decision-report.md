@@ -36,3 +36,5 @@ V1 的本质不是“页面能构建”，而是受邀用户能够在隔离环�
 ## MVP 运行边界与下一门槛
 
 第 1–11 项均已通过，因此本报告确认 **V1 Discord 正式可用 MVP**。该结论不构成生产 SLA，也不涵盖 X、媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或长期无人值守稳定性。任何后续范围均须先完成独立 Spec 与 implementation plan。
+
+本报告对应的实现已于 2026-07-21 合并至 `main` 并推送至 GitHub `origin/main`（发布核对 commit：`c493256`）。后续新对话应将本报告和 Project Status 作为 V1 已完成的事实记录；开始后续范围前，仍须经过新的 Spec 与 Plan 门禁。

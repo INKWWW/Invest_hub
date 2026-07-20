@@ -8,7 +8,11 @@ Last updated: 2026-07-21
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
-V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、摘要与 receipt 闭环、管理员控制、正式 `/discord` 阅读页、定时窗口幂等、离线补采和公开 fixture E2E。最终本地验证为 115 条 pgTAP、54 个控制面测试、62 个 Worker 测试和 3 个 V1 E2E 测试通过。专用 Supabase/Vercel 环境已完成真实双来源 history、两轮增量去重/checkpoint、预设 `unauthorized` 失败隔离与 A 正式恢复；同 hash 重采集的可变本地 evidence 引用冲突已由远程迁移修复。其后受邀普通用户在独立正常会话完成真实阅读、桌面/手机响应式验收；两来源真实质量抽检和 production 日志独立审阅通过。因此结论为 **V1 Discord 正式可用 MVP**。
+V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、摘要与 receipt 闭环、管理员控制、正式 `/discord` 阅读页、定时窗口幂等、离线补采和公开 fixture E2E。最终本地验证为 115 条 pgTAP、54 个控制面测试、62 个 Worker 测试和 3 个 V1 E2E 测试通过。专用 Supabase/Vercel 环境已完成真实双来源 history、两轮增量去重/checkpoint、预设 `unauthorized` 失败隔离与 A 正式恢复；同 hash 重采集的可变本地 evidence 引用冲突已由远程迁移修复。其后受邀普通用户在独立正常会话完成真实阅读、桌面/手机响应式验收；两来源真实质量抽检和 production 日志独立审阅通过。因此结论为 **V1 Discord 正式可用 MVP**。2026-07-21 已在合并后的 `main` 重跑同一套回归，并同步至 GitHub `origin/main`；核对时两端 HEAD 均为 `c493256`。
+
+## 后续对话交接
+
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 Plan 直接视为后续实现授权。
 
 ## Approval status
 
