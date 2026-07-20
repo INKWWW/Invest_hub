@@ -104,6 +104,8 @@ export interface Database {
           display_name: string;
           parameter_version: string;
           enabled: boolean;
+          authorized_worker_id: string | null;
+          author_rules_version: number;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -115,6 +117,8 @@ export interface Database {
           display_name: string;
           parameter_version: string;
           enabled?: boolean;
+          authorized_worker_id?: string | null;
+          author_rules_version?: number;
           created_by?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -134,6 +138,8 @@ export interface Database {
           lease_owner: string | null;
           lease_expires_at: string | null;
           last_checkpoint: string | null;
+          rule_snapshot: Json;
+          collection_scope: Json;
           created_at: string;
           updated_at: string;
         };
@@ -148,6 +154,8 @@ export interface Database {
           lease_owner?: string | null;
           lease_expires_at?: string | null;
           last_checkpoint?: string | null;
+          rule_snapshot?: Json;
+          collection_scope?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -202,6 +210,26 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["checkpoints"]["Insert"]>;
+        Relationships: [];
+      };
+      scheduled_sync_windows: {
+        Row: {
+          id: string;
+          source_id: string;
+          window_key: string;
+          worker_id: string;
+          task_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          window_key: string;
+          worker_id: string;
+          task_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scheduled_sync_windows"]["Insert"]>;
         Relationships: [];
       };
       raw_messages: {
@@ -322,6 +350,86 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["task_events"]["Insert"]>;
         Relationships: [];
       };
+      source_author_rules: {
+        Row: {
+          id: string;
+          author_id: string;
+          scope: "global" | "source";
+          source_id: string | null;
+          policy: "target" | "exclude";
+          enabled: boolean;
+          version: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          author_id: string;
+          scope: "global" | "source";
+          source_id?: string | null;
+          policy: "target" | "exclude";
+          enabled?: boolean;
+          version: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["source_author_rules"]["Insert"]>;
+        Relationships: [];
+      };
+      summary_batches: {
+        Row: {
+          id: string;
+          task_id: string;
+          source_id: string;
+          natural_date: string;
+          input_message_ids: Json;
+          structured_run_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          source_id: string;
+          natural_date: string;
+          input_message_ids: Json;
+          structured_run_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["summary_batches"]["Insert"]>;
+        Relationships: [];
+      };
+      daily_summaries: {
+        Row: {
+          id: string;
+          source_id: string;
+          natural_date: string;
+          version: number;
+          is_current: boolean;
+          batch_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          natural_date: string;
+          version: number;
+          is_current?: boolean;
+          batch_ids: Json;
+          output: Json;
+          coverage: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["daily_summaries"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Enums: Record<string, never>;
@@ -345,6 +453,24 @@ export interface Database {
       };
       persist_worker_execution: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
+        Returns: Json;
+      };
+      replace_source_author_rules: {
+        Args: {
+          p_source_id: string;
+          p_global_target_author_ids: string[];
+          p_source_target_author_ids: string[];
+          p_source_excluded_author_ids: string[];
+          p_actor_id: string;
+        };
+        Returns: Json;
+      };
+      create_discord_sync_task: {
+        Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_scope: Json };
+        Returns: Json;
+      };
+      enqueue_scheduled_discord_tasks: {
+        Args: { p_worker_id: string; p_window_key: string };
         Returns: Json;
       };
       record_task_failure: {

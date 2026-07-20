@@ -18,12 +18,27 @@ const workerRepositoryMocks = vi.hoisted(() => ({
 }));
 const taskMocks = vi.hoisted(() => ({
   acceptTaskResult: vi.fn(),
+  createDiscordSyncTask: vi.fn(),
   getTaskDetail: vi.fn(),
+  listRecentTasks: vi.fn(),
   persistWorkerExecution: vi.fn(),
   recordTaskFailure: vi.fn(),
+  scheduleDiscordSyncTasks: vi.fn(),
+  isScheduleWindowKey: (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/.test(value),
+}));
+const sourceMocks = vi.hoisted(() => ({
+  listSources: vi.fn(),
+  updateSourceAdministration: vi.fn(),
+  upsertDiscordSource: vi.fn(),
+}));
+const ruleMocks = vi.hoisted(() => ({
+  replaceSourceRules: vi.fn(),
 }));
 const loginMocks = vi.hoisted(() => ({
   loginWithPassword: vi.fn(),
+}));
+const readerMocks = vi.hoisted(() => ({
+  readDiscordDay: vi.fn(),
 }));
 
 vi.mock("../../lib/auth/current-user", () => authMocks);
@@ -32,6 +47,9 @@ vi.mock("../../lib/auth/worker", () => workerMocks);
 vi.mock("../../lib/auth/login", () => loginMocks);
 vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
+vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
+vi.mock("../../lib/db/repositories/rules", () => ruleMocks);
+vi.mock("../../lib/db/repositories/reader", () => readerMocks);
 
 import { POST as postAdminInvite } from "./admin/invites/route";
 import { POST as postLogin } from "./auth/login/route";
@@ -40,6 +58,11 @@ import { POST as postHeartbeat } from "./worker/heartbeat/route";
 import { POST as postPersist } from "./worker/tasks/[taskId]/persist/route";
 import { POST as postResult } from "./worker/tasks/[taskId]/result/route";
 import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
+import { PATCH as patchAdminSource } from "./admin/sources/route";
+import { POST as postAdminRule } from "./admin/rules/route";
+import { POST as postAdminTask } from "./admin/tasks/route";
+import { GET as getDiscordReader } from "./reader/discord/route";
+import { POST as postScheduleTick } from "./worker/schedule/tick/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${path}`, {
@@ -123,6 +146,89 @@ describe("v0 control-plane API authorization", () => {
     expect(taskMocks.getTaskDetail).not.toHaveBeenCalled();
   });
 
+  it("allows an authenticated ordinary user to read only the safe Discord reader DTO", async () => {
+    readerMocks.readDiscordDay.mockResolvedValue([{
+      source: { sourceKey: "source-1", displayName: "Fixture source" },
+      naturalDate: "2099-01-01",
+      status: "succeeded",
+      dailySummary: { id: "daily-1", version: 1, output: { topics: [] }, coverage: {}, history: [] },
+      batches: [],
+      messages: [{ externalMessageId: "message-1", occurredAt: "2099-01-01T00:00:00Z", authorDisplay: "Author", content: "fixture", hasUnparsedMedia: false, unresolved: false, evidenceExpired: false }],
+    }]);
+    const response = await getDiscordReader(new Request("http://localhost/api/reader/discord?source=source-1&date=2099-01-01"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.days[0].messages[0].content).toBe("fixture");
+    expect(JSON.stringify(body)).not.toContain("local_raw_ref");
+    expect(JSON.stringify(body)).not.toContain("device_secret_hash");
+  });
+
+  it("blocks ordinary users from changing rules, source bindings, and history scopes", async () => {
+    const rule = await postAdminRule(jsonRequest("/api/admin/rules", {
+      source_id: "source-1",
+      global_target_author_ids: [],
+      source_target_author_ids: [],
+      source_excluded_author_ids: [],
+    }));
+    const source = await patchAdminSource(jsonRequest("/api/admin/sources", {
+      source_id: "source-1",
+      enabled: true,
+      authorized_worker_id: "worker-1",
+    }));
+    const task = await postAdminTask(jsonRequest("/api/admin/tasks", {
+      source_id: "source-1",
+      parameter_version: "v1-source-1",
+      scope: { mode: "history", max_pages: 9 },
+    }));
+
+    expect(rule.status).toBe(403);
+    expect(source.status).toBe(403);
+    expect(task.status).toBe(403);
+    expect(ruleMocks.replaceSourceRules).not.toHaveBeenCalled();
+    expect(sourceMocks.updateSourceAdministration).not.toHaveBeenCalled();
+    expect(taskMocks.createDiscordSyncTask).not.toHaveBeenCalled();
+  });
+
+  it("validates finite task scopes and creates regular tasks with the five-page default", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    taskMocks.createDiscordSyncTask.mockResolvedValue({ id: "task-1", collection_scope: { mode: "incremental", max_pages: 5 } });
+
+    const invalid = await postAdminTask(jsonRequest("/api/admin/tasks", {
+      source_id: "source-1",
+      parameter_version: "v1-source-1",
+      scope: { mode: "history", max_pages: 0 },
+    }));
+    expect(invalid.status).toBe(422);
+
+    const created = await postAdminTask(jsonRequest("/api/admin/tasks", {
+      source_id: "source-1",
+      parameter_version: "v1-source-1",
+    }));
+    expect(created.status).toBe(201);
+    expect(taskMocks.createDiscordSyncTask).toHaveBeenCalledWith({
+      sourceId: "source-1",
+      parameterVersion: "v1-source-1",
+      requestedBy: "admin-1",
+      scope: { mode: "incremental", maxPages: 5 },
+    });
+  });
+
+  it("rejects source administration payloads that try to include collection secrets or URLs", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+
+    const response = await patchAdminSource(jsonRequest("/api/admin/sources", {
+      source_id: "source-1",
+      enabled: true,
+      authorized_worker_id: "worker-1",
+      channel_url: "https://discord.example.invalid/channels/private",
+    }));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_source_administration" });
+    expect(sourceMocks.updateSourceAdministration).not.toHaveBeenCalled();
+  });
+
   it("returns a one-time invite code only to an admin", async () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
     inviteMocks.createOneTimeInvite.mockResolvedValue({
@@ -182,6 +288,43 @@ describe("v0 control-plane API authorization", () => {
     expect(await response.json()).toMatchObject({ worker_id: "worker-1", heartbeat_interval_seconds: 60 });
   });
 
+  it("creates only the bound Worker's scheduled source tasks and returns duplicate ticks idempotently", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.scheduleDiscordSyncTasks.mockResolvedValue({
+      window_key: "2099-01-01T08:00+08:00",
+      tasks: [{ id: "scheduled-task-1", source_id: "source-1", idempotent: false }],
+    });
+
+    const first = await postScheduleTick(
+      jsonRequest("/api/worker/schedule/tick", { window_key: "2099-01-01T08:00+08:00" }, { authorization: "Bearer device-secret" }),
+    );
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ tasks: [{ id: "scheduled-task-1", source_id: "source-1" }] });
+    expect(taskMocks.scheduleDiscordSyncTasks).toHaveBeenCalledWith("worker-1", "2099-01-01T08:00+08:00");
+
+    taskMocks.scheduleDiscordSyncTasks.mockResolvedValueOnce({
+      window_key: "2099-01-01T08:00+08:00",
+      tasks: [{ id: "scheduled-task-1", source_id: "source-1", idempotent: true }],
+    });
+    const duplicate = await postScheduleTick(
+      jsonRequest("/api/worker/schedule/tick", { window_key: "2099-01-01T08:00+08:00" }, { authorization: "Bearer device-secret" }),
+    );
+    expect(duplicate.status).toBe(200);
+    expect((await duplicate.json()).tasks[0]).toMatchObject({ id: "scheduled-task-1", idempotent: true });
+  });
+
+  it("rejects unauthenticated Workers and invalid schedule window payloads", async () => {
+    const unauthenticated = await postScheduleTick(jsonRequest("/api/worker/schedule/tick", { window_key: "2099-01-01T08:00+08:00" }));
+    expect(unauthenticated.status).toBe(401);
+
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    const invalid = await postScheduleTick(
+      jsonRequest("/api/worker/schedule/tick", { window_key: "not-a-window" }, { authorization: "Bearer device-secret" }),
+    );
+    expect(invalid.status).toBe(422);
+    expect(taskMocks.scheduleDiscordSyncTasks).not.toHaveBeenCalled();
+  });
+
   it("maps an attempt/lease mismatch to 409", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     taskMocks.acceptTaskResult.mockRejectedValue({ code: "40001", message: "lease_mismatch" });
@@ -198,6 +341,8 @@ describe("v0 control-plane API authorization", () => {
     taskMocks.persistWorkerExecution.mockResolvedValue({
       persisted: true,
       structured_run_ids: ["run-1"],
+      summary_batch_ids: ["batch-1"],
+      daily_summary_ids: ["daily-1"],
     });
 
     const response = await postPersist(
@@ -206,7 +351,12 @@ describe("v0 control-plane API authorization", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ persisted: true, structured_run_ids: ["run-1"] });
+    expect(await response.json()).toEqual({
+      persisted: true,
+      structured_run_ids: ["run-1"],
+      summary_batch_ids: ["batch-1"],
+      daily_summary_ids: ["daily-1"],
+    });
     expect(taskMocks.persistWorkerExecution).toHaveBeenCalledWith("task-1", 1, "worker-1", validPersistencePayload);
   });
 
@@ -219,6 +369,21 @@ describe("v0 control-plane API authorization", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "conflicting_duplicate_result" });
+  });
+
+  it("refuses a result whose summary receipt IDs do not match persisted evidence", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.acceptTaskResult.mockRejectedValue({ code: "55000", message: "summary_receipt_mismatch" });
+    const response = await postResult(
+      jsonRequest("/api/worker/tasks/task-1/result", {
+        ...validTaskResult,
+        summary_batch_ids: ["wrong-batch"],
+        daily_summary_ids: ["wrong-daily"],
+      }, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "summary_receipt_mismatch" });
   });
 
   it("does not expose a device secret or prompt in a successful result response", async () => {

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { EvidenceSummary } from "../../../../components/admin/EvidenceSummary";
+import { AdminShell } from "../../../../components/admin/AdminShell";
 import { RetryTaskButton } from "../../../../components/admin/RetryTaskButton";
 import { StatusBadge } from "../../../../components/admin/StatusBadge";
 import { TaskTimeline } from "../../../../components/admin/TaskTimeline";
@@ -19,7 +20,7 @@ export default async function AdminTaskDetailPage({ params }: { params: Promise<
     failure: latestAttempt?.failure,
   });
   const evidenceRefs = detail.evidenceRefs.map((ref) => `${ref.id} (${ref.evidence_kind})`);
-  return (
+  return <AdminShell active="tasks">
     <>
       <section>
         <h1>Task {view.id}</h1>
@@ -69,6 +70,5 @@ export default async function AdminTaskDetailPage({ params }: { params: Promise<
         <TaskTimeline events={detail.events} />
       </section>
     </>
-  );
+  </AdminShell>;
 }
-

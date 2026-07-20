@@ -26,11 +26,13 @@ docs/
 ├── engineering-journal/
 │   ├── 2026-07-15-spike-01.md
 │   ├── 2026-07-15-spike-02.md
-│   └── 2026-07-18-v0.md
+│   ├── 2026-07-18-v0.md
+│   └── 2026-07-19-v1.md
 └── spikes/
     ├── 2026-07-15-spike-01-decision-report.md
     ├── 2026-07-15-spike-02-decision-report.md
-    └── 2026-07-18-v0-decision-report.md
+    ├── 2026-07-18-v0-decision-report.md
+    └── 2026-07-19-v1-decision-report.md
 ```
 
 当前暂不创建 `docs/adr/`。Spike-01 的架构取舍已在其 Spec 和 Final Report 中记录；当 Spike-02 或 V0 产生需要跨阶段沿用的正式架构决策时，再新增独立 ADR。
@@ -68,3 +70,5 @@ intake
 - [V0 Final Report（通过：有界单页真实 Discord 验证）](spikes/2026-07-18-v0-decision-report.md)
 - [V1 Discord 正式可用 MVP Spec（已批准）](superpowers/specs/2026-07-19-v1-discord-mvp-design.md)
 - [V1 Discord 正式可用 MVP Plan（已批准）](superpowers/plans/2026-07-19-v1-discord-mvp.md)
+- [V1 Engineering Journal（正式可用 MVP）](engineering-journal/2026-07-19-v1.md)
+- [V1 Final Report（通过：Discord 正式可用 MVP）](spikes/2026-07-19-v1-decision-report.md)

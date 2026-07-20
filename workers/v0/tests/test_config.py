@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from invest_hub_worker.config import ConfigError, LocalWorkerConfig
+from invest_hub_worker.config import ConfigError, LocalWorkerConfig, LocalWorkerConfigSet
 
 
 class LocalWorkerConfigTests(unittest.TestCase):
@@ -30,6 +30,21 @@ class LocalWorkerConfigTests(unittest.TestCase):
             "profile_ref": "/private/worker-profile",
             "opencli_contract_version": "2026-07-15",
             "parameter_version": "v0-default",
+        }
+
+    def valid_source_payload(self, source_id: str) -> dict[str, str]:
+        payload = self.valid_payload()
+        payload.pop("control_plane_url")
+        payload["source_id"] = source_id
+        return payload
+
+    def valid_config_set(self) -> dict[str, object]:
+        return {
+            "control_plane_url": "https://control.example.invalid",
+            "sources": [
+                self.valid_source_payload("discord-source-1"),
+                self.valid_source_payload("discord-source-2"),
+            ],
         }
 
     def test_owner_only_json_loads_and_redaction_does_not_expose_private_values(self) -> None:
@@ -65,6 +80,32 @@ class LocalWorkerConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = LocalWorkerConfig.load(self.write_config(directory, self.valid_payload(), suffix=".toml"))
             self.assertEqual(config.parameter_version, "v0-default")
+
+    def test_owner_only_multi_source_config_selects_each_source_without_redacting_private_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config_set = LocalWorkerConfigSet.load(self.write_config(directory, self.valid_config_set()))
+
+        self.assertEqual(config_set.control_plane_url, "https://control.example.invalid")
+        self.assertEqual(tuple(source.source_id for source in config_set.sources), ("discord-source-1", "discord-source-2"))
+        self.assertEqual(config_set.source_for("discord-source-2").source_id, "discord-source-2")
+        redacted = config_set.redacted()
+        self.assertNotIn("discord.com/channels", json.dumps(redacted))
+        self.assertNotIn("worker-profile", json.dumps(redacted))
+
+    def test_multi_source_config_rejects_duplicate_ids_wide_permissions_and_legacy_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            duplicate = self.valid_config_set()
+            duplicate["sources"] = [self.valid_source_payload("same"), self.valid_source_payload("same")]
+            with self.assertRaises(ConfigError):
+                LocalWorkerConfigSet.load(self.write_config(directory, duplicate))
+
+            wide = self.write_config(directory, self.valid_config_set())
+            os.chmod(wide, 0o640)
+            with self.assertRaises(ConfigError):
+                LocalWorkerConfigSet.load(wide)
+
+            with self.assertRaises(ConfigError):
+                LocalWorkerConfigSet.load(self.write_config(directory, self.valid_payload()))
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import json
 import subprocess
 import time
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 from urllib.parse import parse_qs, urlparse
@@ -244,8 +245,11 @@ class BrowserBridgeOpenCLIInvoker:
         channel_url: str,
         profile_path: Path,
         cursor: str | None,
+        cursor_mode: str = "history",
     ) -> Mapping[str, Any]:
         del profile_path
+        if cursor_mode not in {"history", "incremental"}:
+            raise ConnectorError("Browser Bridge cursor mode is invalid")
         started_ns = time.monotonic_ns()
         if self._page_timeout_seconds is not None:
             self._deadline_ns = started_ns + self._page_timeout_seconds * 1_000_000_000
@@ -261,17 +265,13 @@ class BrowserBridgeOpenCLIInvoker:
             raise ConnectorError("Browser Bridge session is missing")
 
         route = self._channel_route(channel_url)
-        if cursor is not None:
+        if cursor is not None and cursor_mode != "incremental":
             route = f"{route}/{cursor}"
-        cache_buster = str(self._contract.get("cache_buster_param") or "")
-        if cache_buster:
-            route = self._cache_busted_route(route)
         try:
-            baseline = self._run_json(self._network_command(session))
-            baseline_keys = self._network_keys(baseline)
+            not_before = datetime.now(timezone.utc) - timedelta(seconds=2)
 
             phase_started_ns = time.monotonic_ns()
-            self._run_json(["browser", session, "open", route])
+            self._run_json(["browser", session, "open", route, "--window", "foreground"])
             phase_ms["open_ms"] = self._elapsed_ms(phase_started_ns)
 
             phase_started_ns = time.monotonic_ns()
@@ -284,7 +284,9 @@ class BrowserBridgeOpenCLIInvoker:
                 session,
                 channel_id,
                 cursor=cursor,
-                baseline_keys=baseline_keys,
+                cursor_mode=cursor_mode,
+                baseline_keys=frozenset(),
+                not_before=not_before,
                 route=route,
             )
             phase_ms["network_observation_ms"] = self._elapsed_ms(phase_started_ns)
@@ -296,17 +298,21 @@ class BrowserBridgeOpenCLIInvoker:
             phase_ms["detail_ms"] = self._elapsed_ms(phase_started_ns)
             messages = self._message_body(detail)
             if cursor is not None:
-                older_messages = [
+                bounded_messages = [
                     message
                     for message in messages
-                    if self._is_older(str(message.get("id") or ""), cursor)
+                    if (
+                        self._is_newer(str(message.get("id") or ""), cursor)
+                        if cursor_mode == "incremental"
+                        else self._is_older(str(message.get("id") or ""), cursor)
+                    )
                 ]
-                if messages and not older_messages:
+                if messages and not bounded_messages:
                     raise ConnectorError(
                         "Discord message response did not advance cursor",
                         code="cursor_not_advanced",
                     )
-                messages = older_messages
+                messages = bounded_messages
 
             phase_started_ns = time.monotonic_ns()
             messages = [
@@ -317,10 +323,14 @@ class BrowserBridgeOpenCLIInvoker:
 
             ids = [str(message.get("id") or "") for message in messages]
             ids = [message_id for message_id in ids if message_id]
-            cursor_after = min(ids, key=self._numeric_or_text) if ids else None
-            # A genuinely empty cursor-scoped response is the retained-history
-            # boundary. A nonempty response with no older messages is rejected
-            # above: it is not pagination progress.
+            cursor_after = (
+                (max(ids, key=self._numeric_or_text) if cursor_mode == "incremental" else min(ids, key=self._numeric_or_text))
+                if ids
+                else None
+            )
+            # A genuinely empty cursor-scoped response is a bounded collection
+            # boundary. A nonempty response with no qualifying messages is
+            # rejected above: it is not pagination progress.
             page_id = f"discord-{channel_id}-{cursor_after or 'initial'}"
             self.last_timing = {
                 "elapsed_ms": self._elapsed_ms(started_ns),
@@ -365,12 +375,16 @@ class BrowserBridgeOpenCLIInvoker:
         return max(0, (time.monotonic_ns() - started_ns) // 1_000_000)
 
     @staticmethod
-    def _network_keys(network: Mapping[str, Any]) -> frozenset[tuple[str, str]]:
+    def _network_keys(network: Mapping[str, Any]) -> frozenset[tuple[str, str, str]]:
         entries = network.get("entries")
         if not isinstance(entries, list):
             return frozenset()
         return frozenset(
-            (str(entry.get("key")), str(entry.get("url") or ""))
+            (
+                str(entry.get("key")),
+                str(entry.get("url") or ""),
+                str(entry.get("timestamp") or ""),
+            )
             for entry in entries
             if isinstance(entry, dict) and entry.get("key")
         )
@@ -381,7 +395,9 @@ class BrowserBridgeOpenCLIInvoker:
         channel_id: str,
         *,
         cursor: str | None,
-        baseline_keys: frozenset[tuple[str, str]],
+        cursor_mode: str,
+        baseline_keys: frozenset[tuple[str, str, str]],
+        not_before: datetime,
         route: str,
     ) -> tuple[str, int, str]:
         retries = int(self._contract.get("network_retries", 5))
@@ -395,7 +411,9 @@ class BrowserBridgeOpenCLIInvoker:
                     network,
                     channel_id,
                     cursor=cursor,
+                    cursor_mode=cursor_mode,
                     baseline_keys=baseline_keys,
+                    not_before=not_before,
                 )
                 return key, attempt + 1, "matched_new"
             except ConnectorError as exc:
@@ -405,7 +423,15 @@ class BrowserBridgeOpenCLIInvoker:
                     break
                 if exc.code == "missing" and not reopened:
                     reopened_route = self._cache_busted_route(route)
-                    self._run_json(["browser", session, "open", reopened_route])
+                    self._run_json([
+                        "browser",
+                        session,
+                        "open",
+                        reopened_route,
+                        "--window",
+                        "foreground",
+                    ])
+                    self._run(["browser", session, "keys", "CTRL+R"], timeout=120)
                     reopened = True
                 self._run(
                     ["browser", session, "wait", "time", wait_seconds],
@@ -521,7 +547,9 @@ class BrowserBridgeOpenCLIInvoker:
         channel_id: str,
         *,
         cursor: str | None,
-        baseline_keys: frozenset[tuple[str, str]],
+        cursor_mode: str,
+        baseline_keys: frozenset[tuple[str, str, str]],
+        not_before: datetime,
     ) -> str:
         entries = network.get("entries")
         if not isinstance(entries, list):
@@ -543,18 +571,22 @@ class BrowserBridgeOpenCLIInvoker:
             key = str(entry.get("key") or "")
             if not key:
                 continue
-            if (key, url) in baseline_keys:
+            timestamp = str(entry.get("timestamp") or "")
+            if (key, url, timestamp) in baseline_keys:
+                saw_stale = True
+                continue
+            if not BrowserBridgeOpenCLIInvoker._timestamp_is_current(timestamp, not_before):
                 saw_stale = True
                 continue
             if cursor is not None:
                 query = parse_qs(urlparse(url).query)
-                if cursor in query.get("after", []):
-                    saw_wrong_cursor = True
-                    continue
-                cursor_values = set(
-                    query.get("around", []) + query.get("before", [])
+                cursor_values = (
+                    set(query.get("after", []))
+                    if cursor_mode == "incremental"
+                    else set(query.get("around", []) + query.get("before", []))
                 )
-                if cursor not in cursor_values:
+                has_explicit_cursor = any(key in query for key in ("after", "before", "around"))
+                if cursor not in cursor_values and (cursor_mode != "incremental" or has_explicit_cursor):
                     saw_wrong_cursor = True
                     continue
             return key
@@ -658,6 +690,24 @@ class BrowserBridgeOpenCLIInvoker:
         message_key = cls._numeric_or_text(message_id)
         cursor_key = cls._numeric_or_text(cursor)
         return message_key < cursor_key
+
+    @classmethod
+    def _is_newer(cls, message_id: str, cursor: str) -> bool:
+        message_key = cls._numeric_or_text(message_id)
+        cursor_key = cls._numeric_or_text(cursor)
+        return message_key > cursor_key
+
+    @staticmethod
+    def _timestamp_is_current(value: str, not_before: datetime) -> bool:
+        if not value:
+            return True
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        if parsed.tzinfo is None:
+            return False
+        return parsed >= not_before
 
 
 def build_opencli_invoker(

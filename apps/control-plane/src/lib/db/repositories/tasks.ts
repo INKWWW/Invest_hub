@@ -1,26 +1,75 @@
 import { createSupabaseAdminClient } from "../supabase-server";
 import type { Database, Json } from "../types";
 
-type TaskInsert = Database["public"]["Tables"]["sync_tasks"]["Insert"];
+export type TaskScope = {
+  mode: "incremental" | "history";
+  maxPages: number;
+};
+
+export class TaskScopeError extends Error {}
+
+export type ScheduledTask = {
+  id: string;
+  source_id: string;
+  idempotent: boolean;
+};
+
+export type ScheduledTick = {
+  window_key: string;
+  tasks: ScheduledTask[];
+};
+
+const scheduleWindowPattern = /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/;
+
+export function isScheduleWindowKey(value: unknown): value is string {
+  return typeof value === "string" && scheduleWindowPattern.test(value);
+}
+
+function assertTaskScope(scope: TaskScope): void {
+  if (!Number.isInteger(scope.maxPages) || scope.maxPages < 1 || scope.maxPages > 25
+    || (scope.mode === "incremental" && scope.maxPages > 5)) {
+    throw new TaskScopeError("invalid_collection_scope");
+  }
+}
 
 export async function createDiscordSyncTask(input: {
   sourceId: string;
   parameterVersion: string;
   requestedBy: string;
+  scope: TaskScope;
 }) {
-  const row: TaskInsert = {
-    task_type: "discord_sync",
-    source_id: input.sourceId,
-    parameter_version: input.parameterVersion,
-    requested_by: input.requestedBy,
-  };
+  assertTaskScope(input.scope);
   const { data, error } = await createSupabaseAdminClient()
-    .from("sync_tasks")
-    .insert(row)
-    .select()
-    .single();
+    .rpc("create_discord_sync_task", {
+      p_source_id: input.sourceId,
+      p_parameter_version: input.parameterVersion,
+      p_requested_by: input.requestedBy,
+      p_scope: { mode: input.scope.mode, max_pages: input.scope.maxPages },
+    });
   if (error) throw error;
-  return data;
+  if (!data || typeof data !== "object") throw new Error("invalid_created_task");
+  return data as Database["public"]["Tables"]["sync_tasks"]["Row"];
+}
+
+export async function scheduleDiscordSyncTasks(workerId: string, windowKey: string): Promise<ScheduledTick> {
+  if (!isScheduleWindowKey(windowKey)) throw new TaskScopeError("invalid_schedule_window");
+  const { data, error } = await createSupabaseAdminClient().rpc("enqueue_scheduled_discord_tasks", {
+    p_worker_id: workerId,
+    p_window_key: windowKey,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("invalid_scheduled_tick");
+  const tick = data as Record<string, unknown>;
+  if (tick.window_key !== windowKey || !Array.isArray(tick.tasks)) throw new Error("invalid_scheduled_tick");
+  const tasks = tick.tasks.map((task) => {
+    if (!task || typeof task !== "object" || Array.isArray(task)) throw new Error("invalid_scheduled_task");
+    const value = task as Record<string, unknown>;
+    if (typeof value.id !== "string" || typeof value.source_id !== "string" || typeof value.idempotent !== "boolean") {
+      throw new Error("invalid_scheduled_task");
+    }
+    return { id: value.id, source_id: value.source_id, idempotent: value.idempotent };
+  });
+  return { window_key: windowKey, tasks };
 }
 
 export async function listRecentTasks(limit = 50) {

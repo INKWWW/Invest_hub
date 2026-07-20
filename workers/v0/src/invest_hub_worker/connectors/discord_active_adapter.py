@@ -37,18 +37,34 @@ class DiscordActiveAdapter:
         self.page_timeout_seconds = page_timeout_seconds
         self.clock = clock
 
-    def collect(self, source: LocalWorkerConfig, checkpoint: str | None) -> Iterable[RawPage]:
-        started = self.clock()
+    def collect(
+        self,
+        source: LocalWorkerConfig,
+        checkpoint: str | None,
+        *,
+        max_pages: int = 1,
+        collection_mode: str = "history",
+    ) -> Iterable[RawPage]:
+        if max_pages < 1:
+            raise ConnectorError("Discord page limit must be positive", code="preflight")
+        if collection_mode not in {"history", "incremental"}:
+            raise ConnectorError("Discord collection mode is invalid", code="preflight")
         cursor = checkpoint
-        while True:
+        for _page_index in range(max_pages):
+            started = self.clock()
             self._check_deadline(started)
-            response = self._fetch(source, cursor, cache_buster=None)
+            response = self._fetch(source, cursor, cache_buster=None, collection_mode=collection_mode)
             self._check_deadline(started)
             entry, match_state = self._match(response)
             network_attempts = 1
             if entry is None:
                 self._check_deadline(started)
-                response = self._fetch(source, cursor, cache_buster=f"v0-{uuid.uuid4().hex}")
+                response = self._fetch(
+                    source,
+                    cursor,
+                    cache_buster=f"v0-{uuid.uuid4().hex}",
+                    collection_mode=collection_mode,
+                )
                 self._check_deadline(started)
                 entry, match_state = self._match(response)
                 network_attempts = 2
@@ -70,15 +86,24 @@ class DiscordActiveAdapter:
                 raw_payload_ref=f"local://discord/{page_id}",
                 telemetry={"network_attempts": network_attempts, "match_state": "matched_new"},
             )
-            return
+            if cursor_after is None:
+                return
+            cursor = str(cursor_after)
 
-    def _fetch(self, source: LocalWorkerConfig, cursor: str | None, cache_buster: str | None) -> Mapping[str, object]:
+    def _fetch(
+        self,
+        source: LocalWorkerConfig,
+        cursor: str | None,
+        cache_buster: str | None,
+        collection_mode: str,
+    ) -> Mapping[str, object]:
         try:
             response = self.invoker.fetch_page(
                 channel_url=normalize_channel_url(source.channel_url),
                 profile_ref=source.profile_ref,
                 cursor=cursor,
                 cache_buster=cache_buster,
+                collection_mode=collection_mode,
             )
         except ConnectorError:
             raise

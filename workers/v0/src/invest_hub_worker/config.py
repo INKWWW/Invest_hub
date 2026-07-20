@@ -21,6 +21,8 @@ _FIELDS = {
     "opencli_contract_version",
     "parameter_version",
 }
+_CONFIG_SET_FIELDS = {"control_plane_url", "sources"}
+_SOURCE_FIELDS = _FIELDS - {"control_plane_url"}
 
 
 @dataclass(frozen=True)
@@ -83,4 +85,82 @@ class LocalWorkerConfig:
             "source_id": self.source_id,
             "opencli_contract_version": self.opencli_contract_version,
             "parameter_version": self.parameter_version,
+        }
+
+
+@dataclass(frozen=True)
+class LocalWorkerConfigSet:
+    control_plane_url: str
+    sources: tuple[LocalWorkerConfig, ...]
+    config_hash: str
+
+    @classmethod
+    def load(cls, path: Path) -> "LocalWorkerConfigSet":
+        try:
+            mode = stat.S_IMODE(path.stat().st_mode)
+        except OSError as exc:
+            raise ConfigError(f"cannot stat worker config: {path}") from exc
+        if mode & 0o077:
+            raise ConfigError("worker config must be owner-only (0600 or stricter)")
+
+        try:
+            if path.suffix.lower() == ".toml":
+                value = tomllib.loads(path.read_text(encoding="utf-8"))
+            else:
+                value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+            raise ConfigError("worker config is not valid JSON/TOML") from exc
+        if not isinstance(value, dict):
+            raise ConfigError("worker config must be an object")
+        return cls.from_mapping(value)
+
+    @classmethod
+    def from_mapping(cls, value: dict[str, Any]) -> "LocalWorkerConfigSet":
+        unknown = set(value) - _CONFIG_SET_FIELDS
+        missing = _CONFIG_SET_FIELDS - set(value)
+        if unknown:
+            raise ConfigError(f"unknown worker config fields: {sorted(unknown)}")
+        if missing:
+            raise ConfigError(f"missing worker config fields: {sorted(missing)}")
+        control_plane_url = value["control_plane_url"]
+        sources_value = value["sources"]
+        if not isinstance(control_plane_url, str) or not control_plane_url.strip():
+            raise ConfigError("worker config field must be a non-empty string: control_plane_url")
+        if not isinstance(sources_value, list) or not sources_value:
+            raise ConfigError("worker config sources must be a non-empty list")
+
+        sources: list[LocalWorkerConfig] = []
+        seen_source_ids: set[str] = set()
+        for source in sources_value:
+            if not isinstance(source, dict):
+                raise ConfigError("worker config source must be an object")
+            unknown_source = set(source) - _SOURCE_FIELDS
+            missing_source = _SOURCE_FIELDS - set(source)
+            if unknown_source:
+                raise ConfigError(f"unknown worker source fields: {sorted(unknown_source)}")
+            if missing_source:
+                raise ConfigError(f"missing worker source fields: {sorted(missing_source)}")
+            source_config = LocalWorkerConfig.from_mapping({"control_plane_url": control_plane_url, **source})
+            if source_config.source_id in seen_source_ids:
+                raise ConfigError("worker config source_id values must be unique")
+            seen_source_ids.add(source_config.source_id)
+            sources.append(source_config)
+
+        canonical = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return cls(
+            control_plane_url=control_plane_url,
+            sources=tuple(sources),
+            config_hash=hashlib.sha256(canonical).hexdigest(),
+        )
+
+    def source_for(self, source_id: str) -> LocalWorkerConfig:
+        for source in self.sources:
+            if source.source_id == source_id:
+                return source
+        raise ConfigError("task source is not configured for this local Worker")
+
+    def redacted(self) -> dict[str, object]:
+        return {
+            "config_hash": self.config_hash,
+            "sources": [source.redacted() for source in self.sources],
         }
