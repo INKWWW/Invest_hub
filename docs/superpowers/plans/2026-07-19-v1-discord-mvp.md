@@ -680,7 +680,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
   git commit -m "feat(v1): refine discord reader and admin workspace"
   ```
 
-### Task 11: 部署阅读体验并回归验证正式环境
+### Task 11: 部署阅读体验并回归验证正式环境（完成：2026-07-20）
 
 **Files:**
 
@@ -692,7 +692,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 - 使用现有专用 Supabase 和 Vercel 项目；本任务不新增迁移、不重置远程数据库、不改变 environment variables。
 - 部署后的公开探针只允许检查首页 `200` 和未认证 `/api/reader/discord` 的 `401`，不得输出真实 reader 内容。
 
-- [ ] **Step 1: 运行部署前完整回归**
+- [x] **Step 1: 运行部署前完整回归**
 
   Run: `supabase db reset && supabase test db`
 
@@ -702,7 +702,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 
   Expected: 所有数据库、控制面、Worker 与 V1 E2E 测试通过；任一失败则不部署。
 
-- [ ] **Step 2: 部署控制面并执行安全探针**
+- [x] **Step 2: 部署控制面并执行安全探针**
 
   Run: `cd apps/control-plane && npx vercel --prod --yes`
 
@@ -710,7 +710,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 
   Expected: `homepage_status=200` 与 `unauth_reader_status=401`；部署输出、环境变量和探针不得包含真实来源或正文。
 
-- [ ] **Step 3: 更新脱敏部署证据并提交**
+- [x] **Step 3: 更新脱敏部署证据并提交**
 
   在工程日志追加部署 commit、验证命令、HTTP 状态与“未输出内容”的结论；Final Report 的部署/安全项只记录 pass、conditional 或 fail，不记录 URL、数据库标识、来源 key、任务 ID、正文或凭据。
 
