@@ -70,5 +70,5 @@ intake
 - [V0 Final Report（通过：有界单页真实 Discord 验证）](spikes/2026-07-18-v0-decision-report.md)
 - [V1 Discord 正式可用 MVP Spec（已批准）](superpowers/specs/2026-07-19-v1-discord-mvp-design.md)
 - [V1 Discord 正式可用 MVP Plan（已批准）](superpowers/plans/2026-07-19-v1-discord-mvp.md)
-- [V1 Engineering Journal（条件验收）](engineering-journal/2026-07-19-v1.md)
-- [V1 Final Report（条件：待部署与真实双来源验收）](spikes/2026-07-19-v1-decision-report.md)
+- [V1 Engineering Journal（条件验收：已部署并完成真实双来源有界 history）](engineering-journal/2026-07-19-v1.md)
+- [V1 Final Report（条件：真实增量、失败隔离与阅读验收待补）](spikes/2026-07-19-v1-decision-report.md)
