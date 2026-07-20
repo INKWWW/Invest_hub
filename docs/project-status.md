@@ -1,14 +1,14 @@
 # Project Status
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 ## Current phase
 
-**V1 已部署，并完成真实双来源增量、二次去重与 checkpoint 验收（仍为条件验收）**
+**V1 已部署，并完成真实双来源增量、二次去重、checkpoint 与失败隔离恢复验收（仍为条件验收）**
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
-V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、摘要与 receipt 闭环、管理员控制、正式 `/discord` 阅读页、定时窗口幂等、离线补采和公开 fixture E2E。最终本地验证为 114 条 pgTAP、53 个控制面测试、60 个 Worker 测试和 3 个 V1 E2E 测试通过。2026-07-20 已在专用 Supabase/Vercel 环境部署：两条真实授权来源先各成功完成一个 `max_pages=1` 的 history 任务，随后各完成两轮 `incremental/max_pages=1`；四个增量任务均首次成功，第一轮新增 30 条、第二轮新增 19 条 Canonical，数据库未发现重复 Canonical 行，且每轮两个 checkpoint 均只在成功后前移。预设分类的失败隔离、普通用户阅读与响应式视觉验收、真实质量抽检和部署日志独立审阅仍未完成，因此结论仍为条件验收，不得称为“Discord 正式可用 MVP”。
+V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、摘要与 receipt 闭环、管理员控制、正式 `/discord` 阅读页、定时窗口幂等、离线补采和公开 fixture E2E。最新本地验证为 115 条 pgTAP、53 个控制面测试、62 个 Worker 测试和 3 个 V1 E2E 测试通过。2026-07-20 已在专用 Supabase/Vercel 环境部署：两条真实授权来源先各成功完成一个 `max_pages=1` 的 history 任务，随后各完成两轮 `incremental/max_pages=1`；四个增量任务均首次成功，第一轮新增 30 条、第二轮新增 19 条 Canonical，数据库未发现重复 Canonical 行，且每轮两个 checkpoint 均只在成功后前移。其后已完成预设 `unauthorized` 受控失败隔离、B 独立成功与 A 管理员正式重试恢复；同 hash 重采集的可变本地 evidence 引用冲突已由远程迁移修复并有回归和真实恢复证据。普通用户阅读与响应式视觉验收、真实质量抽检和部署日志独立审阅仍未完成，因此结论仍为条件验收，不得称为“Discord 正式可用 MVP”。
 
 ## Approval status
 
@@ -30,7 +30,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [V0 真实运行有界批次恢复计划](superpowers/plans/2026-07-19-v0-real-run-bounded-batch-recovery.md)
   - [V1 Discord 正式可用 MVP 计划](superpowers/plans/2026-07-19-v1-discord-mvp.md)
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
-- V1 implementation status：代码、本地确定性验收、专用部署、真实双来源有界 history，以及真实增量、二次去重/checkpoint 验收已完成；失败隔离、普通用户阅读与视觉验收、真实质量抽检和部署日志审阅待执行，当前为条件验收。
+- V1 implementation status：代码、本地确定性验收、专用部署、真实双来源有界 history、真实增量/二次去重/checkpoint，以及失败隔离/恢复验收已完成；普通用户阅读与视觉验收、真实质量抽检和部署日志审阅待执行，当前为条件验收。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
@@ -99,11 +99,11 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 ## V1 result
 
 - 确定性实现：通过。多来源绑定/规则、有限分页、批次与日累计摘要、收据闭环、正式阅读页、定时窗口幂等和公开 fixture E2E 已完成。
-- 本地验证：通过。6 个 pgTAP 文件共 114 条断言、控制面 53 个测试、Worker 60 个测试、V1 E2E 3 个测试和 V0 E2E 8 个测试均通过；脱敏检查通过。
-- 发布结论：条件验收。专用 V1 部署、用户明确授权的真实双来源有界 history，以及两轮真实增量二次去重/checkpoint 已通过；预设分类的失败隔离、普通用户阅读、桌面/手机视觉、真实质量抽检和部署日志独立审阅尚未完成，故不能称为“Discord 正式可用 MVP”。
+- 本地验证：通过。6 个 pgTAP 文件共 115 条断言、控制面 53 个测试、Worker 62 个测试、V1 E2E 3 个测试和 V0 E2E 8 个测试均通过；脱敏检查通过。
+- 发布结论：条件验收。专用 V1 部署、用户明确授权的真实双来源有界 history、两轮真实增量二次去重/checkpoint，以及预设分类的失败隔离/正式恢复已通过；普通用户阅读、桌面/手机视觉、真实质量抽检和部署日志独立审阅尚未完成，故不能称为“Discord 正式可用 MVP”。
 
 完整证据见 [V1 Engineering Journal](engineering-journal/2026-07-19-v1.md) 和 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)。
 
 ## Next gate
 
-V1 的专用部署、真实双来源有界 history 和两轮真实增量二次去重/checkpoint 已完成。下一步是在用户继续授权下补齐可操作失败隔离、普通用户正式阅读、桌面/手机视觉、真实质量抽检和部署日志独立审阅。第 1–11 项 V1 验收门槛全部通过前，不实现 X、GLM、自动 fallback 或将 V1 称为生产 SLA。
+V1 的专用部署、真实双来源有界 history、两轮真实增量二次去重/checkpoint，以及可操作失败隔离/正式恢复已完成。下一步是在用户继续授权下补齐普通用户正式阅读、桌面/手机视觉、真实质量抽检和部署日志独立审阅。第 1–11 项 V1 验收门槛全部通过前，不实现 X、GLM、自动 fallback 或将 V1 称为生产 SLA。

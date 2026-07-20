@@ -776,29 +776,29 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 - 此任务必须在用户对“受控失败”再次确认后运行；它只临时移除一个本地来源映射以触发 `unauthorized`，不修改 Discord、来源规则、远程内容、Cookie 或 Prompt。
 - 受控失败前，owner-only 备份本地 Worker config；恢复时按字节还原并再次验证 `0600`。失败来源记为 A，独立成功来源记为 B；文档只使用 A/B。
 
-- [ ] **Step 1: 建立失败前基线**
+- [x] **Step 1: 建立失败前基线**
 
   用管理员任务页和只读聚合查询记录 A、B 的 checkpoint 是否存在、当前 Canonical 数量和最新任务状态；输出只允许布尔值与计数。为 A、B 各创建一个 `incremental/max_pages=1` 任务。
 
-- [ ] **Step 2: 制造无内容写入的受控授权失败**
+- [x] **Step 2: 制造无内容写入的受控授权失败**
 
   在本地 protected config 的副本中临时删除 A 的 `[[sources]]` block，保留 B 完整配置。用该副本运行一次 `run-once`，只允许领取 A 任务。
 
   Expected: A 为 `retryable_failed`，failure class 为 `unauthorized`，A 不新增 raw/Canonical/summary，A checkpoint 不前移；进程不得打开 A 频道或输出配置。
 
-- [ ] **Step 3: 恢复配置并确认 B 独立成功**
+- [x] **Step 3: 恢复配置并确认 B 独立成功**
 
   从 owner-only 备份逐字节还原 A block，验证 config 含两个不同 source ID 且 mode 为 `0600`。使用完整配置运行 B 的一个 `incremental/max_pages=1` 任务。
 
   Expected: B 成功，或产生自身明确分类失败；A 的失败不得阻断 B 被领取、持久化或回报。若 B 失败，停止并记录 conditional，不把隔离验收判为通过。
 
-- [ ] **Step 4: 用管理员正式重试恢复 A**
+- [x] **Step 4: 用管理员正式重试恢复 A**
 
   在 `/admin/tasks/<task>` 使用 Retry，不直接改数据库行；随后以完整本地配置运行 A 的重试任务。
 
   Expected: A 通过既有 retry 状态转移恢复为 `succeeded`；任务事件保留失败与重试历史，checkpoint 仅在成功回报后更新。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add docs/engineering-journal/2026-07-19-v1.md docs/spikes/2026-07-19-v1-decision-report.md

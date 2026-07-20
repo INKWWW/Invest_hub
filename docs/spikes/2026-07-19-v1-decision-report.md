@@ -17,10 +17,10 @@ V1 的本质不是“页面能构建”，而是受邀用户能够在隔离环�
 | 4 | 管理两个来源与规则覆盖 | pass | 规则快照、来源绑定、管理 API/UI 和公开双来源 fixture 均通过。 |
 | 5 | 两来源真实授权增量与独立 checkpoint | pass | 两个真实授权来源完成两轮 `incremental`、`max_pages=1` 验收；共 4 个任务均在首次 attempt 成功。第一轮新增 30 条 Canonical，第二轮新增 19 条，Worker 重复计数均为 0，数据库重复 Canonical 行为 0；每轮两个 checkpoint 均只在成功后前移。 |
 | 6 | 有界 history 与离线恢复 | pass | 两个真实 `max_pages=1` history 任务通过；history scope 为 1–25 页，定时 E2E 验证四窗口有界补采与幂等。 |
-| 7 | 单来源失败不前移 checkpoint、不阻断其他来源 | conditional | 真实运行保留了一个 `retryable_failed` 后重试成功，另一个来源已独立成功；但该失败记录为 `unknown`，尚未完成一项预设、可操作分类的真实隔离验收。 |
+| 7 | 单来源失败不前移 checkpoint、不阻断其他来源 | pass | 受控 A 映射移除产生 `retryable_failed/unauthorized`，零内容写入且 checkpoint 不前移；完整配置下 B 独立成功。A 随后通过管理员 Retry 恢复成功，保留 6 次 retry 与 1 次 succeeded 事件。诊断发现同 hash 重采集的本地 evidence 引用变化会被误判冲突，已由 `20260720165534` 修复并以 pgTAP 与真实恢复验证。 |
 | 8 | 批次与日累计摘要可追溯且版本化 | pass | 迁移、摘要 receipt、pgTAP 和 Worker 摘要测试通过。 |
 | 9 | 事实/观点/归纳/不确定性/媒体边界 | conditional | 公开 fixture 与既有 schema 约束通过；V1 尚无真实运行的人工质量证据。 |
-| 10 | 多来源、权限、恢复、阅读测试 | pass | pgTAP 114、控制面 53、Worker 60、V1 E2E 3 个测试均通过。 |
+| 10 | 多来源、权限、恢复、阅读测试 | pass | pgTAP 115、控制面 53、Worker 62、V1 E2E 3 个测试均通过。 |
 | 11 | 敏感资料不进入 Git、日志或页面 | conditional | 仓库脱敏检查、DTO allowlist、受保护配置和本地 evidence 权限复核通过；本次生产发布只做无内容 `200`/`401` 探针，仍缺一次面向部署日志的独立审阅。 |
 | 12 | Final Report 记录实际结论和限制 | pass | 本报告逐项标注 pass/conditional，未把缺失真实证据写成通过。 |
 
@@ -31,10 +31,9 @@ V1 的本质不是“页面能构建”，而是受邀用户能够在隔离环�
 - 正式阅读页 `/discord` 面向已认证用户，管理员仍进入 `/admin`；阅读 UI 与管理诊断隔离。
 - 阅读体验已发布到既有生产项目；发布前全量数据库、控制面、Worker 与 V1 E2E 回归通过，生产探针仅确认首页 `200` 与未认证 reader API `401`，未读取真实 reader 内容。
 - `scripts/v1/run-e2e.sh` 明确分离 deterministic 与 real-discord。real 模式同时要求授权标志、多来源私有配置、Prompt、OpenCLI contract、受保护 evidence 目录和一次性 Worker 凭据。
-- 真实双来源增量验收已完成两轮：两轮均为每来源 `incremental/max_pages=1`；四个任务全在首次 attempt 成功，第一轮新增 30 条、第二轮新增 19 条 Canonical，数据库未发现重复 Canonical 行。来源标识、URL、正文、Prompt 与本机 evidence 均未进入仓库。
+- 真实双来源增量验收已完成两轮：两轮均为每来源 `incremental/max_pages=1`；四个任务全在首次 attempt 成功，第一轮新增 30 条、第二轮新增 19 条 Canonical，数据库未发现重复 Canonical 行。其后的受控失败隔离与 A 正式恢复也已通过：同 hash 的 9 条重采集消息不会重复持久化，只有 1 条新消息写入。来源标识、URL、正文、Prompt 与本机 evidence 均未进入仓库。
 
 ## 阻断项与下一门槛
 
-1. 在一个来源上进行受控的、可操作分类的失败，同时确认另一个来源不受阻断；真实 evidence 继续只保存在仓库外受保护目录。
-2. 以普通用户完成正式阅读流程，并完成基于真实内容的桌面与手机端视觉验收。
-3. 对至少一次真实输出进行人工质量抽检，并独立审阅部署日志。第 1–11 项全部通过前，项目状态必须保持“条件验收”，不得称为正式可用或生产 SLA。
+1. 以普通用户完成正式阅读流程，并完成基于真实内容的桌面与手机端视觉验收。
+2. 对至少一次真实输出进行人工质量抽检，并独立审阅部署日志。第 1–11 项全部通过前，项目状态必须保持“条件验收”，不得称为正式可用或生产 SLA。
