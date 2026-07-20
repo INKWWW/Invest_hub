@@ -1,6 +1,6 @@
 begin;
 
-select plan(11);
+select plan(12);
 
 select has_function(
   'public',
@@ -121,6 +121,25 @@ select throws_ok(
   '22023',
   null,
   'worker cannot persist a payload for a different source'
+);
+
+select is(
+  public.persist_worker_execution(
+    '00000000-0000-0000-0000-000000000132',
+    1,
+    '00000000-0000-0000-0000-000000000111',
+    '{
+      "contract_version":"v0",
+      "task_id":"00000000-0000-0000-0000-000000000132",
+      "attempt":1,
+      "source_id":"discord-persistence-test",
+      "raw_messages":[{"external_message_id":"message-1","occurred_at":"2099-01-01T00:00:00Z","local_raw_ref":"local://v0/raw/recapture-message-1.json","payload_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","retention_expires_at":"2100-01-01T00:00:00Z"}],
+      "canonical_messages":[{"external_message_id":"message-1","occurred_at":"2099-01-01T00:00:00Z","author_display":"fixture-author","content":"fixture content","has_unparsed_media":false,"metadata":{}}],
+      "structured_runs":[{"chunk_key":"recapture-chunk-1","provider":"mock","parameter_version":"v0-test-1","input_message_ids":["message-1"],"media_source_message_ids":[],"output":{"topics":[]}}]
+    }'::jsonb
+  ) ->> 'persisted',
+  'true',
+  'a same-payload recapture may use a new local evidence reference'
 );
 
 select is(
