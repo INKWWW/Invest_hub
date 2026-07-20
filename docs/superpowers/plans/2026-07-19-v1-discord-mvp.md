@@ -818,31 +818,31 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 - 普通用户只通过邀请码注册；用户读取共享 `ReaderDay`，不拥有独立来源、任务或阅读进度状态。
 - 真实质量核对只在受保护会话和本地 evidence 中进行；仓库只记录样本数量、检查项计数和 pass/fail，不记录消息、作者、频道、ticker、总结文本或截图。
 
-- [ ] **Step 1: 创建并验证普通用户**
+- [x] **Step 1: 创建并验证普通用户**
 
   管理员创建一次性普通用户邀请码。用户用自己的邮箱和密码在正常浏览器窗口完成 `/invite` 与 `/login`；不要使用 Discord 专用 Profile、管理员会话或共享密码。
 
   Expected: 普通用户可打开 `/discord`，完成来源、日期、批次、证据和历史版本阅读；访问 `/admin` 返回 `403` 或安全重定向，管理 API 返回 `403`，未登录 reader API 返回 `401`。
 
-- [ ] **Step 2: 完成桌面/手机视觉验收**
+- [x] **Step 2: 完成桌面/手机视觉验收**
 
   使用同一普通用户账户，在 `1280px` 和 `375px` 完成：选择两个来源、切换日期、展开一个 batch、展开一个证据、识别未解析媒体/失败状态（若存在）。截图只使用合成公开 fixture；真实环境只记录通过/失败结果。
 
   Expected: 选择器可操作、内容不横向溢出、topic/batch/evidence 层级可区分、失败状态不伪装为 no-new-data。
 
-- [ ] **Step 3: 执行真实输出质量抽检**
+- [x] **Step 3: 执行真实输出质量抽检**
 
   在两个来源的最近成功任务中各随机抽取至少一条 structured topic，逐条在受保护界面核对：topic 的 `source_message_ids` 指向当前任务输入；`author_scope=target` 时 author ID 在规则快照中；事实/观点/系统归纳没有混写；每个附件消息均被 `media_unparsed`/warning 覆盖；严重错误归因与媒体臆测均为零。
 
   Expected: 样本全部通过；任一严重归因或媒体臆测非零时，停止 MVP 发布并记录 conditional/fail。
 
-- [ ] **Step 4: 独立审阅日志与本地证据权限**
+- [x] **Step 4: 独立审阅日志与本地证据权限**
 
   运行 `bash scripts/v0/redact-check.sh && git diff --check`；检查当前 Vercel deployment 的 runtime error 摘要不含真实正文或凭据；只统计本地 evidence 文件数量和 `0600`、目录 `0700` 权限，不读取或打印文件正文。
 
   Expected: 脱敏、diff 与权限检查均通过；任何敏感输出、宽权限或真实内容进入 Git/日志均为阻断失败。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add docs/engineering-journal/2026-07-19-v1.md docs/spikes/2026-07-19-v1-decision-report.md docs/project-status.md
@@ -864,7 +864,7 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 - Final Report 逐项更新 Spec 7 的 1–12 项；只有 1–11 均为 `pass` 才能将项目状态改为 `V1 Discord 正式可用 MVP`。
 - 若 Task 11–14 的任一验收未通过，Final Report 必须保留 `conditional` 或 `fail`，并在 Next gate 中写出唯一下一项补证据动作；不得为了发布而重写历史失败记录。
 
-- [ ] **Step 1: 运行最终完整验证**
+- [x] **Step 1: 运行最终完整验证**
 
   Run: `supabase db reset && supabase test db`
 
@@ -876,11 +876,11 @@ export function AdminShell(input: { active: AdminSection; children: React.ReactN
 
   Expected: 所有命令通过；真实数据、私密配置与 local evidence 均未进入 Git。
 
-- [ ] **Step 2: 更新发布判定与文档导航**
+- [x] **Step 2: 更新发布判定与文档导航**
 
   将 Task 9–14 的脱敏命令、计数、状态和限制写入 Engineering Journal；将 Final Report 的每一行更新为 pass/conditional/fail；同步 `project-status.md`、`README.md` 与 `docs/README.md`。只有所有阻断项均为 pass 时，使用精确措辞 `V1 Discord 正式可用 MVP`；否则使用 `V1 条件验收`。
 
-- [ ] **Step 3: 提交最终证据链**
+- [x] **Step 3: 提交最终证据链**
 
   ```bash
   git add apps/control-plane docs README.md
