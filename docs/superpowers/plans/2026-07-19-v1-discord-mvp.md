@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 实现与本地确定性验证已完成（Task 1–7、Task 8 的本地收口）；隔离部署与真实 Discord 验收待外部目标和明确授权。
+**Plan status:** Revision-01（2026-07-20）待用户审阅。Task 1–7 已完成；专用部署和真实双来源 `history/max_pages=1` 已通过，但本修订将剩余 MVP 退出门槛拆成阅读体验、部署、真实增量、失败隔离、普通用户与质量验收任务。未经本修订批准，不开始新增页面代码或新的真实 Discord 验收。
 
 **Goal:** 在已验证的 V0 控制面与本地 Worker 边界上，交付可供管理员与受邀普通用户日常阅读的 Discord MVP。
 
@@ -44,6 +44,10 @@
 | `apps/control-plane/src/app/{api,discord}/**/*.test.ts*`、`tests/e2e/v1/*` | API/UI、权限、数据查询和端到端验收。 |
 | `scripts/v1/run-e2e.sh` | 明确区分 deterministic 与显式授权的 real-discord 验收入口。 |
 | `docs/engineering-journal/2026-07-19-v1.md`、`docs/spikes/2026-07-19-v1-decision-report.md` | 只记录脱敏证据、结论、限制和 V2/V3 门禁。 |
+| `apps/control-plane/src/components/reader/reader-presentation.ts` | 将已 allowlist 的 summary JSON 投影为可读的 topic、warning、媒体边界与证据计数；未知字段不显示。 |
+| `apps/control-plane/src/components/reader/reader-presentation.test.ts` | 验证展示投影不回显未知/敏感字段，且保留 topic 证据 ID 计数。 |
+| `apps/control-plane/src/components/admin/AdminShell.tsx` | 统一管理员导航与当前区域标识；只链接已受管理员路由保护的页面。 |
+| `apps/control-plane/src/components/admin/admin-shell.test.tsx` | 验证管理员导航不渲染来源 URL、Profile、Prompt 或凭据字段。 |
 
 ## Task 1: 扩展数据库模型与原子持久化边界
 
@@ -482,10 +486,413 @@
   git commit -m "docs(v1): record discord mvp validation"
   ```
 
+### Task 8 actual state at 2026-07-20
+
+- 专用 Supabase 已应用 `001`–`006` 迁移，Vercel 控制面已部署；首页返回 `200`，未认证 reader API 返回 `401`。
+- 两个真实授权来源各完成一个 `history/max_pages=1` 任务。最终只读聚合验收为：`2` 个 `succeeded` 任务、`2` 个来源、`20` 条 raw、`20` 条 Canonical、`2` 次 structured run、`8` 条 current daily summary 与 `40` 条 evidence reference。
+- 一次 Browser Bridge 缺少网络响应被保留为 `retryable_failed`，刷新后按重试语义恢复并成功；该结果不替代 Spec 7 所需的预设、可操作失败隔离。
+- 因未完成真实增量二次去重/checkpoint、普通用户阅读、移动端视觉、预设失败隔离和真实质量抽检，Task 8 及 V1 总体仍是 **conditional**。
+
+## Revision-01: MVP 收口实施任务
+
+本修订不改变 V1 Spec、数据库 schema、Worker 协议、RLS 角色或采集技术路线。它只把既有安全 Reader DTO 呈现为正式阅读界面，并用显式、有界、可复核的验收补齐 Spec 7.1–7.3。
+
+### Task 9: 把安全 Reader DTO 投影为可读的投研内容模型
+
+**Files:**
+
+- Create: `apps/control-plane/src/components/reader/reader-presentation.ts`
+- Create: `apps/control-plane/src/components/reader/reader-presentation.test.ts`
+- Modify: `apps/control-plane/src/components/reader/DiscordReader.tsx`
+- Modify: `apps/control-plane/src/components/reader/discord-reader.test.tsx`
+
+**Interfaces:**
+
+```ts
+export type PresentedTopic = {
+  title: string;
+  summary: string;
+  sourceMessageIds: string[];
+  authorScope: "target" | "channel" | null;
+  tickers: string[];
+  operationTendency: string | null;
+  uncertainty: string | null;
+};
+
+export type SummaryPresentation = {
+  topics: PresentedTopic[];
+  warnings: string[];
+  mediaUnparsed: boolean;
+};
+
+export function presentSummary(output: unknown): SummaryPresentation;
+export function evidenceCount(value: unknown): number;
+```
+
+- `presentSummary` 只读取已经批准的 `topics`、`warnings`、`media_unparsed` 和 topic allowlist 字段；未知字段、raw reference、Prompt、Provider 诊断与异常 JSON 形状均不显示。
+- `evidenceCount` 只返回字符串数组长度；它不返回或拼接 message ID 内容。页面仍从 `ReaderDay.messages` 的安全 DTO 打开实际证据。
+
+- [ ] **Step 1: 写失败测试**
+
+  在 `reader-presentation.test.ts` 添加公开 fixture；测试 safe projection 与 fail-closed 行为：
+
+  ```ts
+  it("projects only approved structured fields", () => {
+    const result = presentSummary({
+      topics: [{ title: "Earnings", summary: "Guidance changed.", source_message_ids: ["message-1", "message-2"], author_scope: "target", tickers: ["ABC"], hidden_note: "must not render" }],
+      warnings: ["Unparsed attachment"], media_unparsed: true, local_raw_ref: "local://must-not-render",
+    });
+    expect(result.topics[0]?.title).toBe("Earnings");
+    expect(result.topics[0]?.sourceMessageIds).toEqual(["message-1", "message-2"]);
+    expect(JSON.stringify(result)).not.toContain("local://");
+    expect(JSON.stringify(result)).not.toContain("hidden_note");
+    expect(evidenceCount(["message-1", "message-2"])).toBe(2);
+  });
+
+  it("fails closed for malformed output", () => {
+    expect(presentSummary({ topics: "not-an-array", warnings: [3] })).toEqual({ topics: [], warnings: [], mediaUnparsed: false });
+  });
+  ```
+
+- [ ] **Step 2: 运行失败测试**
+
+  Run: `cd apps/control-plane && npm test -- --run src/components/reader/reader-presentation.test.ts`
+
+  Expected: FAIL，因为 `reader-presentation.ts` 尚不存在。
+
+- [ ] **Step 3: 实现最小安全投影与阅读顺序**
+
+  在 `reader-presentation.ts` 使用运行时类型收窄，不得以 `as` 把未知 JSON 直接渲染：
+
+  ```ts
+  type JsonRecord = Record<string, unknown>;
+  const record = (value: unknown): JsonRecord | null => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+    return Object.fromEntries(Object.entries(value));
+  };
+  const strings = (value: unknown): string[] => Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
+
+  export function evidenceCount(value: unknown): number { return strings(value).length; }
+
+  export function presentSummary(output: unknown): SummaryPresentation {
+    const root = record(output);
+    if (!root || !Array.isArray(root.topics) || !Array.isArray(root.warnings)) return { topics: [], warnings: [], mediaUnparsed: false };
+    return {
+      topics: root.topics.flatMap((value) => {
+        const topic = record(value);
+        if (!topic || typeof topic.title !== "string" || typeof topic.summary !== "string") return [];
+        return [{ title: topic.title, summary: topic.summary, sourceMessageIds: strings(topic.source_message_ids), authorScope: topic.author_scope === "target" || topic.author_scope === "channel" ? topic.author_scope : null, tickers: strings(topic.tickers), operationTendency: typeof topic.operation_tendency === "string" ? topic.operation_tendency : null, uncertainty: typeof topic.uncertainty === "string" ? topic.uncertainty : null }];
+      }),
+      warnings: strings(root.warnings), mediaUnparsed: root.media_unparsed === true,
+    };
+  }
+  ```
+
+  修改 `DiscordReader`，以“日累计总结 → topic 卡片 → warnings/未解析媒体 → 批次 → 可展开 evidence → 历史版本”替换 `<pre>{JSON.stringify(...)}</pre>`。无可展示 topic 时显示 `No structured topics were generated for this batch.`，不输出原始 JSON 或 message ID。
+
+- [ ] **Step 4: 验证 Reader 内容边界**
+
+  Run: `cd apps/control-plane && npm test -- --run src/components/reader/reader-presentation.test.ts src/components/reader/discord-reader.test.tsx src/app/api/api.integration.test.ts`
+
+  Expected: PASS；安全 DTO、摘要呈现和普通用户 API allowlist 均继续通过。
+
+- [ ] **Step 5: Commit**
+
+  ```bash
+  git add apps/control-plane/src/components/reader/reader-presentation.ts apps/control-plane/src/components/reader/reader-presentation.test.ts apps/control-plane/src/components/reader/DiscordReader.tsx apps/control-plane/src/components/reader/discord-reader.test.tsx
+  git commit -m "feat(v1): present discord research summaries safely"
+  ```
+
+### Task 10: 完成阅读页、认证页与管理员操作框架
+
+**Files:**
+
+- Create: `apps/control-plane/src/components/admin/AdminShell.tsx`
+- Create: `apps/control-plane/src/components/admin/admin-shell.test.tsx`
+- Modify: `apps/control-plane/src/app/discord/page.tsx`
+- Modify: `apps/control-plane/src/components/reader/DiscordReader.tsx`
+- Modify: `apps/control-plane/src/components/reader/ReaderStatus.tsx`
+- Modify: `apps/control-plane/src/app/admin/layout.tsx`
+- Modify: `apps/control-plane/src/app/admin/page.tsx`
+- Modify: `apps/control-plane/src/app/admin/sources/page.tsx`
+- Modify: `apps/control-plane/src/app/admin/tasks/page.tsx`
+- Modify: `apps/control-plane/src/app/admin/workers/page.tsx`
+- Modify: `apps/control-plane/src/app/(auth)/login/page.tsx`
+- Modify: `apps/control-plane/src/app/(auth)/invite/page.tsx`
+- Modify: `apps/control-plane/src/app/globals.css`
+
+**Interfaces:**
+
+```ts
+export type AdminSection = "overview" | "sources" | "tasks" | "workers";
+
+export function AdminShell(input: { active: AdminSection; children: React.ReactNode }): React.ReactElement;
+```
+
+- `/discord` 固定按“来源/日期 → 日累计总结 → 批次 → 可展开证据 → 历史版本”呈现；状态只解释内容，不占主阅读区。
+- 桌面宽度 `>= 768px` 使用来源/日期侧栏；窄屏 `< 768px` 将两个选择器移到内容前方的单列工具栏，不能横向溢出。
+- 管理员页只呈现来源、任务、Worker 与安全状态；不增加普通用户可见的运行诊断，不显示 URL、Profile、Cookie、Prompt、raw 路径或完整响应。
+
+- [ ] **Step 1: 写失败测试**
+
+  在 `admin-shell.test.tsx` 使用已安装的 `react-dom/server`：
+
+  ```tsx
+  it("renders only the four safe admin navigation destinations", () => {
+    const html = renderToStaticMarkup(<AdminShell active="sources"><p>Sources</p></AdminShell>);
+    expect(html).toContain('href="/admin/sources"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).not.toContain("channel_url");
+    expect(html).not.toContain("profile_ref");
+    expect(html).not.toContain("prompt");
+  });
+  ```
+
+  在 `discord-reader.test.tsx` 用合法公开 `ReaderDay` fixture 调用 `renderToStaticMarkup(<DiscordReader days={days} />)`，断言初始 HTML 包含 topic 标题、`Batch summaries`、`Evidence-backed messages`、`Channel` 与 `Date`；断言不含 `local_raw_ref` 或 `source_message_ids`。
+
+- [ ] **Step 2: 运行失败测试**
+
+  Run: `cd apps/control-plane && npm test -- --run src/components/admin/admin-shell.test.tsx src/components/reader/discord-reader.test.tsx`
+
+  Expected: FAIL，因为 `AdminShell` 和新的 Reader markup 尚未存在。
+
+- [ ] **Step 3: 实现页面框架与响应式样式**
+
+  1. `AdminShell` 固定链接 `Overview`、`Sources`、`Tasks`、`Workers`，当前 section 使用 `aria-current="page"`；各 admin page 传入当前 section。它不接收、查询或显示私有来源配置。
+  2. `/discord` 增加 `reader-page-header`；topic 卡片只含标题、归因范围、ticker、摘要、不确定性与 “`N` evidence messages” 计数。用户点击 evidence `<details>` 后才显示 safe Canonical 消息正文。
+  3. `ReaderStatus` 改为读者文案：成功说明当前安全摘要可读；处理中/可重试失败说明上一次安全摘要仍可读；未解析媒体明确说明不解析图片、PDF 或外部正文。
+  4. `globals.css` 定义 `--ink`、`--surface`、`--muted`、`--line`、`--success`、`--warning`、`--danger` token；桌面 `reader-shell` 使用 `240px minmax(0, 1fr)`，手机为单列；键盘 focus 必须可见。
+  5. 登录/邀请码页使用同一认证卡片、`label`、`role="alert"` 错误与明确动作文案；不改变认证 API 或邀请协议。
+
+- [ ] **Step 4: 验证构建与公开 fixture 视觉检查**
+
+  Run: `cd apps/control-plane && npm run lint && npm test && npm run build`
+
+  Expected: PASS；无新增生产依赖，阅读、管理员与认证页面均能构建。
+
+  在本地使用公开 fixture 数据检查 `1280px` 与 `375px`：来源/日期均可操作，topic 不横向溢出，batch/evidence 可展开，管理员导航不含敏感字段。截图只能使用公开 fixture，不能截取真实 Discord 内容。
+
+- [ ] **Step 5: Commit**
+
+  ```bash
+  git add apps/control-plane/src/components/admin/AdminShell.tsx apps/control-plane/src/components/admin/admin-shell.test.tsx apps/control-plane/src/app/admin apps/control-plane/src/app/discord/page.tsx apps/control-plane/src/components/reader apps/control-plane/src/app/(auth) apps/control-plane/src/app/globals.css
+  git commit -m "feat(v1): refine discord reader and admin workspace"
+  ```
+
+### Task 11: 部署阅读体验并回归验证正式环境
+
+**Files:**
+
+- Modify: `docs/engineering-journal/2026-07-19-v1.md`
+- Modify: `docs/spikes/2026-07-19-v1-decision-report.md`
+
+**Interfaces:**
+
+- 使用现有专用 Supabase 和 Vercel 项目；本任务不新增迁移、不重置远程数据库、不改变 environment variables。
+- 部署后的公开探针只允许检查首页 `200` 和未认证 `/api/reader/discord` 的 `401`，不得输出真实 reader 内容。
+
+- [ ] **Step 1: 运行部署前完整回归**
+
+  Run: `supabase db reset && supabase test db`
+
+  Run: `cd apps/control-plane && npm run lint && npm test && npm run build`
+
+  Run: `PYTHONPATH=workers/v0/src:. .venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_*.py' -v && PYTHONPATH=workers/v0/src:. .venv/bin/python -m unittest discover -s tests/e2e/v1 -p 'test_*.py' -v`
+
+  Expected: 所有数据库、控制面、Worker 与 V1 E2E 测试通过；任一失败则不部署。
+
+- [ ] **Step 2: 部署控制面并执行安全探针**
+
+  Run: `cd apps/control-plane && npx vercel --prod --yes`
+
+  Run: `curl --noproxy '*' -sS -o /dev/null -w 'homepage_status=%{http_code}\n' "$V1_DEPLOYED_URL/" && curl --noproxy '*' -sS -o /dev/null -w 'unauth_reader_status=%{http_code}\n' "$V1_DEPLOYED_URL/api/reader/discord"`
+
+  Expected: `homepage_status=200` 与 `unauth_reader_status=401`；部署输出、环境变量和探针不得包含真实来源或正文。
+
+- [ ] **Step 3: 更新脱敏部署证据并提交**
+
+  在工程日志追加部署 commit、验证命令、HTTP 状态与“未输出内容”的结论；Final Report 的部署/安全项只记录 pass、conditional 或 fail，不记录 URL、数据库标识、来源 key、任务 ID、正文或凭据。
+
+  ```bash
+  git add docs/engineering-journal/2026-07-19-v1.md docs/spikes/2026-07-19-v1-decision-report.md
+  git commit -m "docs(v1): record reader deployment verification"
+  ```
+
+### Task 12: 完成真实双来源增量、二次去重与 checkpoint 验收
+
+**Files:**
+
+- Modify: `docs/engineering-journal/2026-07-19-v1.md`
+- Modify: `docs/spikes/2026-07-19-v1-decision-report.md`
+
+**Interfaces:**
+
+- 只使用现有两个授权逻辑来源和 owner-only Worker 配置；不新增来源 URL、不读取未授权频道、不使用用户 Token 或直接 Discord REST API。
+- 每个真实任务为 `incremental`、`max_pages <= 5`；执行前后只记录每个来源的任务状态、attempt、Canonical 总数、重复数、checkpoint 是否前移和摘要/证据计数，不输出 ID、正文、URL 或 Prompt。
+
+- [ ] **Step 1: 创建第一轮双来源增量任务**
+
+  在 `/admin/tasks` 对两个已启用来源各创建一个 `incremental` 任务，确认 UI 显示 Incremental 而不是 History；不要在此阶段改变作者规则或 Worker binding。
+
+  每次只领取一个任务，运行既有本地受保护 Worker 入口：
+
+  ```bash
+  V0_REAL_DISCORD_ACK=authorized V1_REAL_DISCORD_ACK=authorized \
+  PYTHONPATH=workers/v0/src .venv/bin/python -m invest_hub_worker.cli run-once \
+    --config "$V1_WORKER_CONFIG" --credential "$V1_WORKER_CREDENTIAL" \
+    --opencli-contract "$V1_OPENCLI_CONTRACT" --prompt-path "$V1_PROMPT_PATH" \
+    --evidence-dir "$V1_EVIDENCE_DIR" --worker-name v1-authorized-worker
+  ```
+
+  Expected: 两次运行均为 `succeeded`，或任一来源留下明确 retryable failure；不得把 missing/stale 解释为成功。
+
+- [ ] **Step 2: 执行第二轮增量并核验无重复**
+
+  对同一两个来源再次创建 `incremental` 任务，并以同一受保护 Worker 运行两次。仅用 service-role 聚合查询或管理员任务页比较：第二轮新增 Canonical 数、duplicate count、每来源 checkpoint 是否只在 `succeeded` 后改变、daily summary version 与 structured run 数。
+
+  Expected: 第二轮不产生重复 Canonical 行；若无新消息，结果可为安全零新增，但不得形成伪造 checkpoint 或失败成功状态。若有新消息，只允许新增唯一 external message ID。
+
+- [ ] **Step 3: 保存脱敏验收结论**
+
+  在受保护本地 evidence 保存每轮计数快照；工程日志只记录 `source_coverage=2`、任务终态计数、重复是否为零、checkpoint 是否满足规则和摘要版本数量。不要把配置值、来源标识、正文或完整模型响应写入仓库。
+
+- [ ] **Step 4: Commit**
+
+  ```bash
+  git add docs/engineering-journal/2026-07-19-v1.md docs/spikes/2026-07-19-v1-decision-report.md
+  git commit -m "docs(v1): record dual-source incremental acceptance"
+  ```
+
+### Task 13: 执行可操作失败隔离与恢复验收
+
+**Files:**
+
+- Modify: `docs/engineering-journal/2026-07-19-v1.md`
+- Modify: `docs/spikes/2026-07-19-v1-decision-report.md`
+
+**Interfaces:**
+
+- 此任务必须在用户对“受控失败”再次确认后运行；它只临时移除一个本地来源映射以触发 `unauthorized`，不修改 Discord、来源规则、远程内容、Cookie 或 Prompt。
+- 受控失败前，owner-only 备份本地 Worker config；恢复时按字节还原并再次验证 `0600`。失败来源记为 A，独立成功来源记为 B；文档只使用 A/B。
+
+- [ ] **Step 1: 建立失败前基线**
+
+  用管理员任务页和只读聚合查询记录 A、B 的 checkpoint 是否存在、当前 Canonical 数量和最新任务状态；输出只允许布尔值与计数。为 A、B 各创建一个 `incremental/max_pages=1` 任务。
+
+- [ ] **Step 2: 制造无内容写入的受控授权失败**
+
+  在本地 protected config 的副本中临时删除 A 的 `[[sources]]` block，保留 B 完整配置。用该副本运行一次 `run-once`，只允许领取 A 任务。
+
+  Expected: A 为 `retryable_failed`，failure class 为 `unauthorized`，A 不新增 raw/Canonical/summary，A checkpoint 不前移；进程不得打开 A 频道或输出配置。
+
+- [ ] **Step 3: 恢复配置并确认 B 独立成功**
+
+  从 owner-only 备份逐字节还原 A block，验证 config 含两个不同 source ID 且 mode 为 `0600`。使用完整配置运行 B 的一个 `incremental/max_pages=1` 任务。
+
+  Expected: B 成功，或产生自身明确分类失败；A 的失败不得阻断 B 被领取、持久化或回报。若 B 失败，停止并记录 conditional，不把隔离验收判为通过。
+
+- [ ] **Step 4: 用管理员正式重试恢复 A**
+
+  在 `/admin/tasks/<task>` 使用 Retry，不直接改数据库行；随后以完整本地配置运行 A 的重试任务。
+
+  Expected: A 通过既有 retry 状态转移恢复为 `succeeded`；任务事件保留失败与重试历史，checkpoint 仅在成功回报后更新。
+
+- [ ] **Step 5: Commit**
+
+  ```bash
+  git add docs/engineering-journal/2026-07-19-v1.md docs/spikes/2026-07-19-v1-decision-report.md
+  git commit -m "docs(v1): record source isolation recovery"
+  ```
+
+### Task 14: 完成普通用户、视觉与真实质量验收
+
+**Files:**
+
+- Modify: `docs/engineering-journal/2026-07-19-v1.md`
+- Modify: `docs/spikes/2026-07-19-v1-decision-report.md`
+- Modify: `docs/project-status.md`
+
+**Interfaces:**
+
+- 普通用户只通过邀请码注册；用户读取共享 `ReaderDay`，不拥有独立来源、任务或阅读进度状态。
+- 真实质量核对只在受保护会话和本地 evidence 中进行；仓库只记录样本数量、检查项计数和 pass/fail，不记录消息、作者、频道、ticker、总结文本或截图。
+
+- [ ] **Step 1: 创建并验证普通用户**
+
+  管理员创建一次性普通用户邀请码。用户用自己的邮箱和密码在正常浏览器窗口完成 `/invite` 与 `/login`；不要使用 Discord 专用 Profile、管理员会话或共享密码。
+
+  Expected: 普通用户可打开 `/discord`，完成来源、日期、批次、证据和历史版本阅读；访问 `/admin` 返回 `403` 或安全重定向，管理 API 返回 `403`，未登录 reader API 返回 `401`。
+
+- [ ] **Step 2: 完成桌面/手机视觉验收**
+
+  使用同一普通用户账户，在 `1280px` 和 `375px` 完成：选择两个来源、切换日期、展开一个 batch、展开一个证据、识别未解析媒体/失败状态（若存在）。截图只使用合成公开 fixture；真实环境只记录通过/失败结果。
+
+  Expected: 选择器可操作、内容不横向溢出、topic/batch/evidence 层级可区分、失败状态不伪装为 no-new-data。
+
+- [ ] **Step 3: 执行真实输出质量抽检**
+
+  在两个来源的最近成功任务中各随机抽取至少一条 structured topic，逐条在受保护界面核对：topic 的 `source_message_ids` 指向当前任务输入；`author_scope=target` 时 author ID 在规则快照中；事实/观点/系统归纳没有混写；每个附件消息均被 `media_unparsed`/warning 覆盖；严重错误归因与媒体臆测均为零。
+
+  Expected: 样本全部通过；任一严重归因或媒体臆测非零时，停止 MVP 发布并记录 conditional/fail。
+
+- [ ] **Step 4: 独立审阅日志与本地证据权限**
+
+  运行 `bash scripts/v0/redact-check.sh && git diff --check`；检查当前 Vercel deployment 的 runtime error 摘要不含真实正文或凭据；只统计本地 evidence 文件数量和 `0600`、目录 `0700` 权限，不读取或打印文件正文。
+
+  Expected: 脱敏、diff 与权限检查均通过；任何敏感输出、宽权限或真实内容进入 Git/日志均为阻断失败。
+
+- [ ] **Step 5: Commit**
+
+  ```bash
+  git add docs/engineering-journal/2026-07-19-v1.md docs/spikes/2026-07-19-v1-decision-report.md docs/project-status.md
+  git commit -m "docs(v1): record reader and quality acceptance"
+  ```
+
+### Task 15: 以 V1 MVP 退出门槛完成最终收口
+
+**Files:**
+
+- Modify: `docs/engineering-journal/2026-07-19-v1.md`
+- Modify: `docs/spikes/2026-07-19-v1-decision-report.md`
+- Modify: `docs/project-status.md`
+- Modify: `README.md`
+- Modify: `docs/README.md`
+
+**Interfaces:**
+
+- Final Report 逐项更新 Spec 7 的 1–12 项；只有 1–11 均为 `pass` 才能将项目状态改为 `V1 Discord 正式可用 MVP`。
+- 若 Task 11–14 的任一验收未通过，Final Report 必须保留 `conditional` 或 `fail`，并在 Next gate 中写出唯一下一项补证据动作；不得为了发布而重写历史失败记录。
+
+- [ ] **Step 1: 运行最终完整验证**
+
+  Run: `supabase db reset && supabase test db`
+
+  Run: `cd apps/control-plane && npm run lint && npm test && npm run build`
+
+  Run: `PYTHONPATH=workers/v0/src:. .venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_*.py' -v && PYTHONPATH=workers/v0/src:. .venv/bin/python -m unittest discover -s tests/e2e/v1 -p 'test_*.py' -v`
+
+  Run: `bash scripts/v0/redact-check.sh && git diff --check`
+
+  Expected: 所有命令通过；真实数据、私密配置与 local evidence 均未进入 Git。
+
+- [ ] **Step 2: 更新发布判定与文档导航**
+
+  将 Task 9–14 的脱敏命令、计数、状态和限制写入 Engineering Journal；将 Final Report 的每一行更新为 pass/conditional/fail；同步 `project-status.md`、`README.md` 与 `docs/README.md`。只有所有阻断项均为 pass 时，使用精确措辞 `V1 Discord 正式可用 MVP`；否则使用 `V1 条件验收`。
+
+- [ ] **Step 3: 提交最终证据链**
+
+  ```bash
+  git add apps/control-plane docs README.md
+  git diff --cached --check
+  git commit -m "docs(v1): close discord mvp acceptance"
+  ```
+
+  Expected: 提交只包含公开代码、公开测试、脱敏文档和无敏感静态资源；`.env*`、`.venv`、本地 evidence、Cookie、真实 fixture 和浏览器配置档均不在暂存区。
+
 ## Plan Self-Review
 
-- Spec coverage: Task 1–2 覆盖多来源、规则和权限数据；Task 3–4 覆盖有界采集、规则归因、批次/日累计摘要、证据和 checkpoint；Task 5–6 覆盖管理员与普通用户正式网页；Task 7–8 覆盖定时补采、离线恢复、真实验证、脱敏与阶段结论。
-- Dependency order: 数据模型和任务快照先于 Worker/摘要持久化；摘要持久化先于阅读页；确定性 E2E 先于远程与真实验证。每个任务都有独立测试和提交点。
+- Spec coverage: Task 1–2 覆盖多来源、规则和权限数据；Task 3–4 覆盖有界采集、规则归因、批次/日累计摘要、证据和 checkpoint；Task 5–6 覆盖管理员与普通用户正式网页；Task 7–8 覆盖定时补采、离线恢复、部署、真实验证、脱敏与阶段结论；Revision-01 的 Task 9–10 将安全 DTO 转为内容优先且响应式的正式页面，Task 11 部署页面，Task 12–14 补齐真实增量、失败隔离、普通用户、质量与日志验收，Task 15 只在全部证据通过后更新 MVP 结论。
+- Dependency order: 数据模型和任务快照先于 Worker/摘要持久化；摘要持久化先于阅读页；安全 DTO 投影先于视觉样式；完整回归先于页面部署；真实增量先于受控失败隔离；普通用户/质量检查先于最终发布判定。每个任务都有独立测试或明确的受保护验收动作。
 - Non-goal check: 未添加 X、媒体解析、普通用户 Token、自动 fallback、第二采集框架或无限历史任务。
-- Placeholder scan: 本 Plan 未使用未决占位文本或“以后实现”等表述；范围上限、接口、文件和命令均已明确。
-- Type consistency: `rule_snapshot`、`collection_scope`、`BatchSummaryPayload` 和 receipt summary IDs 从数据库、契约、Worker 到控制面使用相同含义；实施时若改变任一字段，必须同时更新同一 Task 中的 schema、DTO、测试和 SQL 函数。
+- Placeholder scan: 本 Plan 没有未决实现标记；外部用户邮箱、真实来源和受保护路径不写入仓库，而在对应真实验收步骤中由用户提供/保留在 owner-only 环境。
+- Type consistency: `rule_snapshot`、`collection_scope`、`BatchSummaryPayload` 和 receipt summary IDs 从数据库、契约、Worker 到控制面使用相同含义；`SummaryPresentation` 只投影 `ReaderDay` 中已经安全允许的结构化 output，不能扩展 Reader API 或暴露管理字段。
