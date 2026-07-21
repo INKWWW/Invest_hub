@@ -140,6 +140,8 @@ export interface Database {
           last_checkpoint: string | null;
           rule_snapshot: Json;
           collection_scope: Json;
+          capture_range: Json | null;
+          author_profile_snapshot: Json;
           created_at: string;
           updated_at: string;
         };
@@ -156,6 +158,8 @@ export interface Database {
           last_checkpoint?: string | null;
           rule_snapshot?: Json;
           collection_scope?: Json;
+          capture_range?: Json | null;
+          author_profile_snapshot?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -230,6 +234,118 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["scheduled_sync_windows"]["Insert"]>;
+        Relationships: [];
+      };
+      source_collection_coverage: {
+        Row: {
+          source_id: string;
+          coverage_start_at: string;
+          coverage_through_at: string;
+          last_completed_task_id: string | null;
+          initialized_by: string | null;
+          initialized_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          source_id: string;
+          coverage_start_at: string;
+          coverage_through_at: string;
+          last_completed_task_id?: string | null;
+          initialized_by?: string | null;
+          initialized_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["source_collection_coverage"]["Insert"]>;
+        Relationships: [];
+      };
+      sync_task_capture_progress: {
+        Row: {
+          task_id: string;
+          source_id: string;
+          capture_range: Json;
+          resume_cursor: string | null;
+          page_count: number;
+          oldest_verified_at: string | null;
+          newest_verified_at: string | null;
+          boundary_verified_at: string | null;
+          boundary_kind: "oldest_at_or_before_start" | "history_exhausted" | null;
+          range_complete: boolean;
+          last_error: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          task_id: string;
+          source_id: string;
+          capture_range: Json;
+          resume_cursor?: string | null;
+          page_count?: number;
+          oldest_verified_at?: string | null;
+          newest_verified_at?: string | null;
+          boundary_verified_at?: string | null;
+          boundary_kind?: "oldest_at_or_before_start" | "history_exhausted" | null;
+          range_complete?: boolean;
+          last_error?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sync_task_capture_progress"]["Insert"]>;
+        Relationships: [];
+      };
+      sync_task_capture_segments: {
+        Row: {
+          id: string;
+          task_id: string;
+          attempt: number;
+          idempotency_key: string;
+          request_cursor: string | null;
+          next_cursor: string | null;
+          oldest_occurred_at: string | null;
+          newest_occurred_at: string | null;
+          response_matched: boolean;
+          response_fresh: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          attempt: number;
+          idempotency_key: string;
+          request_cursor?: string | null;
+          next_cursor?: string | null;
+          oldest_occurred_at?: string | null;
+          newest_occurred_at?: string | null;
+          response_matched: boolean;
+          response_fresh: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sync_task_capture_segments"]["Insert"]>;
+        Relationships: [];
+      };
+      source_author_profiles: {
+        Row: {
+          id: string;
+          source_id: string;
+          author_id: string;
+          author_display: string;
+          author_handle: string | null;
+          enabled: boolean;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          author_id: string;
+          author_display: string;
+          author_handle?: string | null;
+          enabled?: boolean;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["source_author_profiles"]["Insert"]>;
         Relationships: [];
       };
       raw_messages: {
@@ -467,6 +583,29 @@ export interface Database {
       };
       create_discord_sync_task: {
         Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_scope: Json };
+        Returns: Json;
+      };
+      initialize_discord_collection_coverage: {
+        Args: { p_source_id: string; p_actor_id: string; p_boundary: string };
+        Returns: Json;
+      };
+      create_windowed_discord_sync_task: {
+        Args: {
+          p_source_id: string;
+          p_parameter_version: string;
+          p_requested_by: string | null;
+          p_trigger: string;
+          p_end_at: string;
+          p_scheduled_window_key: string | null;
+        };
+        Returns: Json;
+      };
+      record_windowed_capture_segment: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_segment: Json };
+        Returns: Json;
+      };
+      complete_windowed_capture_range: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
         Returns: Json;
       };
       enqueue_scheduled_discord_tasks: {

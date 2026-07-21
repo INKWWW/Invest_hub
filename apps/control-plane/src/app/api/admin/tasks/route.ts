@@ -8,7 +8,7 @@ function hasOnlyKeys(body: Record<string, unknown>, allowed: string[]): boolean 
 }
 
 function parseTaskScope(value: unknown): TaskScope | null {
-  if (value === undefined) return { mode: "incremental", maxPages: 5 };
+  if (value === undefined) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const scope = value as Record<string, unknown>;
   if (Object.keys(scope).some((key) => key !== "mode" && key !== "max_pages")

@@ -26,6 +26,18 @@ const taskMocks = vi.hoisted(() => ({
   scheduleDiscordSyncTasks: vi.fn(),
   isScheduleWindowKey: (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/.test(value),
 }));
+const windowedSyncMocks = vi.hoisted(() => ({
+  createManualDiscordRefresh: vi.fn(),
+  initializeSourceCoverage: vi.fn(),
+  WindowedSyncError: class WindowedSyncError extends Error {},
+}));
+const authorProfileMocks = vi.hoisted(() => ({
+  deleteSourceAuthorProfile: vi.fn(),
+  listObservedAuthors: vi.fn(),
+  listSourceAuthorProfiles: vi.fn(),
+  saveSourceAuthorProfile: vi.fn(),
+  SourceAuthorProfileError: class SourceAuthorProfileError extends Error {},
+}));
 const sourceMocks = vi.hoisted(() => ({
   listSources: vi.fn(),
   updateSourceAdministration: vi.fn(),
@@ -47,6 +59,8 @@ vi.mock("../../lib/auth/worker", () => workerMocks);
 vi.mock("../../lib/auth/login", () => loginMocks);
 vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
+vi.mock("../../lib/db/repositories/windowed-sync", () => windowedSyncMocks);
+vi.mock("../../lib/db/repositories/author-profiles", () => authorProfileMocks);
 vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
 vi.mock("../../lib/db/repositories/rules", () => ruleMocks);
 vi.mock("../../lib/db/repositories/reader", () => readerMocks);
@@ -61,6 +75,13 @@ import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
 import { PATCH as patchAdminSource } from "./admin/sources/route";
 import { POST as postAdminRule } from "./admin/rules/route";
 import { POST as postAdminTask } from "./admin/tasks/route";
+import { POST as postCoverageInitialization } from "./admin/sources/[sourceId]/coverage/route";
+import {
+  GET as getAuthorProfiles,
+  POST as postAuthorProfile,
+} from "./admin/sources/[sourceId]/author-profiles/route";
+import { GET as getObservedAuthors } from "./admin/sources/[sourceId]/observed-authors/route";
+import { POST as postManualDiscordRefresh } from "./admin/discord/manual-refresh/route";
 import { GET as getDiscordReader } from "./reader/discord/route";
 import { POST as postScheduleTick } from "./worker/schedule/tick/route";
 
@@ -190,9 +211,29 @@ describe("v0 control-plane API authorization", () => {
     expect(taskMocks.createDiscordSyncTask).not.toHaveBeenCalled();
   });
 
-  it("validates finite task scopes and creates regular tasks with the five-page default", async () => {
+  it("blocks ordinary users from V1.1 coverage, author configuration, and manual refresh APIs", async () => {
+    const params = { params: Promise.resolve({ sourceId: "source-1" }) };
+    const coverage = await postCoverageInitialization(
+      jsonRequest("/api/admin/sources/source-1/coverage", { coverage_start_at: "2026-07-22T00:00:00Z" }),
+      params,
+    );
+    const authors = await getAuthorProfiles(new Request("http://localhost/api/admin/sources/source-1/author-profiles"), params);
+    const observed = await getObservedAuthors(new Request("http://localhost/api/admin/sources/source-1/observed-authors"), params);
+    const manual = await postManualDiscordRefresh(jsonRequest("/api/admin/discord/manual-refresh", { source_id: "source-1" }));
+
+    expect(coverage.status).toBe(403);
+    expect(authors.status).toBe(403);
+    expect(observed.status).toBe(403);
+    expect(manual.status).toBe(403);
+    expect(windowedSyncMocks.initializeSourceCoverage).not.toHaveBeenCalled();
+    expect(windowedSyncMocks.createManualDiscordRefresh).not.toHaveBeenCalled();
+    expect(authorProfileMocks.listSourceAuthorProfiles).not.toHaveBeenCalled();
+    expect(authorProfileMocks.listObservedAuthors).not.toHaveBeenCalled();
+  });
+
+  it("requires an explicit legacy scope instead of silently creating a five-page task", async () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
-    taskMocks.createDiscordSyncTask.mockResolvedValue({ id: "task-1", collection_scope: { mode: "incremental", max_pages: 5 } });
+    taskMocks.createDiscordSyncTask.mockResolvedValue({ id: "task-1", collection_scope: { mode: "history", max_pages: 9 } });
 
     const invalid = await postAdminTask(jsonRequest("/api/admin/tasks", {
       source_id: "source-1",
@@ -201,17 +242,113 @@ describe("v0 control-plane API authorization", () => {
     }));
     expect(invalid.status).toBe(422);
 
+    const missingScope = await postAdminTask(jsonRequest("/api/admin/tasks", {
+      source_id: "source-1",
+      parameter_version: "v1-source-1",
+    }));
+    expect(missingScope.status).toBe(422);
+    expect(taskMocks.createDiscordSyncTask).not.toHaveBeenCalled();
+
     const created = await postAdminTask(jsonRequest("/api/admin/tasks", {
       source_id: "source-1",
       parameter_version: "v1-source-1",
+      scope: { mode: "history", max_pages: 9 },
     }));
     expect(created.status).toBe(201);
     expect(taskMocks.createDiscordSyncTask).toHaveBeenCalledWith({
       sourceId: "source-1",
       parameterVersion: "v1-source-1",
       requestedBy: "admin-1",
-      scope: { mode: "incremental", maxPages: 5 },
+      scope: { mode: "history", maxPages: 9 },
     });
+  });
+
+  it("allows admins to initialize coverage, select observed authors, and queue a safe manual refresh", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    windowedSyncMocks.initializeSourceCoverage.mockResolvedValue({
+      sourceId: "source-1",
+      coverageStartAt: "2026-07-22T00:00:00Z",
+      coverageThroughAt: "2026-07-22T00:00:00Z",
+    });
+    authorProfileMocks.listObservedAuthors.mockResolvedValue([{
+      authorId: "discord-stable-author-1",
+      authorDisplay: "Observed author",
+      authorHandle: "observed-author",
+    }]);
+    authorProfileMocks.saveSourceAuthorProfile.mockResolvedValue({
+      sourceId: "source-1",
+      authorId: "discord-stable-author-1",
+      authorDisplay: "Observed author",
+      authorHandle: "observed-author",
+      enabled: true,
+    });
+    windowedSyncMocks.createManualDiscordRefresh.mockResolvedValue({
+      id: "window-task-1",
+      sourceId: "source-1",
+      status: "queued",
+      trigger: "manual",
+      startAt: "2026-07-22T00:00:00Z",
+      endAt: "2026-07-22T03:00:00Z",
+      queuedAt: "2026-07-22T03:00:00Z",
+      idempotent: false,
+    });
+    const params = { params: Promise.resolve({ sourceId: "source-1" }) };
+
+    const coverage = await postCoverageInitialization(
+      jsonRequest("/api/admin/sources/source-1/coverage", { coverage_start_at: "2026-07-22T00:00:00Z" }),
+      params,
+    );
+    expect(coverage.status).toBe(200);
+    expect(await coverage.json()).toEqual({
+      coverage: {
+        source_id: "source-1",
+        coverage_start_at: "2026-07-22T00:00:00Z",
+        coverage_through_at: "2026-07-22T00:00:00Z",
+      },
+    });
+
+    const observed = await getObservedAuthors(new Request("http://localhost/api/admin/sources/source-1/observed-authors"), params);
+    expect(observed.status).toBe(200);
+    expect(await observed.json()).toEqual({ authors: [{
+      author_id: "discord-stable-author-1",
+      author_display: "Observed author",
+      author_handle: "observed-author",
+    }] });
+
+    const invalidProfile = await postAuthorProfile(
+      jsonRequest("/api/admin/sources/source-1/author-profiles", { author_id: "discord-stable-author-1", author_display: "free-text" }),
+      params,
+    );
+    expect(invalidProfile.status).toBe(422);
+    expect(authorProfileMocks.saveSourceAuthorProfile).not.toHaveBeenCalled();
+
+    const profile = await postAuthorProfile(
+      jsonRequest("/api/admin/sources/source-1/author-profiles", { author_id: "discord-stable-author-1" }),
+      params,
+    );
+    expect(profile.status).toBe(201);
+    expect(await profile.json()).toEqual({ author_profile: {
+      source_id: "source-1",
+      author_id: "discord-stable-author-1",
+      author_display: "Observed author",
+      author_handle: "observed-author",
+      enabled: true,
+    } });
+
+    const manual = await postManualDiscordRefresh(jsonRequest("/api/admin/discord/manual-refresh", { source_id: "source-1" }));
+    expect(manual.status).toBe(202);
+    const manualBody = await manual.json();
+    expect(manualBody).toEqual({ task: {
+      id: "window-task-1",
+      source_id: "source-1",
+      status: "queued",
+      trigger: "manual",
+      start_at: "2026-07-22T00:00:00Z",
+      end_at: "2026-07-22T03:00:00Z",
+      queued_at: "2026-07-22T03:00:00Z",
+      idempotent: false,
+    } });
+    expect(JSON.stringify(manualBody)).not.toContain("cursor");
   });
 
   it("rejects source administration payloads that try to include collection secrets or URLs", async () => {
