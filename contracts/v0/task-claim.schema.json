@@ -27,13 +27,95 @@
       }
     },
     "collection_scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "max_pages"],
+          "properties": {
+            "mode": { "enum": ["incremental", "history"] },
+            "max_pages": { "type": "integer", "minimum": 1, "maximum": 25 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "const": "window" }
+          }
+        }
+      ]
+    },
+    "capture_range": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "max_pages"],
+      "required": ["mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"],
       "properties": {
-        "mode": { "enum": ["incremental", "history"] },
-        "max_pages": { "type": "integer", "minimum": 1, "maximum": 25 }
+        "mode": { "const": "window" },
+        "trigger": { "enum": ["scheduled", "manual", "bootstrap"] },
+        "timezone": { "const": "Asia/Shanghai" },
+        "start_at": { "type": "string", "format": "date-time" },
+        "end_at": { "type": "string", "format": "date-time" },
+        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|16:00|20:50)[+]08:00$" }
+      }
+    },
+    "coverage_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverage_start_at", "coverage_through_at", "last_completed_task_id"],
+      "properties": {
+        "coverage_start_at": { "type": "string", "format": "date-time" },
+        "coverage_through_at": { "type": "string", "format": "date-time" },
+        "last_completed_task_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 }
+      }
+    },
+    "capture_progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resume_cursor", "page_count", "range_complete"],
+      "properties": {
+        "resume_cursor": { "type": ["string", "null"], "maxLength": 512 },
+        "page_count": { "type": "integer", "minimum": 0 },
+        "range_complete": { "const": false }
+      }
+    },
+    "author_profile_snapshot": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["author_id", "author_display", "author_handle", "enabled"],
+        "properties": {
+          "author_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "author_display": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "author_handle": { "type": ["string", "null"], "maxLength": 512 },
+          "enabled": { "const": true }
+        }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "collection_scope": {
+            "type": "object",
+            "required": ["mode"],
+            "properties": { "mode": { "const": "window" } }
+          }
+        },
+        "required": ["collection_scope"]
+      },
+      "then": {
+        "properties": {
+          "capture_range": {},
+          "coverage_snapshot": {},
+          "capture_progress": {},
+          "author_profile_snapshot": {}
+        },
+        "required": ["capture_range", "coverage_snapshot", "capture_progress", "author_profile_snapshot"]
+      }
+    }
+  ]
 }
