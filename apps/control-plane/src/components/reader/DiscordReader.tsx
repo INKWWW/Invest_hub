@@ -78,19 +78,11 @@ export function DiscordReader({ days }: { days: ReaderDay[] }) {
       </section>
       <section>
         <h3>Batch summaries</h3>
-        {selected.batches.map((batch) => <details key={batch.id}>
+        {selected.batches.map((batch) => <details key={batch.id} open>
           <summary>Batch with {Array.isArray(batch.inputMessageIds) ? batch.inputMessageIds.length : "recorded"} evidence messages</summary>
           <div className="batch-summary">
             <SummaryTopics presentation={presentSummary(batch.output, batch.coverage)} emptyCopy="No structured topics were generated for this batch." />
           </div>
-        </details>)}
-      </section>
-      <section>
-        <h3>Evidence-backed messages</h3>
-        {selected.messages.map((message) => <details key={message.externalMessageId}>
-          <summary>{message.authorDisplay ?? "Unknown"} · {message.occurredAt ?? "unknown time"}{message.hasUnparsedMedia ? " · unparsed media" : ""}{message.evidenceExpired ? " · evidence expired" : ""}</summary>
-          <p>{message.content}</p>
-          {message.unresolved ? <p>Reply context unresolved.</p> : null}
         </details>)}
       </section>
       {selected.dailySummary.history.length > 1 ? <section>

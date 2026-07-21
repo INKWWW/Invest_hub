@@ -9,9 +9,8 @@ export default async function DiscordPage() {
   return <main className="reader-page">
     <header className="reader-page-header">
       <a className="product-mark" href="/">Invest Hub</a>
-      <p className="reader-kicker">Discord research</p>
       <h1>Daily research, grounded in evidence.</h1>
-      <p>Generated summaries and their permitted evidence. Local raw files and Worker diagnostics are never shown here.</p>
+      <p>Generated summaries and their permitted evidence.</p>
     </header>
     <DiscordReader days={await readDiscordDay()} />
   </main>;

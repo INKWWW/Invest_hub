@@ -27,7 +27,7 @@ describe("DiscordReader", () => {
     expect(readerStatusLabel("failed")).toContain("Failed");
   });
 
-  it("renders evidence-backed topics without serializing summary JSON", () => {
+  it("renders summary-first content without serializing summary JSON or raw evidence", () => {
     const renderedDays: ReaderDay[] = [{
       source: { sourceKey: "source-a", displayName: "Source A" },
       naturalDate: "2099-01-02",
@@ -81,9 +81,12 @@ describe("DiscordReader", () => {
     expect(html).toContain("2 evidence messages");
     expect(html).toContain("Unparsed media");
     expect(html).toContain("Batch summaries");
-    expect(html).toContain("Evidence-backed messages");
+    expect(html).toContain("<details open=\"\">");
     expect(html).toContain("Channel");
     expect(html).toContain("Date");
+    expect(html).not.toContain("Evidence-backed messages");
+    expect(html).not.toContain("Fixture Author");
+    expect(html).not.toContain("Public fixture message.");
     expect(html).not.toContain("source_message_ids");
     expect(html).not.toContain("local://");
   });
