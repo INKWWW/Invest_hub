@@ -4,7 +4,7 @@ Last updated: 2026-07-22
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收、专用 V1 数据库 migration 与控制面生产部署。来源面向人的名称统一采用“社区名 · 频道名”，内部逻辑标识不再出现在阅读、任务或来源列表。真实范围验收仍待完成。**
+**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收、专用 V1 数据库 migration 与控制面生产部署。来源面向人的名称统一采用“社区名 · 频道名”，内部逻辑标识不再出现在阅读、任务或来源列表。真实范围验收仍待完成。V2 X 指定博主信息收集与阅读 Spec 已获批准，独立 implementation plan 为 Draft、待审阅批准；任何 V2 实现、共享协议改动、部署或真实 X 采集仍须等待该 Plan 获批及逐项授权。**
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
@@ -12,7 +12,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位。管理员指定作者现在可直接输入，已观察作者仅作建议；唯一 stable ID 会在任务页面持久化后解析，零候选保持 pending、多候选标记 ambiguous。来源名称是受保护的运行数据：页面与任务选择只显示“社区名 · 频道名”，内部 `source_key` 只用于服务端与 Worker 绑定，真实名称不进入 Git。生产控制面已部署此前修订，但尚未完成真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，故仍不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 或 V1.1 Plan 直接视为后续实现授权。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位。管理员指定作者现在可直接输入，已观察作者仅作建议；唯一 stable ID 会在任务页面持久化后解析，零候选保持 pending、多候选标记 ambiguous。来源名称是受保护的运行数据：页面与任务选择只显示“社区名 · 频道名”，内部 `source_key` 只用于服务端与 Worker 绑定，真实名称不进入 Git。生产控制面已部署此前修订，但尚未完成真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，故仍不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。V2 Spec 已批准，但 V2 Plan 仍待批准；V2 实现、真实 X 采集、共享协议改动或部署均不由现有 V1/V1.1 Plan 授权。媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 与模块 2–4 仍须各自完成 Spec/Plan 批准。
 
 ## Approval status
 
@@ -25,6 +25,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [V0 基础设施与技术验证设计](superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md)
   - [V1 Discord 正式可用 MVP 设计](superpowers/specs/2026-07-19-v1-discord-mvp-design.md)
   - [V1.1 Discord 完整时间窗采集与观点阅读设计](superpowers/specs/2026-07-22-v1.1-discord-windowed-collection-and-insight-design.md)
+  - [V2 X 指定博主信息收集与阅读设计](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
@@ -112,4 +113,4 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## Next gate
 
-V1 MVP 退出门槛已通过。V1.1 的 Task 1–7、Task 8 本地确定性验收、远程 migration、控制面部署和双来源初始 coverage 已完成。此时仍不能将 V1.1 标记为“已验收”或“正式可用”：尚缺管理员重点作者选择后的真实 Discord 正常窗口与手动范围验收、作者配置生效、普通用户真实页面审阅和明确 label/config 的 launchd 安装。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2、X、媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作，仍必须分别编写并批准新的 Spec 与 implementation plan；本次结论不构成生产 SLA。
+V1 MVP 退出门槛已通过。V1.1 的 Task 1–7、Task 8 本地确定性验收、远程 migration、控制面部署和双来源初始 coverage 已完成。此时仍不能将 V1.1 标记为“已验收”或“正式可用”：尚缺管理员重点作者选择后的真实 Discord 正常窗口与手动范围验收、作者配置生效、普通用户真实页面审阅和明确 label/config 的 launchd 安装。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2 X Spec 已批准、V2 Plan 待批准；在 Plan 获批前，X 实现、共享协议改动、真实 X 采集与部署仍不启动。媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作仍须分别完成 Spec/Plan 批准；本次结论不构成生产 SLA。

@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：V2 / X 指定博主信息收集与阅读
-- 书面状态：**Draft — 待用户审阅批准**
+- 书面状态：**已批准（用户确认 2026-07-22）**；独立 V2 implementation plan 待审阅批准
 - 日期：2026-07-22
 - 事实输入：[intake 的 V2 X 信息收集与阅读讨论补充](../../intake.md)、[项目状态](../../project-status.md)、[V1 Engineering Journal](../../engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](../../engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)
 - 前置结论：V1 已完成 Discord 正式可用 MVP；V1.1 的代码、专用数据库 migration、控制面部署和初始覆盖水位已生效，但真实 Discord 范围验收与本地常驻 Agent 安装仍待独立授权。两者都**不证明** X 网页采集、X 内容模型或 X 阅读体验已通过验证。
@@ -190,7 +190,7 @@ V2 implementation plan 必须在批准后逐项提出最小迁移、读写边界
 
 ## 9. 后续阶段门禁
 
-本文仍为 Draft。用户批准本 Spec 后，下一步只能是编写独立 V2 implementation plan。该 Plan 必须列出：
+本文已获用户批准。下一步是审阅并批准独立 V2 implementation plan；该 Plan 必须列出：
 
 - X 网页采集验证的准确范围、样本、Go/No-Go 判定和脱敏 evidence；
 - 最小 Canonical 字段、身份/类型/上下文关系、去重和冲突策略；
@@ -215,4 +215,4 @@ V2 implementation plan 必须在批准后逐项提出最小迁移、读写边界
 - 完整性：每博主独立范围，页数或滚动次数不是成功条件；checkpoint 只在完整持久化后推进。
 - 产品边界：每博主每日摘要、原帖链接和历史版本清晰；不做跨博主统一结论或 V3 统一体验。
 - 安全边界：真实内容与浏览器会话留在 owner-only 环境；普通阅读与管理/运行信息隔离。
-- 阶段边界：本文是待审阅 Draft，不授权代码、共享协议改动、部署或真实 X 采集；V2 Plan 必须独立批准。
+- 阶段边界：本文已获批准，但仍不授权代码、共享协议改动、部署或真实 X 采集；V2 Plan 必须独立批准。
