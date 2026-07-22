@@ -39,8 +39,12 @@ export function SourceCoverageForm({ sourceId }: { sourceId: string }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!date) {
-      setMessage("请选择首次采集的上海日期。");
+    const parsedDate = new Date(`${date}T00:00:00+08:00`);
+    const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date)
+      && !Number.isNaN(parsedDate.getTime())
+      && parsedDate.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }) === date;
+    if (!validDate) {
+      setMessage("请输入有效的首次采集日期，格式为 YYYY-MM-DD。");
       return;
     }
     setIsSubmitting(true);
@@ -77,7 +81,7 @@ export function SourceCoverageForm({ sourceId }: { sourceId: string }) {
   return <form className="source-coverage-form" onSubmit={submit}>
     <h3>首次采集范围</h3>
     <p>请选择上海时间的已有边界。初始化后，连续覆盖从该时点开始，不能由页面改写。</p>
-    <label>日期 <input aria-label="首次采集日期" type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
+    <label>日期 <input aria-label="首次采集日期" type="text" inputMode="numeric" autoComplete="off" placeholder="YYYY-MM-DD" maxLength={10} pattern="\d{4}-\d{2}-\d{2}" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
     <label>上海时间边界 <select value={time} onChange={(event) => setTime(event.target.value as typeof boundaryTimes[number])}>{boundaryTimes.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
     <button type="submit" disabled={isSubmitting || coverage === undefined}>{isSubmitting ? "正在初始化…" : "初始化采集范围"}</button>
     {coverage === undefined ? <p>正在读取采集范围…</p> : null}
