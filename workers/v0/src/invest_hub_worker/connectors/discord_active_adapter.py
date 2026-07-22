@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Iterable, Mapping
+from datetime import datetime
 from typing import Callable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -51,44 +52,62 @@ class DiscordActiveAdapter:
             raise ConnectorError("Discord collection mode is invalid", code="preflight")
         cursor = checkpoint
         for _page_index in range(max_pages):
-            started = self.clock()
+            page = self.fetch_page(source, cursor, collection_mode=collection_mode)
+            yield page
+            if page.cursor_after is None:
+                return
+            cursor = page.cursor_after
+
+    def fetch_page(
+        self,
+        source: LocalWorkerConfig,
+        cursor: str | None,
+        *,
+        end_at: datetime | None = None,
+        collection_mode: str = "history",
+    ) -> RawPage:
+        """Return one fresh, route-matched Discord page without page budgeting."""
+
+        if collection_mode not in {"history", "incremental"}:
+            raise ConnectorError("Discord collection mode is invalid", code="preflight")
+        started = self.clock()
+        self._check_deadline(started)
+        response = self._fetch(source, cursor, cache_buster=None, collection_mode=collection_mode)
+        self._check_deadline(started)
+        entry, match_state = self._match(response)
+        network_attempts = 1
+        if entry is None:
             self._check_deadline(started)
-            response = self._fetch(source, cursor, cache_buster=None, collection_mode=collection_mode)
+            response = self._fetch(
+                source,
+                cursor,
+                cache_buster=f"v0-{uuid.uuid4().hex}",
+                collection_mode=collection_mode,
+            )
             self._check_deadline(started)
             entry, match_state = self._match(response)
-            network_attempts = 1
-            if entry is None:
-                self._check_deadline(started)
-                response = self._fetch(
-                    source,
-                    cursor,
-                    cache_buster=f"v0-{uuid.uuid4().hex}",
-                    collection_mode=collection_mode,
-                )
-                self._check_deadline(started)
-                entry, match_state = self._match(response)
-                network_attempts = 2
-            if entry is None:
-                code = "opencli_missing" if match_state == "missing" else "opencli_stale"
-                raise ConnectorError(f"Discord network response is {match_state}", code=code)
+            network_attempts = 2
+        if entry is None:
+            code = "opencli_missing" if match_state == "missing" else "opencli_stale"
+            raise ConnectorError(f"Discord network response is {match_state}", code=code)
 
-            cursor_after = entry.get("cursor_after", response.get("cursor_after"))
-            page_id = str(entry.get("page_id") or response.get("page_id") or f"page-{uuid.uuid4().hex}")
-            messages = entry.get("messages") or []
-            if not isinstance(messages, list):
-                raise ConnectorError("Discord network messages must be a list", code="opencli_contract")
-            yield RawPage(
-                page_id=page_id,
-                source_id=source.source_id,
-                cursor_before=cursor,
-                cursor_after=str(cursor_after) if cursor_after is not None else None,
-                messages=tuple(item for item in messages if isinstance(item, dict)),
-                raw_payload_ref=f"local://discord/{page_id}",
-                telemetry={"network_attempts": network_attempts, "match_state": "matched_new"},
-            )
-            if cursor_after is None:
-                return
-            cursor = str(cursor_after)
+        cursor_after = entry.get("cursor_after", response.get("cursor_after"))
+        page_id = str(entry.get("page_id") or response.get("page_id") or f"page-{uuid.uuid4().hex}")
+        messages = entry.get("messages") or []
+        if not isinstance(messages, list):
+            raise ConnectorError("Discord network messages must be a list", code="opencli_contract")
+        telemetry: dict[str, object] = {"network_attempts": network_attempts, "match_state": "matched_new"}
+        if end_at is not None:
+            telemetry["collection_end_at"] = end_at.isoformat().replace("+00:00", "Z")
+        return RawPage(
+            page_id=page_id,
+            source_id=source.source_id,
+            cursor_before=cursor,
+            cursor_after=str(cursor_after) if cursor_after is not None else None,
+            messages=tuple(item for item in messages if isinstance(item, dict)),
+            raw_payload_ref=f"local://discord/{page_id}",
+            telemetry=telemetry,
+        )
 
     def _fetch(
         self,

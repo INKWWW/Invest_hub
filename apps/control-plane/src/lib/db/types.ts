@@ -571,6 +571,10 @@ export interface Database {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
         Returns: Json;
       };
+      persist_windowed_capture_page: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
+        Returns: Json;
+      };
       replace_source_author_rules: {
         Args: {
           p_source_id: string;

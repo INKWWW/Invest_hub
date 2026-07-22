@@ -22,6 +22,7 @@ const taskMocks = vi.hoisted(() => ({
   getTaskDetail: vi.fn(),
   listRecentTasks: vi.fn(),
   persistWorkerExecution: vi.fn(),
+  persistWindowedCapturePage: vi.fn(),
   recordWindowedCaptureSegment: vi.fn(),
   completeWindowedCaptureRange: vi.fn(),
   recordTaskFailure: vi.fn(),
@@ -599,6 +600,38 @@ describe("v0 control-plane API authorization", () => {
       daily_summary_ids: ["daily-1"],
     });
     expect(taskMocks.persistWorkerExecution).toHaveBeenCalledWith("task-1", 1, "worker-1", validPersistencePayload);
+  });
+
+  it("persists one window page and its resume segment atomically", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    const payload = {
+      ...validPersistencePayload,
+      structured_runs: [],
+      capture_segment: {
+        idempotency_key: "page:1",
+        request_cursor: null,
+        next_cursor: "cursor-1",
+        oldest_occurred_at: "2099-01-01T00:00:00.000Z",
+        newest_occurred_at: "2099-01-01T00:00:00.000Z",
+        response_matched: true,
+        response_fresh: true,
+      },
+    };
+    taskMocks.persistWindowedCapturePage.mockResolvedValue({
+      persisted: true,
+      idempotent: false,
+      resume_cursor: "cursor-1",
+    });
+
+    const response = await postPersist(
+      jsonRequest("/api/worker/tasks/task-1/persist", payload, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ persisted: true, idempotent: false, resume_cursor: "cursor-1" });
+    expect(taskMocks.persistWindowedCapturePage).toHaveBeenCalledWith("task-1", 1, "worker-1", payload);
+    expect(taskMocks.persistWorkerExecution).not.toHaveBeenCalled();
   });
 
   it("maps a conflicting duplicate result to 409", async () => {
