@@ -10,7 +10,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..structured import SchemaError, parse_structured_output, validate_structured_output
+from ..structured import (
+    SchemaError,
+    parse_structured_output,
+    parse_v1_1_chunk_output,
+    parse_v1_1_daily_output,
+    validate_structured_output,
+    validate_v1_1_chunk_output,
+    validate_v1_1_daily_output,
+)
 from .base import ProviderContext, ProviderResponse
 
 
@@ -161,13 +169,7 @@ class CodexCLIProvider:
                 # evidence directory, never in the response or cloud payload.
                 _write_text(raw_ref, raw_text)
                 try:
-                    parsed = parse_structured_output(raw_text)
-                    parsed = validate_structured_output(
-                        parsed,
-                        set(context.input_message_ids) or _input_ids(input_chunk),
-                        set(context.unparsed_media_message_ids) or _media_ids(input_chunk),
-                        set(context.target_author_ids) or None,
-                    )
+                    parsed = self._parse_for_context(raw_text, input_chunk, context)
                 except SchemaError as exc:
                     _write_text(diagnostic_ref, str(exc))
                     return self._response(
@@ -216,6 +218,43 @@ class CodexCLIProvider:
             command.extend(["--model", self.model])
         command.append("-")
         return command
+
+    @staticmethod
+    def _parse_for_context(
+        raw_text: str,
+        input_chunk: tuple[Any, ...],
+        context: ProviderContext,
+    ) -> dict[str, Any]:
+        if context.operation == "legacy_topics":
+            parsed = parse_structured_output(raw_text)
+            return validate_structured_output(
+                parsed,
+                set(context.input_message_ids) or _input_ids(input_chunk),
+                set(context.unparsed_media_message_ids) or _media_ids(input_chunk),
+                set(context.target_author_ids) or None,
+            )
+
+        catalog = {
+            message_id: (author_id, author_display)
+            for message_id, author_id, author_display in context.input_message_authors
+        }
+        if context.operation == "v1_1_chunk":
+            parsed = parse_v1_1_chunk_output(raw_text)
+            return validate_v1_1_chunk_output(
+                parsed,
+                catalog,
+                set(context.unparsed_media_message_ids),
+            )
+
+        parsed = parse_v1_1_daily_output(raw_text)
+        return validate_v1_1_daily_output(
+            parsed,
+            catalog,
+            dict(context.configured_author_profiles),
+            expected_natural_date=str(context.expected_natural_date),
+            expected_as_of=str(context.expected_as_of),
+            unparsed_media_ids=set(context.unparsed_media_message_ids),
+        )
 
     def _response(
         self,

@@ -172,6 +172,19 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/schedule/tick"))
             self.assertEqual(transport.calls[1]["body"], {})
 
+    def test_daily_fact_context_is_read_only_and_scoped_to_the_current_task_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"message_catalog": [], "prior_batches": []}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(protocol.get_daily_fact_context("task-window-1", 2), {"message_catalog": [], "prior_batches": []})
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-window-1/daily-fact-context?attempt=2"))
+            self.assertIsNone(transport.calls[1]["body"])
+
     def test_window_page_and_range_protocols_use_task_scoped_endpoints(self) -> None:
         segment = {
             "contract_version": "v0",

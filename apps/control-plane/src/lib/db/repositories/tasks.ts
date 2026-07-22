@@ -258,6 +258,21 @@ export async function persistWindowedCapturePage(
   return data;
 }
 
+export async function getWindowDailyFactContext(
+  taskId: string,
+  attempt: number,
+  workerId: string,
+) {
+  const { data, error } = await createSupabaseAdminClient().rpc("get_window_daily_fact_context", {
+    p_task_id: taskId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("invalid_daily_fact_context");
+  return data;
+}
+
 export async function recordWindowedCaptureSegment(
   taskId: string,
   attempt: number,

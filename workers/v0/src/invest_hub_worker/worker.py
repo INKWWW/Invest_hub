@@ -99,7 +99,18 @@ class Worker:
             return self.execute(claim)
         if self.execute_windowed is None:
             raise RuntimeError("window task requires a streaming executor")
-        return self.execute_windowed(claim, on_capture_page=self._persist_windowed_capture_page)
+        daily_context = getattr(self.protocol, "get_daily_fact_context", None)
+        if not callable(daily_context):
+            return self.execute_windowed(claim, on_capture_page=self._persist_windowed_capture_page)
+        task_id = claim.get("task_id")
+        attempt = claim.get("attempt")
+        if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            raise RuntimeError("invalid window task identity")
+        return self.execute_windowed(
+            claim,
+            on_capture_page=self._persist_windowed_capture_page,
+            load_daily_fact_context=lambda: daily_context(task_id, attempt),
+        )
 
     def _persist_windowed_capture_page(self, page_execution: dict[str, Any]) -> None:
         persistence = page_execution.get("persistence")

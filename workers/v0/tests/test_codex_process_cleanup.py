@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from invest_hub_worker.providers.base import ProviderContext
 from invest_hub_worker.providers.codex_cli import CodexCLIProvider
+from invest_hub_worker.structured import SchemaError
 
 
 VALID_OUTPUT = {"topics": [], "media_unparsed": False, "media_source_message_ids": [], "warnings": []}
@@ -50,6 +51,41 @@ class TimeoutProcess:
 
 
 class CodexProcessCleanupTests(unittest.TestCase):
+    def test_v1_1_daily_operation_validates_the_configured_author_and_fact_evidence(self) -> None:
+        context = ProviderContext(
+            chunk_id="daily-1",
+            prompt_version="v1.1",
+            prompt_text="private prompt",
+            operation="v1_1_daily",
+            input_message_authors=(("message-1", "author-1", "Author One"),),
+            configured_author_profiles=(("author-1", "Author One"),),
+            expected_natural_date="2099-01-01",
+            expected_as_of="2099-01-01T08:00:00Z",
+        )
+        output = {
+            "schema_version": "v1.1",
+            "natural_date": "2099-01-01",
+            "as_of": "2099-01-01T08:00:00Z",
+            "author_cards": [{
+                "author_id": "author-1",
+                "author_display": "Author One",
+                "core_logic": {"market_trend": None, "stock_judgments": []},
+                "operation_tendency": {"market": None, "stocks": None},
+                "methodology": [],
+                "uncertainty": [],
+                "source_message_ids": ["message-1"],
+            }],
+            "topic_discussions": [],
+            "warnings": [],
+        }
+
+        parsed = CodexCLIProvider._parse_for_context(json.dumps(output), (), context)
+
+        self.assertEqual(parsed["author_cards"][0]["author_id"], "author-1")
+        invalid = {**output, "author_cards": [{**output["author_cards"][0], "author_id": "author-2"}]}
+        with self.assertRaises(SchemaError):
+            CodexCLIProvider._parse_for_context(json.dumps(invalid), (), context)
+
     def test_success_uses_read_only_ephemeral_command_and_persists_raw_ref(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory) / "evidence"

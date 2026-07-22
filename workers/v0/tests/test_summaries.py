@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from invest_hub_worker.canonical import CanonicalMessage
-from invest_hub_worker.summaries import SummaryError, build_batch_summaries
+from invest_hub_worker.summaries import SummaryError, build_batch_summaries, build_v1_1_batch_summaries
 
 
 def message(message_id: str, occurred_at: str, *, media: bool = False) -> CanonicalMessage:
@@ -21,6 +21,33 @@ def message(message_id: str, occurred_at: str, *, media: bool = False) -> Canoni
 
 
 class SummaryTests(unittest.TestCase):
+    def test_v1_1_batches_keep_fact_units_and_the_validated_daily_output_per_shanghai_day(self) -> None:
+        messages = [
+            message("message-1", "2099-01-01T15:30:00Z"),
+            message("message-2", "2099-01-01T16:10:00Z"),
+        ]
+        daily = {
+            "2099-01-01": {"schema_version": "v1.1", "natural_date": "2099-01-01"},
+            "2099-01-02": {"schema_version": "v1.1", "natural_date": "2099-01-02"},
+        }
+        summaries = build_v1_1_batch_summaries(messages, [
+            {
+                "chunk_key": "chunk-1",
+                "input_message_ids": ["message-1"],
+                "output": {"schema_version": "v1.1-chunk", "facts": [{"author_id": "author-1"}], "warnings": []},
+            },
+            {
+                "chunk_key": "chunk-2",
+                "input_message_ids": ["message-2"],
+                "output": {"schema_version": "v1.1-chunk", "facts": [], "warnings": ["存在未解析媒体"]},
+            },
+        ], daily)
+
+        self.assertEqual([item["natural_date"] for item in summaries], ["2099-01-01", "2099-01-02"])
+        self.assertEqual(summaries[0]["output"]["schema_version"], "v1.1-batch")
+        self.assertEqual(summaries[0]["output"]["daily_summary"], daily["2099-01-01"])
+        self.assertEqual(summaries[1]["output"]["facts"], [])
+
     def test_groups_same_day_chunks_and_preserves_target_topic_channel_scope_and_media_warning(self) -> None:
         summaries = build_batch_summaries(
             [message("message-1", "2099-01-01T00:00:00Z", media=True), message("message-2", "2099-01-01T01:00:00Z")],

@@ -27,6 +27,24 @@ def source_config() -> LocalWorkerConfig:
 
 class EmptyTopicsProvider:
     def complete(self, _chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
+        if context.operation == "v1_1_chunk":
+            output = {
+                "schema_version": "v1.1-chunk",
+                "facts": [],
+                "media_source_message_ids": sorted(context.unparsed_media_message_ids),
+                "warnings": ["存在未解析媒体"] if context.unparsed_media_message_ids else [],
+            }
+        elif context.operation == "v1_1_daily":
+            output = {
+                "schema_version": "v1.1",
+                "natural_date": context.expected_natural_date,
+                "as_of": context.expected_as_of,
+                "author_cards": [],
+                "topic_discussions": [],
+                "warnings": ["存在未解析媒体"] if context.unparsed_media_message_ids else [],
+            }
+        else:
+            output = {"topics": [], "warnings": []}
         return ProviderResponse(
             status="success",
             provider="mock",
@@ -36,7 +54,7 @@ class EmptyTopicsProvider:
             attempt=context.attempt,
             raw_ref=None,
             parsed_output_ref=None,
-            parsed_output={"topics": [], "warnings": []},
+            parsed_output=output,
         )
 
 
@@ -94,6 +112,113 @@ def window_claim() -> dict[str, object]:
 
 
 class WindowedRuntimeTests(unittest.TestCase):
+    def test_windowed_runtime_generates_a_v1_1_fact_batch_and_author_daily_summary(self) -> None:
+        class OnePageConnector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:
+                return RawPage(
+                    page_id="insight-page",
+                    source_id="discord-source",
+                    cursor_before=cursor,
+                    cursor_after=None,
+                    messages=(
+                        {"id": "insight-1", "published_at": "2026-07-21T16:59:00Z", "author": {"id": "author-1", "name": "Author One"}, "content": "market fixture"},
+                        {"id": "boundary", "published_at": "2026-07-21T15:20:00Z", "author": {"id": "author-1", "name": "Author One"}, "content": "boundary fixture"},
+                    ),
+                    raw_payload_ref="local://discord/insight-page",
+                    telemetry={"match_state": "matched_new", "network_attempts": 1},
+                )
+
+        class InsightProvider:
+            def __init__(self) -> None:
+                self.operations: list[str] = []
+                self.daily_fact_counts: list[int] = []
+
+            def complete(self, _chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
+                self.operations.append(context.operation)
+                if context.operation == "v1_1_chunk":
+                    message_id, author_id, _display = context.input_message_authors[0]
+                    output = {
+                        "schema_version": "v1.1-chunk",
+                        "facts": [{
+                            "author_id": author_id,
+                            "topic": "市场",
+                            "viewpoint": "风险偏好改善",
+                            "reasoning": None,
+                            "operation_tendency": None,
+                            "methodology": [],
+                            "uncertainty": [],
+                            "source_message_ids": [message_id],
+                        }],
+                        "media_source_message_ids": [],
+                        "warnings": [],
+                    }
+                else:
+                    self.daily_fact_counts.append(len(_chunk))
+                    message_id, author_id, display = context.input_message_authors[0]
+                    output = {
+                        "schema_version": "v1.1",
+                        "natural_date": context.expected_natural_date,
+                        "as_of": context.expected_as_of,
+                        "author_cards": [{
+                            "author_id": author_id,
+                            "author_display": display,
+                            "core_logic": {"market_trend": "偏多", "stock_judgments": []},
+                            "operation_tendency": {"market": None, "stocks": None},
+                            "methodology": [],
+                            "uncertainty": [],
+                            "source_message_ids": [message_id],
+                        }],
+                        "topic_discussions": [],
+                        "warnings": [],
+                    }
+                return ProviderResponse(
+                    status="success", provider="mock", model_reported=None,
+                    prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
+                    raw_ref=None, parsed_output_ref=None, parsed_output=output,
+                )
+
+        claim = window_claim()
+        claim["author_profile_snapshot"] = [{
+            "author_id": "author-1", "author_display": "Author One", "author_handle": None, "enabled": True,
+        }]
+        provider = InsightProvider()
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = AuthorizedDiscordRuntime(
+                config=source_config(), connector=OnePageConnector(), evidence=LocalEvidenceStore(Path(directory) / "evidence"),
+                canonicalizer=Canonicalizer(), provider=provider, prompt_template="private prompt",
+            )
+            bundle = runtime.execute_windowed(claim, load_daily_fact_context=lambda: {
+                "message_catalog": [{
+                    "external_message_id": "prior-1",
+                    "natural_date": "2026-07-22",
+                    "author_id": "author-1",
+                    "author_display": "Author One",
+                    "has_unparsed_media": False,
+                }],
+                "prior_batches": [{
+                    "natural_date": "2026-07-22",
+                    "facts": [{
+                        "author_id": "author-1",
+                        "topic": "市场",
+                        "viewpoint": "早盘判断",
+                        "reasoning": None,
+                        "operation_tendency": None,
+                        "methodology": [],
+                        "uncertainty": [],
+                        "source_message_ids": ["prior-1"],
+                    }],
+                    "warnings": [],
+                    "unparsed_media_message_ids": [],
+                }],
+            })
+
+        self.assertEqual(provider.operations, ["v1_1_chunk", "v1_1_daily"])
+        self.assertEqual(provider.daily_fact_counts, [2])
+        self.assertEqual(bundle["persistence"]["structured_runs"][0]["output"]["schema_version"], "v1.1-chunk")
+        output = bundle["persistence"]["batch_summaries"][0]["output"]
+        self.assertEqual(output["schema_version"], "v1.1-batch")
+        self.assertEqual(output["daily_summary"]["author_cards"][0]["author_display"], "Author One")
+
     def test_window_collection_reaches_the_time_boundary_after_more_than_one_hundred_pages(self) -> None:
         connector = MoreThanOneHundredPagesConnector()
         with tempfile.TemporaryDirectory() as directory:

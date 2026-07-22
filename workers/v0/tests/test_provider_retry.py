@@ -12,6 +12,19 @@ def valid_output() -> dict[str, object]:
 
 
 class ProviderRetryTests(unittest.TestCase):
+    def test_context_limits_provider_to_approved_structuring_operations(self) -> None:
+        context = ProviderContext(
+            chunk_id="chunk-1",
+            prompt_version="v1.1",
+            prompt_text="private prompt",
+            operation="v1_1_chunk",
+            input_message_authors=(("message-1", "author-1", "Author One"),),
+            configured_author_profiles=(("author-1", "Author One"),),
+        )
+        self.assertEqual(context.operation, "v1_1_chunk")
+        with self.assertRaises(ValueError):
+            ProviderContext(chunk_id="chunk-1", prompt_version="v1.1", prompt_text="private prompt", operation="arbitrary")
+
     def test_mock_provider_success_returns_structured_output_without_prompt(self) -> None:
         provider = MockProvider({"chunk-1": [MockOutcome.success(valid_output())]})
         response = RetryPolicy().execute(
