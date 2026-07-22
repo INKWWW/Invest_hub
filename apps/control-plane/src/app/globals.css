@@ -234,6 +234,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .author-profile-actions button { padding: 0.38rem 0.55rem; font-size: 0.78rem; }
 
+.source-coverage-form { display: grid; gap: 0.6rem; min-width: 16rem; }
+
+.source-coverage-form h3, .source-coverage-form p { margin: 0; }
+
+.source-coverage-form > p { color: #52666c; font-size: 0.85rem; line-height: 1.5; }
+
+.source-coverage-form label { display: grid; gap: 0.35rem; }
+
+.source-coverage-form button { justify-self: start; padding: 0.45rem 0.6rem; }
+
 .admin-shell { min-height: 100vh; }
 
 .admin-shell-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; border-bottom: 1px solid #d2dcda; padding: 1rem max(2rem, calc((100vw - 1200px) / 2)); background: #fffefa; }
@@ -317,6 +327,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .author-card dl { grid-template-columns: 1fr; gap: 0.25rem; }
   .author-card dd { margin-bottom: 0.45rem; }
   .author-profile-list li { align-items: flex-start; flex-direction: column; }
+  .source-coverage-form { min-width: 14rem; }
   .admin-shell-header { align-items: flex-start; flex-direction: column; padding: 1rem; }
   .admin-header-navigation { align-items: flex-start; flex-direction: column; gap: 0.8rem; }
   .admin-content { padding: 2rem 1rem 3rem; overflow-x: auto; }

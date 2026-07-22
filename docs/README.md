@@ -75,4 +75,4 @@ intake
 - [V1 Final Report（通过：Discord 正式可用 MVP，已推送 GitHub）](spikes/2026-07-19-v1-decision-report.md)
 - [V1.1 Discord 完整时间窗采集与观点阅读 Spec（已批准）](superpowers/specs/2026-07-22-v1.1-discord-windowed-collection-and-insight-design.md)
 - [V1.1 Discord 完整时间窗采集与观点阅读 Plan（已批准，实施中）](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md)
-- [V1.1 Engineering Journal（本地验收已完成；真实授权门禁待执行）](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)
+- [V1.1 Engineering Journal（远程 migration 与控制面已部署；真实内容验收/launchd 待执行）](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)
