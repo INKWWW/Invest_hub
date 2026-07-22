@@ -213,6 +213,22 @@ export async function persistWorkerExecution(
   return data;
 }
 
+export async function persistWindowedCapturePage(
+  taskId: string,
+  attempt: number,
+  workerId: string,
+  payload: Json,
+) {
+  const { data, error } = await createSupabaseAdminClient().rpc("persist_windowed_capture_page", {
+    p_task_id: taskId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+    p_payload: payload,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function recordWindowedCaptureSegment(
   taskId: string,
   attempt: number,

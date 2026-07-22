@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime, timezone
 
 from invest_hub_worker.config import LocalWorkerConfig
 from invest_hub_worker.connectors.discord_active_adapter import (
@@ -115,6 +116,25 @@ class DiscordActiveAdapterTests(unittest.TestCase):
 
         self.assertEqual(len(pages), 1)
         self.assertEqual(invoker.calls[0]["collection_mode"], "incremental")
+
+    def test_windowed_call_fetches_one_fresh_page_without_a_page_budget(self) -> None:
+        invoker = FakeInvoker(response(network=[{
+            "request_key": "request-1",
+            "request_url": "https://discord.com/api/v9/channels/channel/messages?limit=50",
+            "messages": [{"id": "message-2", "content": "new"}],
+        }], cursor_after="cursor-2"))
+
+        page = DiscordActiveAdapter(invoker).fetch_page(
+            source_config(),
+            "cursor-1",
+            end_at=datetime(2026, 7, 21, 8, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(page.cursor_before, "cursor-1")
+        self.assertEqual(page.cursor_after, "cursor-2")
+        self.assertEqual(page.telemetry["match_state"], "matched_new")
+        self.assertEqual(page.telemetry["collection_end_at"], "2026-07-21T08:00:00Z")
+        self.assertEqual(len(invoker.calls), 1)
 
     def test_limited_pagination_uses_at_most_the_claimed_page_budget_and_keeps_the_final_cursor(self) -> None:
         invoker = FakeInvoker(

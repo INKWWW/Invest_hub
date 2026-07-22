@@ -32,11 +32,13 @@ class Worker:
         protocol: Any,
         *,
         execute: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        execute_windowed: Callable[..., dict[str, Any]] | None = None,
         preflight: Callable[[dict[str, Any]], None] | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.protocol = protocol
         self.execute = execute or self._not_configured
+        self.execute_windowed = execute_windowed
         self.preflight = preflight or (lambda _claim: None)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.state = WorkerState.IDLE
@@ -63,7 +65,7 @@ class Worker:
                 raise LeaseUncertain("lease expired before execution")
             self.preflight(claim)
             self.state = WorkerState.EXECUTING
-            execution = self.execute(claim)
+            execution = self._execute_claim(claim)
             window_acknowledgement = self._complete_windowed_execution(execution)
             if window_acknowledgement is not None:
                 self.state = WorkerState.IDLE
@@ -90,6 +92,34 @@ class Worker:
     @staticmethod
     def _not_configured(_claim: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("worker executor is not configured")
+
+    def _execute_claim(self, claim: dict[str, Any]) -> dict[str, Any]:
+        scope = claim.get("collection_scope")
+        if not isinstance(scope, Mapping) or scope.get("mode") != "window":
+            return self.execute(claim)
+        if self.execute_windowed is None:
+            raise RuntimeError("window task requires a streaming executor")
+        return self.execute_windowed(claim, on_capture_page=self._persist_windowed_capture_page)
+
+    def _persist_windowed_capture_page(self, page_execution: dict[str, Any]) -> None:
+        persistence = page_execution.get("persistence")
+        segment_payload = page_execution.get("capture_segment")
+        if not isinstance(persistence, Mapping) or not isinstance(segment_payload, Mapping):
+            raise RuntimeError("invalid window page execution")
+        segment = persistence.get("capture_segment")
+        if not isinstance(segment, Mapping) or segment_payload.get("capture_segment") != segment:
+            raise RuntimeError("window page segment does not match its persistence")
+        acknowledgement = self.protocol.persist(dict(persistence))
+        if acknowledgement.get("persisted") is not True:
+            raise LeaseUncertain("control plane did not acknowledge window page persistence")
+        expected_cursor = segment.get("next_cursor")
+        if acknowledgement.get("resume_cursor") != expected_cursor:
+            raise LeaseUncertain("control plane acknowledged an unexpected window resume cursor")
+        task_id = persistence.get("task_id")
+        attempt = persistence.get("attempt")
+        if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            raise RuntimeError("invalid window page identity")
+        self.protocol.renew(task_id, attempt)
 
     def _persist_before_result(self, execution: dict[str, Any]) -> dict[str, Any]:
         """Persist a complete execution before allowing a success result.

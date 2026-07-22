@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         opencli_contract_path=Path(args.opencli_contract),
         opencli_executable=args.opencli_executable,
     )
-    worker = Worker(protocol, execute=runtime.execute)
+    worker = Worker(protocol, execute=runtime.execute, execute_windowed=runtime.execute_windowed)
     if args.command == "run-once":
         outcome = worker.run_once()
         print(json.dumps({"status": outcome.status, "task_id": outcome.task_id, "error": outcome.error}, sort_keys=True))
