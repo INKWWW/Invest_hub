@@ -112,6 +112,13 @@ class WorkerProtocol:
         _, value = self._request("POST", "api/worker/schedule/tick", {})
         return self._object(value, "invalid schedule tick response")
 
+    def get_daily_fact_context(self, task_id: str, attempt: int) -> dict[str, Any]:
+        self._require_credential()
+        if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            raise ProtocolError("invalid daily fact context request")
+        _, value = self._request("GET", f"api/worker/tasks/{task_id}/daily-fact-context?attempt={attempt}", None)
+        return self._object(value, "invalid daily fact context response")
+
     def renew(self, task_id: str, attempt: int) -> dict[str, Any]:
         self._require_credential()
         _, value = self._request("POST", f"api/worker/tasks/{task_id}/lease", {"contract_version": "v0", "attempt": attempt})

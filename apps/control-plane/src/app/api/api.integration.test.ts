@@ -20,6 +20,7 @@ const taskMocks = vi.hoisted(() => ({
   acceptTaskResult: vi.fn(),
   createDiscordSyncTask: vi.fn(),
   getTaskDetail: vi.fn(),
+  getWindowDailyFactContext: vi.fn(),
   listRecentTasks: vi.fn(),
   persistWorkerExecution: vi.fn(),
   persistWindowedCapturePage: vi.fn(),
@@ -90,6 +91,7 @@ import { GET as getObservedAuthors } from "./admin/sources/[sourceId]/observed-a
 import { POST as postManualDiscordRefresh } from "./admin/discord/manual-refresh/route";
 import { GET as getDiscordReader } from "./reader/discord/route";
 import { POST as postScheduleTick } from "./worker/schedule/tick/route";
+import { GET as getDailyFactContext } from "./worker/tasks/[taskId]/daily-fact-context/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${path}`, {
@@ -457,6 +459,35 @@ describe("v0 control-plane API authorization", () => {
     );
     expect(invalid.status).toBe(422);
     expect(taskMocks.scheduleDueDiscordTasks).not.toHaveBeenCalled();
+  });
+
+  it("returns only safe daily fact context to the Worker holding the current lease", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.getWindowDailyFactContext.mockResolvedValue({
+      message_catalog: [{
+        external_message_id: "message-1",
+        natural_date: "2099-01-01",
+        author_id: "author-1",
+        author_display: "Observed Author",
+        has_unparsed_media: false,
+      }],
+      prior_batches: [],
+    });
+
+    const response = await getDailyFactContext(
+      new Request("http://localhost/api/worker/tasks/task-1/daily-fact-context?attempt=2"),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(expect.objectContaining({ message_catalog: expect.any(Array) }));
+    expect(taskMocks.getWindowDailyFactContext).toHaveBeenCalledWith("task-1", 2, "worker-1");
+
+    const invalid = await getDailyFactContext(
+      new Request("http://localhost/api/worker/tasks/task-1/daily-fact-context?attempt=0"),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+    expect(invalid.status).toBe(422);
   });
 
   it("maps an attempt/lease mismatch to 409", async () => {

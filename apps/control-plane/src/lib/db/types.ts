@@ -620,6 +620,10 @@ export interface Database {
         Args: { p_worker_id: string; p_now: string };
         Returns: Json;
       };
+      get_window_daily_fact_context: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string };
+        Returns: Json;
+      };
       record_task_failure: {
         Args: { p_task_id: string; p_attempt: number; p_failure: Json; p_context: Json };
         Returns: Json;

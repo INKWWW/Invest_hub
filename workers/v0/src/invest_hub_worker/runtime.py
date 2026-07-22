@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
@@ -15,7 +15,13 @@ from .connectors.discord_active_adapter import DiscordActiveAdapter, normalize_c
 from .evidence import LocalEvidenceStore
 from .providers.base import Provider, ProviderContext
 from .retry import RetryPolicy
-from .summaries import SummaryError, build_batch_summaries
+from .structured import (
+    SchemaError,
+    parse_v1_1_chunk_output,
+    validate_v1_1_chunk_output,
+    validate_v1_1_daily_output,
+)
+from .summaries import SummaryError, build_batch_summaries, build_v1_1_batch_summaries
 
 
 class RuntimeExecutionError(RuntimeError):
@@ -182,6 +188,8 @@ class AuthorizedDiscordRuntime:
         self.canonicalizer = canonicalizer
         self.provider = provider
         self.prompt_template = prompt_template
+        self.v1_1_chunk_template = _read_public_prompt("v1_1_discord_chunk.md")
+        self.v1_1_daily_template = _read_public_prompt("v1_1_discord_daily.md")
         self.retry_policy = retry_policy or RetryPolicy(max_attempts=3, timeout_seconds=240)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
@@ -261,6 +269,7 @@ class AuthorizedDiscordRuntime:
         claim: dict[str, Any],
         *,
         on_capture_page: Callable[[dict[str, Any]], None] | None = None,
+        load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Collect one immutable range until its lower boundary is proven.
 
@@ -271,7 +280,7 @@ class AuthorizedDiscordRuntime:
         payloads for the compatibility worker path.
         """
 
-        capture_range, target_author_ids = self._validate_windowed_claim(claim)
+        capture_range, author_profiles = self._validate_windowed_claim(claim)
         cursor = capture_range.resume_cursor
         canonical_by_id: dict[str, CanonicalMessage] = {}
         duplicate_count = 0
@@ -348,11 +357,21 @@ class AuthorizedDiscordRuntime:
             raise RuntimeExecutionError("persistence_failure", "windowed local evidence persistence failed") from exc
 
         canonical_messages = list(canonical_by_id.values())
-        structured_runs, retry_count, elapsed_ms = self._structured_runs(claim, canonical_messages, target_author_ids)
+        structured_runs, retry_count, elapsed_ms = self._structured_runs_v1_1(claim, canonical_messages, author_profiles)
         try:
-            batch_summaries = build_batch_summaries(canonical_messages, structured_runs) if canonical_messages else []
+            daily_outputs, daily_retries, daily_elapsed_ms = self._v1_1_daily_outputs(
+                claim,
+                canonical_messages,
+                structured_runs,
+                author_profiles,
+                capture_range.end_at,
+                self._load_daily_fact_context(load_daily_fact_context),
+            )
+            batch_summaries = build_v1_1_batch_summaries(canonical_messages, structured_runs, daily_outputs) if canonical_messages else []
         except SummaryError as exc:
             raise RuntimeExecutionError("schema_error", "structured output cannot form a batch summary") from exc
+        retry_count += daily_retries
+        elapsed_ms += daily_elapsed_ms
         completion = {
             "contract_version": "v0",
             "task_id": str(claim["task_id"]),
@@ -406,7 +425,7 @@ class AuthorizedDiscordRuntime:
             raise RuntimeExecutionError("preflight", str(exc)) from exc
         return scope, frozenset(target_author_ids)
 
-    def _validate_windowed_claim(self, claim: Mapping[str, Any]) -> tuple[WindowedCaptureRange, frozenset[str]]:
+    def _validate_windowed_claim(self, claim: Mapping[str, Any]) -> tuple[WindowedCaptureRange, dict[str, str]]:
         if claim.get("source_id") != self.config.source_id:
             raise RuntimeExecutionError("unauthorized", "task source does not match the local authorized source")
         if claim.get("parameter_version") != self.config.parameter_version:
@@ -416,7 +435,7 @@ class AuthorizedDiscordRuntime:
             profiles = claim.get("author_profile_snapshot")
             if not isinstance(profiles, list):
                 raise ValueError("window task author profile snapshot is invalid")
-            author_ids: list[str] = []
+            author_profiles: dict[str, str] = {}
             for profile in profiles:
                 if not isinstance(profile, Mapping) or set(profile) != {"author_id", "author_display", "author_handle", "enabled"}:
                     raise ValueError("window task author profile snapshot is invalid")
@@ -429,12 +448,12 @@ class AuthorizedDiscordRuntime:
                     raise ValueError("window task author profile snapshot is invalid")
                 if profile.get("enabled") is not True:
                     raise ValueError("window task author profile snapshot is invalid")
-                author_ids.append(author_id)
-            if len(set(author_ids)) != len(author_ids):
-                raise ValueError("window task author profiles are duplicated")
+                if author_id in author_profiles:
+                    raise ValueError("window task author profiles are duplicated")
+                author_profiles[author_id] = display
         except ValueError as exc:
             raise RuntimeExecutionError("preflight", str(exc)) from exc
-        return capture_range, frozenset(author_ids)
+        return capture_range, author_profiles
 
     def _validate_window_page(self, page: object, requested_cursor: str | None) -> None:
         if not isinstance(page, RawPage) or page.source_id != self.config.source_id:
@@ -503,6 +522,156 @@ class AuthorizedDiscordRuntime:
             )
         return runs, retries, elapsed_ms
 
+    def _structured_runs_v1_1(
+        self,
+        claim: Mapping[str, Any],
+        messages: list[CanonicalMessage],
+        author_profiles: Mapping[str, str],
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        """Extract message-backed fact units without crossing Shanghai dates."""
+
+        by_day: dict[str, list[CanonicalMessage]] = {}
+        for message in messages:
+            by_day.setdefault(_shanghai_natural_date(message.occurred_at), []).append(message)
+
+        runs: list[dict[str, Any]] = []
+        retries = 0
+        elapsed_ms = 0
+        chunk_index = 0
+        for natural_date in sorted(by_day):
+            day_messages = by_day[natural_date]
+            for index in range(0, len(day_messages), 100):
+                chunk_index += 1
+                chunk = tuple(day_messages[index : index + 100])
+                message_ids = [message.external_message_id for message in chunk]
+                media_ids = {message.external_message_id for message in chunk if message.attachments}
+                identities = tuple((message.external_message_id, message.author_id, message.author_name) for message in chunk)
+                context = ProviderContext(
+                    chunk_id=f"{claim['task_id']}-{claim['attempt']}-v1-1-chunk-{chunk_index}",
+                    prompt_version=self.config.parameter_version,
+                    prompt_text=self._v1_1_chunk_prompt_for(chunk),
+                    input_message_ids=frozenset(message_ids),
+                    unparsed_media_message_ids=frozenset(media_ids),
+                    operation="v1_1_chunk",
+                    input_message_authors=identities,
+                    configured_author_profiles=tuple(sorted(author_profiles.items())),
+                )
+                response = self.retry_policy.execute(self.provider, chunk, context)
+                retries += max(0, response.attempt - 1)
+                elapsed_ms += response.elapsed_ms
+                if response.status != "success" or response.parsed_output is None:
+                    failure = response.failure_class or response.error_code or "provider_failure"
+                    raise RuntimeExecutionError(str(failure), "Codex CLI did not produce valid V1.1 fact units")
+                try:
+                    output = validate_v1_1_chunk_output(
+                        response.parsed_output,
+                        {message_id: (author_id, author_display) for message_id, author_id, author_display in identities},
+                        media_ids,
+                    )
+                except SchemaError as exc:
+                    raise RuntimeExecutionError("schema_error", "V1.1 chunk output failed evidence validation") from exc
+                runs.append({
+                    "chunk_key": context.chunk_id,
+                    "provider": response.provider,
+                    "parameter_version": self.config.parameter_version,
+                    "input_message_ids": message_ids,
+                    "media_source_message_ids": sorted(media_ids),
+                    "output": output,
+                })
+        return runs, retries, elapsed_ms
+
+    def _v1_1_daily_outputs(
+        self,
+        claim: Mapping[str, Any],
+        messages: list[CanonicalMessage],
+        runs: list[dict[str, Any]],
+        author_profiles: Mapping[str, str],
+        end_at: datetime,
+        daily_fact_context: Mapping[str, Any],
+    ) -> tuple[dict[str, dict[str, Any]], int, int]:
+        """Generate one V1.1 daily output from validated fact units per day."""
+
+        if not messages:
+            return {}, 0, 0
+        context_catalog, prior_batches = _parse_daily_fact_context(daily_fact_context)
+        by_day: dict[str, list[CanonicalMessage]] = {}
+        for message in messages:
+            by_day.setdefault(_shanghai_natural_date(message.occurred_at), []).append(message)
+        outputs: dict[str, dict[str, Any]] = {}
+        retries = 0
+        elapsed_ms = 0
+        as_of = _instant_text(end_at)
+        for natural_date in sorted(by_day):
+            day_messages = by_day[natural_date]
+            day_ids = {message.external_message_id for message in day_messages}
+            catalog = {
+                message_id: (author_id, author_display)
+                for message_id, author_id, author_display in context_catalog.get(natural_date, ())
+            }
+            for message in day_messages:
+                identity = (message.author_id, message.author_name)
+                existing = catalog.get(message.external_message_id)
+                if existing is not None and existing != identity:
+                    raise RuntimeExecutionError("schema_error", "daily fact context conflicts with current message identity")
+                catalog[message.external_message_id] = identity
+            identities = tuple((message_id, author_id, author_display) for message_id, (author_id, author_display) in sorted(catalog.items()))
+            facts: list[dict[str, Any]] = []
+            for run in runs:
+                if set(run["input_message_ids"]) <= day_ids:
+                    facts.extend(run["output"]["facts"])
+            media_ids = {message.external_message_id for message in day_messages if message.attachments}
+            for prior in prior_batches.get(natural_date, ()):
+                facts.extend(prior["facts"])
+                media_ids.update(prior["unparsed_media_message_ids"])
+            context = ProviderContext(
+                chunk_id=f"{claim['task_id']}-{claim['attempt']}-v1-1-daily-{natural_date}",
+                prompt_version=self.config.parameter_version,
+                prompt_text=self._v1_1_daily_prompt_for(
+                    natural_date,
+                    as_of,
+                    identities,
+                    author_profiles,
+                    facts,
+                    media_ids,
+                ),
+                input_message_ids=frozenset(day_ids),
+                unparsed_media_message_ids=frozenset(media_ids),
+                operation="v1_1_daily",
+                input_message_authors=identities,
+                configured_author_profiles=tuple(sorted(author_profiles.items())),
+                expected_natural_date=natural_date,
+                expected_as_of=as_of,
+            )
+            response = self.retry_policy.execute(self.provider, tuple(facts), context)
+            retries += max(0, response.attempt - 1)
+            elapsed_ms += response.elapsed_ms
+            if response.status != "success" or response.parsed_output is None:
+                failure = response.failure_class or response.error_code or "provider_failure"
+                raise RuntimeExecutionError(str(failure), "Codex CLI did not produce a valid V1.1 daily summary")
+            try:
+                outputs[natural_date] = validate_v1_1_daily_output(
+                    response.parsed_output,
+                    {message_id: (author_id, author_display) for message_id, author_id, author_display in identities},
+                    author_profiles,
+                    expected_natural_date=natural_date,
+                    expected_as_of=as_of,
+                    unparsed_media_ids=media_ids,
+                )
+            except SchemaError as exc:
+                raise RuntimeExecutionError("schema_error", "V1.1 daily output failed evidence validation") from exc
+        return outputs, retries, elapsed_ms
+
+    @staticmethod
+    def _load_daily_fact_context(
+        loader: Callable[[], Mapping[str, Any]] | None,
+    ) -> Mapping[str, Any]:
+        if loader is None:
+            return {"message_catalog": [], "prior_batches": []}
+        value = loader()
+        if not isinstance(value, Mapping):
+            raise RuntimeExecutionError("schema_error", "daily fact context must be an object")
+        return value
+
     def _prompt_for(self, chunk: Iterable[CanonicalMessage]) -> str:
         payload = [
             {
@@ -516,6 +685,48 @@ class AuthorizedDiscordRuntime:
             for message in chunk
         ]
         return f"{self.prompt_template}\n\n输入消息（仅本地 Codex CLI 可见）：\n{json.dumps(payload, ensure_ascii=False)}"
+
+    def _v1_1_chunk_prompt_for(self, chunk: Iterable[CanonicalMessage]) -> str:
+        return f"{self.v1_1_chunk_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n输入消息（仅本地 Codex CLI 可见）：\n{json.dumps(self._prompt_messages(chunk), ensure_ascii=False)}"
+
+    def _v1_1_daily_prompt_for(
+        self,
+        natural_date: str,
+        as_of: str,
+        identities: tuple[tuple[str, str, str], ...],
+        author_profiles: Mapping[str, str],
+        facts: list[dict[str, Any]],
+        media_ids: set[str],
+    ) -> str:
+        payload = {
+            "natural_date": natural_date,
+            "as_of": as_of,
+            "configured_author_profiles": [
+                {"author_id": author_id, "author_display": display}
+                for author_id, display in sorted(author_profiles.items())
+            ],
+            "message_identity_catalog": [
+                {"external_message_id": message_id, "author_id": author_id, "author_display": display}
+                for message_id, author_id, display in identities
+            ],
+            "fact_units": facts,
+            "unparsed_media_message_ids": sorted(media_ids),
+        }
+        return f"{self.v1_1_daily_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n已验证输入（不含原始正文）：\n{json.dumps(payload, ensure_ascii=False)}"
+
+    @staticmethod
+    def _prompt_messages(chunk: Iterable[CanonicalMessage]) -> list[dict[str, Any]]:
+        return [
+            {
+                "external_message_id": message.external_message_id,
+                "author_id": message.author_id,
+                "author_name": message.author_name,
+                "occurred_at": message.occurred_at,
+                "content": message.content,
+                "attachments_present": bool(message.attachments),
+            }
+            for message in chunk
+        ]
 
     def _raw_message(self, page: RawPage, external_message_id: str) -> dict[str, Any]:
         item = next((message for message in page.messages if str(message.get("id")) == external_message_id), {})
@@ -562,11 +773,16 @@ class AuthorizedDiscordRuntimeSet:
         claim: dict[str, Any],
         *,
         on_capture_page: Callable[[dict[str, Any]], None],
+        load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
         source_id = claim.get("source_id")
         if not isinstance(source_id, str) or source_id not in self._runtimes:
             raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
-        return self._runtimes[source_id].execute_windowed(claim, on_capture_page=on_capture_page)
+        return self._runtimes[source_id].execute_windowed(
+            claim,
+            on_capture_page=on_capture_page,
+            load_daily_fact_context=load_daily_fact_context,
+        )
 
 
 def build_authorized_discord_runtime(
@@ -641,3 +857,105 @@ def _required_instant(value: object, field_name: str) -> datetime:
 
 def _instant_text(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _shanghai_natural_date(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (AttributeError, ValueError) as exc:
+        raise RuntimeExecutionError("schema_error", "canonical message occurred_at is invalid") from exc
+    if parsed.tzinfo is None:
+        raise RuntimeExecutionError("schema_error", "canonical message occurred_at must be timezone-aware")
+    return parsed.astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+
+def _read_public_prompt(name: str) -> str:
+    path = Path(__file__).resolve().parents[2] / "prompts" / name
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RuntimeError("V1.1 public prompt template is unavailable") from exc
+    if not value:
+        raise RuntimeError("V1.1 public prompt template is empty")
+    return value
+
+
+def _parse_daily_fact_context(
+    value: Mapping[str, Any],
+) -> tuple[dict[str, list[tuple[str, str, str]]], dict[str, list[dict[str, Any]]]]:
+    if set(value) != {"message_catalog", "prior_batches"}:
+        raise RuntimeExecutionError("schema_error", "daily fact context has unknown fields")
+    raw_catalog = value.get("message_catalog")
+    raw_batches = value.get("prior_batches")
+    if not isinstance(raw_catalog, list) or not isinstance(raw_batches, list):
+        raise RuntimeExecutionError("schema_error", "daily fact context collections are invalid")
+
+    catalog_by_day: dict[str, list[tuple[str, str, str]]] = {}
+    catalog_by_id: dict[str, tuple[str, str]] = {}
+    catalog_day_by_id: dict[str, str] = {}
+    for item in raw_catalog:
+        if not isinstance(item, Mapping) or set(item) != {
+            "external_message_id", "natural_date", "author_id", "author_display", "has_unparsed_media",
+        }:
+            raise RuntimeExecutionError("schema_error", "daily message catalog entry is invalid")
+        message_id = item.get("external_message_id")
+        natural_date = item.get("natural_date")
+        author_id = item.get("author_id")
+        author_display = item.get("author_display")
+        if (not isinstance(message_id, str) or not message_id
+                or not isinstance(natural_date, str)
+                or not isinstance(author_id, str) or not author_id
+                or not isinstance(author_display, str) or not author_display
+                or not isinstance(item.get("has_unparsed_media"), bool)):
+            raise RuntimeExecutionError("schema_error", "daily message catalog identity is invalid")
+        try:
+            date.fromisoformat(natural_date)
+        except ValueError as exc:
+            raise RuntimeExecutionError("schema_error", "daily message catalog date is invalid") from exc
+        identity = (author_id, author_display)
+        if message_id in catalog_by_id and (catalog_by_id[message_id] != identity or catalog_day_by_id[message_id] != natural_date):
+            raise RuntimeExecutionError("schema_error", "daily message catalog repeats a conflicting message")
+        if message_id not in catalog_by_id:
+            catalog_by_id[message_id] = identity
+            catalog_day_by_id[message_id] = natural_date
+            catalog_by_day.setdefault(natural_date, []).append((message_id, author_id, author_display))
+
+    prior_by_day: dict[str, list[dict[str, Any]]] = {}
+    for item in raw_batches:
+        if not isinstance(item, Mapping) or set(item) != {
+            "natural_date", "facts", "warnings", "unparsed_media_message_ids",
+        }:
+            raise RuntimeExecutionError("schema_error", "daily prior batch is invalid")
+        natural_date = item.get("natural_date")
+        if not isinstance(natural_date, str):
+            raise RuntimeExecutionError("schema_error", "daily prior batch date is invalid")
+        try:
+            date.fromisoformat(natural_date)
+        except ValueError as exc:
+            raise RuntimeExecutionError("schema_error", "daily prior batch date is invalid") from exc
+        try:
+            parsed = parse_v1_1_chunk_output(json.dumps({
+                "schema_version": "v1.1-chunk",
+                "facts": item.get("facts"),
+                "media_source_message_ids": item.get("unparsed_media_message_ids"),
+                "warnings": item.get("warnings"),
+            }, ensure_ascii=False))
+            validated = validate_v1_1_chunk_output(
+                parsed,
+                catalog_by_id,
+                set(parsed["media_source_message_ids"]),
+            )
+        except SchemaError as exc:
+            raise RuntimeExecutionError("schema_error", "daily prior batch has invalid fact evidence") from exc
+        cited_ids = {
+            message_id
+            for fact in validated["facts"]
+            for message_id in fact["source_message_ids"]
+        } | set(validated["media_source_message_ids"])
+        if any(catalog_day_by_id[message_id] != natural_date for message_id in cited_ids):
+            raise RuntimeExecutionError("schema_error", "daily prior batch crosses Shanghai days")
+        prior_by_day.setdefault(natural_date, []).append({
+            "facts": validated["facts"],
+            "unparsed_media_message_ids": list(validated["media_source_message_ids"]),
+        })
+    return catalog_by_day, prior_by_day
