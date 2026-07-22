@@ -7,7 +7,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const current = await requireRole("admin");
   if (!isCurrentUser(current)) {
     if (current.status === 401) redirect("/login?next=%2Fadmin");
-    redirect("/?error=forbidden");
+    redirect("/forbidden");
   }
   return children;
 }

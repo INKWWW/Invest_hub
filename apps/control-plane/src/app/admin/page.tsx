@@ -5,13 +5,15 @@ import { StatusBadge } from "../../components/admin/StatusBadge";
 import { UserInviteForm } from "../../components/admin/UserInviteForm";
 import { WorkerCard } from "../../components/admin/WorkerCard";
 import { buildTaskViewModel } from "../../lib/admin/view-model";
+import { getCurrentUser } from "../../lib/auth/current-user";
 import { listSources } from "../../lib/db/repositories/sources";
 import { listRecentTasks } from "../../lib/db/repositories/tasks";
 import { listWorkers } from "../../lib/db/repositories/workers";
 
 export default async function AdminOverviewPage() {
-  const [workers, sources, tasks] = await Promise.all([listWorkers(), listSources(), listRecentTasks(10)]);
-  return <AdminShell active="overview">
+  const [workers, sources, tasks, viewer] = await Promise.all([listWorkers(), listSources(), listRecentTasks(10), getCurrentUser()]);
+  if (!viewer) return null;
+  return <AdminShell active="overview" viewer={viewer}>
     <>
       <section>
         <h1>Admin overview</h1>

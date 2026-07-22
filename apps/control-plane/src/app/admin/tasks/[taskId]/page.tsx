@@ -6,12 +6,14 @@ import { RetryTaskButton } from "../../../../components/admin/RetryTaskButton";
 import { StatusBadge } from "../../../../components/admin/StatusBadge";
 import { TaskTimeline } from "../../../../components/admin/TaskTimeline";
 import { buildTaskViewModel, canRetryTask } from "../../../../lib/admin/view-model";
+import { getCurrentUser } from "../../../../lib/auth/current-user";
 import { getTaskDetail } from "../../../../lib/db/repositories/tasks";
 
 export default async function AdminTaskDetailPage({ params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = await params;
-  const detail = await getTaskDetail(taskId);
+  const [detail, viewer] = await Promise.all([getTaskDetail(taskId), getCurrentUser()]);
   if (!detail) notFound();
+  if (!viewer) return null;
   const latestAttempt = detail.attempts[0];
   const view = buildTaskViewModel({
     ...detail.task,
@@ -20,7 +22,7 @@ export default async function AdminTaskDetailPage({ params }: { params: Promise<
     failure: latestAttempt?.failure,
   });
   const evidenceRefs = detail.evidenceRefs.map((ref) => `${ref.id} (${ref.evidence_kind})`);
-  return <AdminShell active="tasks">
+  return <AdminShell active="tasks" viewer={viewer}>
     <>
       <section>
         <h1>Task {view.id}</h1>

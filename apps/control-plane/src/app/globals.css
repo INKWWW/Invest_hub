@@ -46,7 +46,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .reader-page { max-width: 1240px; margin: 0 auto; padding: 3.25rem 2rem 4.5rem; }
 
 .reader-page-header {
-  max-width: 760px;
+  max-width: none;
   border-left: 5px solid var(--accent);
   margin: 0 0 2.25rem;
   padding: 0.15rem 0 0.15rem 1.25rem;
@@ -61,7 +61,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   text-transform: uppercase;
 }
 
+.reader-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.35rem;
+}
+
 .reader-page-header h1, .auth-card h1 {
+  max-width: 760px;
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
   font-size: clamp(2rem, 5vw, 3.5rem);
@@ -71,6 +80,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .reader-page-header > p:last-child { max-width: 680px; margin: 1rem 0 0; color: #50636a; line-height: 1.65; }
+
+.session-controls { display: flex; align-items: center; justify-content: flex-end; gap: 0.65rem; margin-left: auto; }
+
+.session-identity { display: grid; grid-template-columns: auto auto; gap: 0.05rem 0.45rem; margin: 0; color: #4a6268; font-size: 0.75rem; line-height: 1.25; text-align: right; }
+
+.session-identity > span { grid-column: 1 / -1; color: #687a7d; font-size: 0.67rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.session-identity strong { color: var(--ink); font-size: 0.8rem; overflow-wrap: anywhere; }
+
+.session-identity em { align-self: center; border: 1px solid #b7ceca; border-radius: 999px; color: #285461; font-size: 0.68rem; font-style: normal; font-weight: 800; padding: 0.1rem 0.38rem; white-space: nowrap; }
+
+.session-controls button { background: transparent; color: #1f5663; padding: 0.45rem 0.6rem; white-space: nowrap; }
+
+.session-controls button:hover { background: #e5efed; }
+
+.session-controls button:disabled { cursor: wait; opacity: 0.7; }
+
+.session-message { color: var(--danger); font-size: 0.78rem; margin: 0; }
 
 .reader-shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 1.5rem; align-items: start; }
 
@@ -211,6 +238,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .admin-shell-header { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; border-bottom: 1px solid #d2dcda; padding: 1rem max(2rem, calc((100vw - 1200px) / 2)); background: #fffefa; }
 
+.admin-header-navigation { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem 1.5rem; }
+
 .admin-navigation { display: flex; flex-wrap: wrap; gap: 0.2rem; }
 
 .admin-navigation a { border-radius: 4px; padding: 0.45rem 0.7rem; color: #4e6267; font-size: 0.9rem; font-weight: 700; text-decoration: none; }
@@ -259,6 +288,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .auth-card > p:not(.reader-kicker) { color: #50636a; line-height: 1.6; }
 
+.forbidden-page { max-width: 960px; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
+
+.forbidden-page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 1rem; }
+
+.forbidden-card { max-width: 640px; border-left: 5px solid var(--warning); margin-top: 3.5rem; padding: 0.15rem 0 0.15rem 1.25rem; }
+
+.forbidden-card h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 5vw, 3.2rem); letter-spacing: -0.04em; }
+
+.forbidden-card > p:not(.reader-kicker) { color: #50636a; line-height: 1.65; }
+
 .auth-card form { display: grid; gap: 0.9rem; margin-top: 1.25rem; }
 
 .auth-card label { display: grid; gap: 0.35rem; color: #41565c; font-weight: 700; }
@@ -268,6 +307,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 767px) {
   .reader-page { padding: 2rem 1rem 3rem; }
   .reader-page-header { margin-bottom: 1.5rem; padding-left: 0.9rem; }
+  .reader-header-top, .forbidden-page-header { align-items: flex-start; flex-direction: column; }
+  .session-controls { align-items: flex-start; justify-content: flex-start; margin-left: 0; }
+  .session-identity { text-align: left; }
   .reader-shell { grid-template-columns: 1fr; gap: 1rem; }
   .reader-sidebar { position: static; grid-template-columns: 1fr 1fr; }
   .reader-content { gap: 1.25rem; }
@@ -276,7 +318,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .author-card dd { margin-bottom: 0.45rem; }
   .author-profile-list li { align-items: flex-start; flex-direction: column; }
   .admin-shell-header { align-items: flex-start; flex-direction: column; padding: 1rem; }
+  .admin-header-navigation { align-items: flex-start; flex-direction: column; gap: 0.8rem; }
   .admin-content { padding: 2rem 1rem 3rem; overflow-x: auto; }
+  .forbidden-page { padding: 1rem 1rem 3rem; }
 }
 
 @media (max-width: 430px) {
