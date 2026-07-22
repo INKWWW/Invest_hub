@@ -1,6 +1,6 @@
 begin;
 
-select plan(32);
+select plan(33);
 
 select has_table('public', 'source_collection_coverage', 'V1.1 stores a per-source collection coverage waterline');
 select has_table('public', 'sync_task_capture_progress', 'V1.1 stores resumable progress per window task');
@@ -207,10 +207,55 @@ select is(
   'true',
   'a repeated page receipt is idempotent'
 );
+
+update public.task_attempts
+set status = 'retryable_failed',
+    completed_at = '2099-01-01T00:02:00Z',
+    lease_expires_at = '2099-01-01T00:02:00Z'
+where task_id = (select (payload ->> 'id')::uuid from first_window_task)
+  and attempt = (select (payload ->> 'attempt')::integer from claimed_window_task);
+
+update public.sync_tasks
+set status = 'retryable_failed',
+    lease_owner = null,
+    lease_expires_at = null
+where id = (select (payload ->> 'id')::uuid from first_window_task);
+
+create temporary table retry_claimed_window_task as
+select public.claim_next_task(
+  '00000000-0000-0000-0000-000000007011',
+  '2099-01-01T00:03:00Z'
+) as payload;
+
+select is(
+  public.record_windowed_capture_segment(
+    (select (payload ->> 'id')::uuid from first_window_task),
+    (select (payload ->> 'attempt')::integer from retry_claimed_window_task),
+    '00000000-0000-0000-0000-000000007011',
+    '{"idempotency_key":"page-001","request_cursor":null,"next_cursor":"cursor-001","oldest_occurred_at":"2099-01-01T00:00:00Z","newest_occurred_at":"2099-01-01T08:00:00Z","response_matched":true,"response_fresh":true}'::jsonb
+  ) ->> 'idempotent',
+  'true',
+  'a retry reuses an already persisted matching page segment'
+);
+
+insert into public.worker_execution_receipts (
+  task_id, attempt, worker_id, payload_digest, raw_count, canonical_count, structured_run_ids, summary_batch_ids, daily_summary_ids
+) values (
+  (select (payload ->> 'id')::uuid from first_window_task),
+  (select (payload ->> 'attempt')::integer from retry_claimed_window_task),
+  '00000000-0000-0000-0000-000000007011',
+  'v11-empty-window-retry-receipt',
+  0,
+  0,
+  '[]'::jsonb,
+  '[]'::jsonb,
+  '[]'::jsonb
+);
+
 select throws_ok(
   $$select public.record_windowed_capture_segment(
     (select (payload ->> 'id')::uuid from first_window_task),
-    1,
+    (select (payload ->> 'attempt')::integer from retry_claimed_window_task),
     '00000000-0000-0000-0000-000000007011',
     '{"idempotency_key":"page-002","request_cursor":"wrong-cursor","next_cursor":"cursor-002","oldest_occurred_at":"2098-12-31T23:59:00Z","newest_occurred_at":"2099-01-01T00:00:00Z","response_matched":true,"response_fresh":true}'::jsonb
   );$$,
@@ -222,7 +267,7 @@ select throws_ok(
 select throws_ok(
   $$select public.complete_windowed_capture_range(
     (select (payload ->> 'id')::uuid from first_window_task),
-    1,
+    (select (payload ->> 'attempt')::integer from retry_claimed_window_task),
     '00000000-0000-0000-0000-000000007011',
     '{"range_complete":true,"capture_range":{"mode":"window","trigger":"manual","timezone":"Asia/Shanghai","start_at":"2099-01-01T00:00:00Z","end_at":"2099-01-01T08:00:00Z","scheduled_window_key":null},"summary_batch_ids":[],"daily_summary_ids":[],"no_new_data":true}'::jsonb
   );$$,
@@ -239,7 +284,7 @@ select is(
 select is(
   public.complete_windowed_capture_range(
     (select (payload ->> 'id')::uuid from first_window_task),
-    1,
+    (select (payload ->> 'attempt')::integer from retry_claimed_window_task),
     '00000000-0000-0000-0000-000000007011',
     '{"range_complete":true,"capture_range":{"mode":"window","trigger":"manual","timezone":"Asia/Shanghai","start_at":"2099-01-01T00:00:00Z","end_at":"2099-01-01T08:00:00Z","scheduled_window_key":null},"boundary":{"kind":"oldest_at_or_before_start","observed_at":"2099-01-01T00:00:00Z"},"summary_batch_ids":[],"daily_summary_ids":[],"no_new_data":true}'::jsonb
   ) ->> 'status',
