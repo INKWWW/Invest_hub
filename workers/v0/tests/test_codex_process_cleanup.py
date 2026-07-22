@@ -57,7 +57,7 @@ class CodexProcessCleanupTests(unittest.TestCase):
             prompt_version="v1.1",
             prompt_text="private prompt",
             operation="v1_1_daily",
-            input_message_authors=(("message-1", "author-1", "Author One"),),
+            input_message_authors=(("message-1", "author-1", "Author One"), ("known-2", "author-1", "Author One")),
             configured_author_profiles=(("author-1", "Author One"),),
             expected_natural_date="2099-01-01",
             expected_as_of="2099-01-01T08:00:00Z",
@@ -79,12 +79,17 @@ class CodexProcessCleanupTests(unittest.TestCase):
             "warnings": [],
         }
 
-        parsed = CodexCLIProvider._parse_for_context(json.dumps(output), (), context)
+        facts = ({"source_message_ids": ["message-1"]},)
+        parsed = CodexCLIProvider._parse_for_context(json.dumps(output), facts, context)
 
         self.assertEqual(parsed["author_cards"][0]["author_id"], "author-1")
         invalid = {**output, "author_cards": [{**output["author_cards"][0], "author_id": "author-2"}]}
         with self.assertRaises(SchemaError):
-            CodexCLIProvider._parse_for_context(json.dumps(invalid), (), context)
+            CodexCLIProvider._parse_for_context(json.dumps(invalid), facts, context)
+
+        unsupported_evidence = {**output, "author_cards": [{**output["author_cards"][0], "source_message_ids": ["known-2"]}]}
+        with self.assertRaisesRegex(SchemaError, "validated fact evidence"):
+            CodexCLIProvider._parse_for_context(json.dumps(unsupported_evidence), facts, context)
 
     def test_success_uses_read_only_ephemeral_command_and_persists_raw_ref(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

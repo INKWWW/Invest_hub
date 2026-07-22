@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
 
@@ -275,6 +275,7 @@ def validate_v1_1_daily_output(
     message_catalog: Mapping[str, tuple[str, str]],
     configured_author_profiles: Mapping[str, str],
     *,
+    fact_units: Sequence[Mapping[str, Any]],
     expected_natural_date: str,
     expected_as_of: str,
     unparsed_media_ids: set[str],
@@ -286,11 +287,13 @@ def validate_v1_1_daily_output(
         raise SchemaError("daily_time_mismatch", "daily output must use the requested date and as_of instant")
     catalog = _validated_message_catalog(message_catalog)
     configured = _validated_configured_profiles(configured_author_profiles)
+    fact_evidence_ids = _validated_fact_evidence_ids(fact_units)
     if not unparsed_media_ids <= set(catalog):
         unknown = sorted(unparsed_media_ids - set(catalog))[0]
         raise SchemaError("media_source_message_ids", f"unparsed media ID is not in daily evidence: {unknown}")
     if unparsed_media_ids and "存在未解析媒体" not in normalized["warnings"]:
         raise SchemaError("media_uncertainty", "daily output must surface unparsed media")
+    conclusion_evidence_ids = fact_evidence_ids - unparsed_media_ids
 
     seen_cards: set[str] = set()
     for card in normalized["author_cards"]:
@@ -299,18 +302,22 @@ def validate_v1_1_daily_output(
             raise SchemaError("author_card", "author card must belong to one configured author with its observed display")
         seen_cards.add(author_id)
         _validate_author_evidence(card["source_message_ids"], author_id, catalog, "author_card")
+        _validate_fact_evidence(card["source_message_ids"], conclusion_evidence_ids, "author_card")
         for judgment in card["core_logic"]["stock_judgments"]:
             _validate_author_evidence(judgment["source_message_ids"], author_id, catalog, "stock_judgment")
+            _validate_fact_evidence(judgment["source_message_ids"], conclusion_evidence_ids, "stock_judgment")
 
     for topic in normalized["topic_discussions"]:
         topic_ids = set(topic["source_message_ids"])
         _validate_known_evidence(topic_ids, catalog, "topic")
+        _validate_fact_evidence(topic["source_message_ids"], conclusion_evidence_ids, "topic")
         for viewpoint in topic["viewpoints"]:
             author_id = viewpoint["author_id"]
             if any(catalog[message_id][0] != author_id or catalog[message_id][1] != viewpoint["author_display"]
                    for message_id in viewpoint["source_message_ids"]):
                 raise SchemaError("viewpoint", "viewpoint evidence must belong to its named author")
             _validate_known_evidence(set(viewpoint["source_message_ids"]), catalog, "viewpoint")
+            _validate_fact_evidence(viewpoint["source_message_ids"], conclusion_evidence_ids, "viewpoint")
             if not set(viewpoint["source_message_ids"]) <= topic_ids:
                 raise SchemaError("topic", "topic evidence must include every viewpoint evidence ID")
     return normalized
@@ -442,6 +449,21 @@ def _validate_author_evidence(source_ids: list[str], author_id: str, catalog: Ma
     _validate_known_evidence(set(source_ids), catalog, kind)
     if any(catalog[message_id][0] != author_id for message_id in source_ids):
         raise SchemaError(kind, "author evidence must belong to the named author")
+
+
+def _validated_fact_evidence_ids(fact_units: Sequence[Mapping[str, Any]]) -> set[str]:
+    evidence_ids: set[str] = set()
+    for index, fact in enumerate(fact_units):
+        if not isinstance(fact, Mapping) or not _non_empty_string_list(fact.get("source_message_ids")):
+            raise SchemaError("invalid_fact_units", f"fact unit {index} requires source message IDs")
+        evidence_ids.update(fact["source_message_ids"])
+    return evidence_ids
+
+
+def _validate_fact_evidence(source_ids: list[str], fact_evidence_ids: set[str], kind: str) -> None:
+    unsupported = set(source_ids) - fact_evidence_ids
+    if unsupported:
+        raise SchemaError("source_message_ids", f"{kind} must cite validated fact evidence: {sorted(unsupported)[0]}")
 
 
 def _non_empty_string(value: object) -> bool:
