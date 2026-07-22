@@ -16,6 +16,9 @@ describe("SourceCoverageForm", () => {
     expect(html).toContain("16:00");
     expect(html).toContain("20:50");
     expect(html).toContain("初始化采集范围");
+    expect(html).toContain('placeholder="YYYY-MM-DD"');
+    expect(html).toContain('inputMode="numeric"');
+    expect(html).not.toContain('type="date"');
     expect(html).not.toContain("source-private-id");
     expect(html).not.toContain("max_pages");
   });
