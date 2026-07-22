@@ -4,7 +4,7 @@ Last updated: 2026-07-22
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准，时间窗代码、远程 migration 和控制面已部署。真实 Discord 范围采集、普通用户生产审阅、launchd 安装与最终 GitHub 收口仍待完成。**
+**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准，时间窗代码、远程 migration、控制面与双来源初始覆盖边界已生效。真实 Discord 范围采集、作者配置、普通用户生产审阅与 launchd 安装仍待完成。**
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
@@ -12,7 +12,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 尚未完成真实 Discord 正常窗口/手动范围、普通用户生产审阅、launchd 安装或 GitHub 收口，不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 或 V1.1 Plan 直接视为后续实现授权。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位，但尚未完成重点作者选择、真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 或 V1.1 Plan 直接视为后续实现授权。
 
 ## Approval status
 
@@ -36,7 +36,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [V1 Discord 正式可用 MVP 计划](superpowers/plans/2026-07-19-v1-discord-mvp.md)
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V1 implementation status：代码、本地确定性验收、专用部署、真实双来源 history/增量/checkpoint、失败隔离/恢复、普通用户阅读与视觉、真实质量抽检和部署日志审阅均已完成；结论为 V1 Discord 正式可用 MVP。
-- V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、稳定作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全的作者配置界面、管理员手动更新与内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。为同步真实 V1 数据库的既有历史，`f9aedcc` 将本地 migration 文件与远程历史对齐，随后已在专用 V1 数据库应用 V1.1 远程 migration 并核对全部历史一致。控制面已部署至专用 V1 生产项目；账号可操作性热修复 `082e5b7` 与管理员首次覆盖边界表单 `54c472d` 均已在生产上线并通过管理员审阅，后者确认两个来源只提供不预填日期的四个上海边界选择。当前控制面验证为 18 个测试文件/77 项、lint 与 production build 通过；V1.1 E2E 公开 fixture 为 5 项，另覆盖 Worker/runtime/scheduler 10 项及控制面 API/Reader/Presentation 32 项；redaction 与 diff 检查通过；代码和进展文档已与 GitHub `origin/main` 同步。尚待管理员为每个来源明确选择首次覆盖边界；之后才能完成真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。
+- V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、稳定作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全的作者配置界面、管理员手动更新与内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。为同步真实 V1 数据库的既有历史，`f9aedcc` 将本地 migration 文件与远程历史对齐，随后已在专用 V1 数据库应用 V1.1 远程 migration 并核对全部历史一致。控制面已部署至专用 V1 生产项目；账号可操作性热修复 `082e5b7`、可靠日期输入 `30f6f0b` 和采集范围路由部署修复 `7afd7b6` 均已生产上线。后者修正了宽泛 Git ignore 规则导致 API 路由未进入 Vercel 构建的问题。管理员已将两个逻辑来源初始化为 2026-07-21 20:50（上海），正式页回显相同的 coverage start/through；尚未因此抓取新内容。当前控制面验证为 18 个测试文件/78 项、lint 与 production build 通过；V1.1 E2E 公开 fixture 为 5 项，另覆盖 Worker/runtime/scheduler 10 项及控制面 API/Reader/Presentation 33 项；redaction 与 diff 检查通过；代码已与 GitHub `origin/main` 同步，本文档将在本次收口同步。尚待管理员为每个来源明确选择重点作者；之后才能完成真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
@@ -112,4 +112,4 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## Next gate
 
-V1 MVP 退出门槛已通过。V1.1 的 Task 1–7、Task 8 本地确定性验收、远程 migration 和控制面部署已完成。此时仍不能将 V1.1 标记为“已验收”或“正式可用”：尚缺用户再次明确授权后的真实 Discord 正常窗口与手动范围验收、作者配置生效、普通用户真实页面审阅、明确 label/config 的 launchd 安装和 GitHub 推送。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2、X、媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作，仍必须分别编写并批准新的 Spec 与 implementation plan；本次结论不构成生产 SLA。
+V1 MVP 退出门槛已通过。V1.1 的 Task 1–7、Task 8 本地确定性验收、远程 migration、控制面部署和双来源初始 coverage 已完成。此时仍不能将 V1.1 标记为“已验收”或“正式可用”：尚缺管理员重点作者选择后的真实 Discord 正常窗口与手动范围验收、作者配置生效、普通用户真实页面审阅和明确 label/config 的 launchd 安装。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2、X、媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作，仍必须分别编写并批准新的 Spec 与 implementation plan；本次结论不构成生产 SLA。
