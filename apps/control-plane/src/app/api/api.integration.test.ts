@@ -54,6 +54,9 @@ const ruleMocks = vi.hoisted(() => ({
 const loginMocks = vi.hoisted(() => ({
   loginWithPassword: vi.fn(),
 }));
+const logoutMocks = vi.hoisted(() => ({
+  signOutCurrentUser: vi.fn(),
+}));
 const readerMocks = vi.hoisted(() => ({
   readDiscordDay: vi.fn(),
 }));
@@ -62,6 +65,7 @@ vi.mock("../../lib/auth/current-user", () => authMocks);
 vi.mock("../../lib/auth/invites", () => inviteMocks);
 vi.mock("../../lib/auth/worker", () => workerMocks);
 vi.mock("../../lib/auth/login", () => loginMocks);
+vi.mock("../../lib/auth/logout", () => logoutMocks);
 vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
 vi.mock("../../lib/db/repositories/windowed-sync", () => windowedSyncMocks);
@@ -72,6 +76,7 @@ vi.mock("../../lib/db/repositories/reader", () => readerMocks);
 
 import { POST as postAdminInvite } from "./admin/invites/route";
 import { POST as postLogin } from "./auth/login/route";
+import { POST as postLogout } from "./auth/logout/route";
 import { POST as postEnrol } from "./worker/enrol/route";
 import { POST as postHeartbeat } from "./worker/heartbeat/route";
 import { POST as postPersist } from "./worker/tasks/[taskId]/persist/route";
@@ -708,5 +713,15 @@ describe("v0 control-plane API authorization", () => {
     }));
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "invalid_credentials" });
+  });
+
+  it("clears the current session through the logout API without returning authentication data", async () => {
+    logoutMocks.signOutCurrentUser.mockResolvedValue({ ok: true });
+
+    const response = await postLogout(new Request("http://localhost/api/auth/logout", { method: "POST" }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(logoutMocks.signOutCurrentUser).toHaveBeenCalledOnce();
   });
 });

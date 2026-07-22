@@ -4,11 +4,13 @@ import { SourceCreateForm } from "../../../components/admin/SourceCreateForm";
 import { SourceRuleForm } from "../../../components/admin/SourceRuleForm";
 import { SourceAuthorProfilesForm } from "../../../components/admin/SourceAuthorProfilesForm";
 import { SourceAdministrationForm } from "../../../components/admin/SourceAdministrationForm";
+import { getCurrentUser } from "../../../lib/auth/current-user";
 import { listWorkers } from "../../../lib/db/repositories/workers";
 
 export default async function AdminSourcesPage() {
-  const [sources, workers] = await Promise.all([listSources(), listWorkers()]);
-  return <AdminShell active="sources">
+  const [sources, workers, viewer] = await Promise.all([listSources(), listWorkers(), getCurrentUser()]);
+  if (!viewer) return null;
+  return <AdminShell active="sources" viewer={viewer}>
     <section>
       <h1>Sources</h1>
       <p>Only logical source identifiers are shown. Channel URLs and Profile references remain on the Worker.</p>
