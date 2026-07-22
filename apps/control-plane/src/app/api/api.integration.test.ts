@@ -33,6 +33,7 @@ const taskMocks = vi.hoisted(() => ({
 }));
 const windowedSyncMocks = vi.hoisted(() => ({
   createManualDiscordRefresh: vi.fn(),
+  getSourceCoverage: vi.fn(),
   initializeSourceCoverage: vi.fn(),
   WindowedSyncError: class WindowedSyncError extends Error {},
 }));
@@ -87,7 +88,7 @@ import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
 import { PATCH as patchAdminSource } from "./admin/sources/route";
 import { POST as postAdminRule } from "./admin/rules/route";
 import { POST as postAdminTask } from "./admin/tasks/route";
-import { POST as postCoverageInitialization } from "./admin/sources/[sourceId]/coverage/route";
+import { GET as getCoverage, POST as postCoverageInitialization } from "./admin/sources/[sourceId]/coverage/route";
 import {
   GET as getAuthorProfiles,
   POST as postAuthorProfile,
@@ -365,6 +366,22 @@ describe("v0 control-plane API authorization", () => {
       idempotent: false,
     } });
     expect(JSON.stringify(manualBody)).not.toContain("cursor");
+  });
+
+  it("keeps coverage read failures generic while recording safe diagnostics", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    windowedSyncMocks.getSourceCoverage.mockRejectedValue({ code: "42P01", message: "relation is unavailable" });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await getCoverage(
+      new Request("http://localhost/api/admin/sources/source-1/coverage"),
+      { params: Promise.resolve({ sourceId: "source-1" }) },
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "coverage_read_failed" });
+    expect(errorSpy).toHaveBeenCalledWith("coverage_read_failed", { code: "42P01", message: "relation is unavailable" });
+    errorSpy.mockRestore();
   });
 
   it("rejects source administration payloads that try to include collection secrets or URLs", async () => {

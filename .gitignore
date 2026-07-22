@@ -28,7 +28,7 @@ logs/
 tmp/
 .tmp/
 temp/
-coverage/
+/coverage/
 dist/
 build/
 .worktrees/
