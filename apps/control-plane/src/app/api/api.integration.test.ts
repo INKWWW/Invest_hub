@@ -21,6 +21,7 @@ const taskMocks = vi.hoisted(() => ({
   createDiscordSyncTask: vi.fn(),
   getTaskDetail: vi.fn(),
   getWindowDailyFactContext: vi.fn(),
+  resolveWindowedAuthorProfiles: vi.fn(),
   listRecentTasks: vi.fn(),
   persistWorkerExecution: vi.fn(),
   persistWindowedCapturePage: vi.fn(),
@@ -98,6 +99,7 @@ import { POST as postManualDiscordRefresh } from "./admin/discord/manual-refresh
 import { GET as getDiscordReader } from "./reader/discord/route";
 import { POST as postScheduleTick } from "./worker/schedule/tick/route";
 import { GET as getDailyFactContext } from "./worker/tasks/[taskId]/daily-fact-context/route";
+import { POST as postResolveAuthorProfiles } from "./worker/tasks/[taskId]/resolve-author-profiles/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${path}`, {
@@ -280,7 +282,7 @@ describe("v0 control-plane API authorization", () => {
     });
   });
 
-  it("allows admins to initialize coverage, select observed authors, and queue a safe manual refresh", async () => {
+  it("allows admins to initialize coverage, configure direct author selectors, and queue a safe manual refresh", async () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
     windowedSyncMocks.initializeSourceCoverage.mockResolvedValue({
       sourceId: "source-1",
@@ -293,10 +295,13 @@ describe("v0 control-plane API authorization", () => {
       authorHandle: "observed-author",
     }]);
     authorProfileMocks.saveSourceAuthorProfile.mockResolvedValue({
+      id: "profile-1",
       sourceId: "source-1",
-      authorId: "discord-stable-author-1",
-      authorDisplay: "Observed author",
-      authorHandle: "observed-author",
+      requestedAuthor: "Priority author",
+      resolutionStatus: "pending",
+      authorId: null,
+      authorDisplay: "Priority author",
+      authorHandle: null,
       enabled: true,
     });
     windowedSyncMocks.createManualDiscordRefresh.mockResolvedValue({
@@ -333,24 +338,32 @@ describe("v0 control-plane API authorization", () => {
     }] });
 
     const invalidProfile = await postAuthorProfile(
-      jsonRequest("/api/admin/sources/source-1/author-profiles", { author_id: "discord-stable-author-1", author_display: "free-text" }),
+      jsonRequest("/api/admin/sources/source-1/author-profiles", { requested_author: "Priority author", author_id: "discord-stable-author-1" }),
       params,
     );
     expect(invalidProfile.status).toBe(422);
     expect(authorProfileMocks.saveSourceAuthorProfile).not.toHaveBeenCalled();
 
     const profile = await postAuthorProfile(
-      jsonRequest("/api/admin/sources/source-1/author-profiles", { author_id: "discord-stable-author-1" }),
+      jsonRequest("/api/admin/sources/source-1/author-profiles", { requested_author: "Priority author" }),
       params,
     );
     expect(profile.status).toBe(201);
     expect(await profile.json()).toEqual({ author_profile: {
+      id: "profile-1",
       source_id: "source-1",
-      author_id: "discord-stable-author-1",
-      author_display: "Observed author",
-      author_handle: "observed-author",
+      requested_author: "Priority author",
+      resolution_status: "pending",
+      author_id: null,
+      author_display: "Priority author",
+      author_handle: null,
       enabled: true,
     } });
+    expect(authorProfileMocks.saveSourceAuthorProfile).toHaveBeenCalledWith({
+      sourceId: "source-1",
+      requestedAuthor: "Priority author",
+      actorId: "admin-1",
+    });
 
     const manual = await postManualDiscordRefresh(jsonRequest("/api/admin/discord/manual-refresh", { source_id: "source-1" }));
     expect(manual.status).toBe(202);
@@ -513,6 +526,28 @@ describe("v0 control-plane API authorization", () => {
       { params: Promise.resolve({ taskId: "task-1" }) },
     );
     expect(invalid.status).toBe(422);
+  });
+
+  it("resolves configured author selectors after page persistence without returning messages", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.resolveWindowedAuthorProfiles.mockResolvedValue({ author_profiles: [{
+      profile_id: "profile-1",
+      requested_author: "Priority author",
+      resolution_status: "resolved",
+      author_id: "stable-author-1",
+      author_display: "Priority author",
+      author_handle: null,
+      enabled: true,
+    }] });
+
+    const response = await postResolveAuthorProfiles(
+      jsonRequest("/api/worker/tasks/task-1/resolve-author-profiles", { attempt: 2 }),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ author_profiles: [expect.objectContaining({ profile_id: "profile-1" })] });
+    expect(taskMocks.resolveWindowedAuthorProfiles).toHaveBeenCalledWith("task-1", 2, "worker-1");
   });
 
   it("maps an attempt/lease mismatch to 409", async () => {

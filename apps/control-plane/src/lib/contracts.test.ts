@@ -107,7 +107,7 @@ describe("v0 contracts", () => {
       collection_scope: { mode: string };
       capture_range: { start_at: string; end_at: string; timezone: string };
       capture_progress: { resume_cursor: string | null; page_count: number };
-      author_profile_snapshot: Array<{ author_id: string }>;
+      author_profile_snapshot: Array<{ profile_id: string; author_id: string | null }>;
     }>("task-claim", {
       contract_version: "v0",
       task_id: "task-window-001",
@@ -134,9 +134,12 @@ describe("v0 contracts", () => {
       },
       capture_progress: { resume_cursor: null, page_count: 0, range_complete: false },
       author_profile_snapshot: [{
-        author_id: "discord-stable-author-1",
-        author_display: "Observed author",
-        author_handle: "observed-author",
+        profile_id: "profile-1",
+        requested_author: "Priority author",
+        resolution_status: "pending",
+        author_id: null,
+        author_display: "Priority author",
+        author_handle: null,
         enabled: true,
       }],
     });
@@ -144,6 +147,7 @@ describe("v0 contracts", () => {
     expect(claim.collection_scope).toEqual({ mode: "window" });
     expect(claim.capture_range).toMatchObject({ timezone: "Asia/Shanghai", end_at: "2026-07-22T08:00:00Z" });
     expect(claim.capture_progress).toEqual({ resume_cursor: null, page_count: 0, range_complete: false });
+    expect(claim.author_profile_snapshot[0]).toMatchObject({ profile_id: "profile-1", author_id: null });
   });
 
   it("accepts a verified V1.1 page receipt while rejecting unknown persistence fields", () => {

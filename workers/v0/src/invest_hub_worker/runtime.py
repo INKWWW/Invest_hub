@@ -270,6 +270,7 @@ class AuthorizedDiscordRuntime:
         *,
         on_capture_page: Callable[[dict[str, Any]], None] | None = None,
         load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
+        resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Collect one immutable range until its lower boundary is proven.
 
@@ -280,7 +281,7 @@ class AuthorizedDiscordRuntime:
         payloads for the compatibility worker path.
         """
 
-        capture_range, author_profiles = self._validate_windowed_claim(claim)
+        capture_range, author_profile_snapshot = self._validate_windowed_claim(claim)
         cursor = capture_range.resume_cursor
         canonical_by_id: dict[str, CanonicalMessage] = {}
         duplicate_count = 0
@@ -357,6 +358,10 @@ class AuthorizedDiscordRuntime:
             raise RuntimeExecutionError("persistence_failure", "windowed local evidence persistence failed") from exc
 
         canonical_messages = list(canonical_by_id.values())
+        author_profiles = self._resolve_windowed_author_profiles(
+            author_profile_snapshot,
+            resolve_author_profiles,
+        )
         structured_runs, retry_count, elapsed_ms = self._structured_runs_v1_1(claim, canonical_messages, author_profiles)
         try:
             daily_outputs, daily_retries, daily_elapsed_ms = self._v1_1_daily_outputs(
@@ -425,7 +430,7 @@ class AuthorizedDiscordRuntime:
             raise RuntimeExecutionError("preflight", str(exc)) from exc
         return scope, frozenset(target_author_ids)
 
-    def _validate_windowed_claim(self, claim: Mapping[str, Any]) -> tuple[WindowedCaptureRange, dict[str, str]]:
+    def _validate_windowed_claim(self, claim: Mapping[str, Any]) -> tuple[WindowedCaptureRange, list[dict[str, Any]]]:
         if claim.get("source_id") != self.config.source_id:
             raise RuntimeExecutionError("unauthorized", "task source does not match the local authorized source")
         if claim.get("parameter_version") != self.config.parameter_version:
@@ -435,25 +440,111 @@ class AuthorizedDiscordRuntime:
             profiles = claim.get("author_profile_snapshot")
             if not isinstance(profiles, list):
                 raise ValueError("window task author profile snapshot is invalid")
-            author_profiles: dict[str, str] = {}
+            author_profiles: list[dict[str, Any]] = []
+            profile_ids: set[str] = set()
+            legacy_author_ids: set[str] = set()
             for profile in profiles:
-                if not isinstance(profile, Mapping) or set(profile) != {"author_id", "author_display", "author_handle", "enabled"}:
+                if not isinstance(profile, Mapping):
                     raise ValueError("window task author profile snapshot is invalid")
+                if set(profile) == {"author_id", "author_display", "author_handle", "enabled"}:
+                    author_id = profile.get("author_id")
+                    display = profile.get("author_display")
+                    handle = profile.get("author_handle")
+                    if not isinstance(author_id, str) or not author_id or not isinstance(display, str) or not display:
+                        raise ValueError("window task author profile snapshot is invalid")
+                    if handle is not None and not isinstance(handle, str):
+                        raise ValueError("window task author profile snapshot is invalid")
+                    if profile.get("enabled") is not True or author_id in legacy_author_ids:
+                        raise ValueError("window task author profile snapshot is invalid")
+                    legacy_author_ids.add(author_id)
+                    author_profiles.append({
+                        "profile_id": None,
+                        "requested_author": display,
+                        "resolution_status": "resolved",
+                        "author_id": author_id,
+                        "author_display": display,
+                        "author_handle": handle,
+                        "enabled": True,
+                    })
+                    continue
+                if set(profile) != {"profile_id", "requested_author", "resolution_status", "author_id", "author_display", "author_handle", "enabled"}:
+                    raise ValueError("window task author profile snapshot is invalid")
+                profile_id = profile.get("profile_id")
+                requested_author = profile.get("requested_author")
+                status = profile.get("resolution_status")
                 author_id = profile.get("author_id")
                 display = profile.get("author_display")
                 handle = profile.get("author_handle")
-                if not isinstance(author_id, str) or not author_id or not isinstance(display, str) or not display:
+                if not isinstance(profile_id, str) or not profile_id or profile_id in profile_ids:
                     raise ValueError("window task author profile snapshot is invalid")
+                if not isinstance(requested_author, str) or not requested_author or not isinstance(display, str) or not display:
+                    raise ValueError("window task author profile snapshot is invalid")
+                if status not in {"pending", "resolved", "ambiguous"} or profile.get("enabled") is not True:
+                    raise ValueError("window task author profiles are duplicated")
                 if handle is not None and not isinstance(handle, str):
                     raise ValueError("window task author profile snapshot is invalid")
-                if profile.get("enabled") is not True:
+                if status == "resolved":
+                    if not isinstance(author_id, str) or not author_id:
+                        raise ValueError("window task author profile snapshot is invalid")
+                elif author_id is not None:
                     raise ValueError("window task author profile snapshot is invalid")
-                if author_id in author_profiles:
-                    raise ValueError("window task author profiles are duplicated")
-                author_profiles[author_id] = display
+                profile_ids.add(profile_id)
+                author_profiles.append(dict(profile))
         except ValueError as exc:
             raise RuntimeExecutionError("preflight", str(exc)) from exc
         return capture_range, author_profiles
+
+    @staticmethod
+    def _resolve_windowed_author_profiles(
+        snapshot: list[dict[str, Any]],
+        resolver: Callable[[], Mapping[str, Any]] | None,
+    ) -> dict[str, str]:
+        """Use only server-resolved stable identities in V1.1 author cards.
+
+        New snapshots name a profile row and are re-resolved after every page is
+        durably persisted.  Legacy snapshots already carry a stable identity
+        and deliberately bypass the new endpoint so old queued work remains
+        executable during the migration.
+        """
+
+        new_profiles = [profile for profile in snapshot if profile["profile_id"] is not None]
+        resolved: list[Mapping[str, Any]] = [profile for profile in snapshot if profile["profile_id"] is None]
+        if new_profiles:
+            if resolver is None:
+                raise RuntimeExecutionError("preflight", "window task author selectors require a resolver")
+            value = resolver()
+            if not isinstance(value, Mapping) or set(value) != {"author_profiles"} or not isinstance(value.get("author_profiles"), list):
+                raise RuntimeExecutionError("schema_error", "resolved author profiles must be a safe object")
+            expected = {str(profile["profile_id"]): profile for profile in new_profiles}
+            returned_ids: set[str] = set()
+            for profile in value["author_profiles"]:
+                if not isinstance(profile, Mapping) or set(profile) != {"profile_id", "requested_author", "resolution_status", "author_id", "author_display", "author_handle", "enabled"}:
+                    raise RuntimeExecutionError("schema_error", "resolved author profile is invalid")
+                profile_id = profile.get("profile_id")
+                author_id = profile.get("author_id")
+                display = profile.get("author_display")
+                handle = profile.get("author_handle")
+                if not isinstance(profile_id, str) or profile_id not in expected or profile_id in returned_ids:
+                    raise RuntimeExecutionError("schema_error", "resolved author profile is outside its task snapshot")
+                if profile.get("requested_author") != expected[profile_id]["requested_author"] or profile.get("resolution_status") != "resolved":
+                    raise RuntimeExecutionError("schema_error", "resolved author profile does not match its selector")
+                if not isinstance(author_id, str) or not author_id or not isinstance(display, str) or not display or profile.get("enabled") is not True:
+                    raise RuntimeExecutionError("schema_error", "resolved author profile is invalid")
+                if handle is not None and not isinstance(handle, str):
+                    raise RuntimeExecutionError("schema_error", "resolved author profile is invalid")
+                returned_ids.add(profile_id)
+                resolved.append(profile)
+
+        profiles_by_author: dict[str, str] = {}
+        for profile in resolved:
+            author_id = profile.get("author_id")
+            display = profile.get("author_display")
+            if not isinstance(author_id, str) or not author_id or not isinstance(display, str) or not display:
+                raise RuntimeExecutionError("schema_error", "resolved author profile is invalid")
+            if author_id in profiles_by_author:
+                raise RuntimeExecutionError("schema_error", "resolved author profiles are duplicated")
+            profiles_by_author[author_id] = display
+        return profiles_by_author
 
     def _validate_window_page(self, page: object, requested_cursor: str | None) -> None:
         if not isinstance(page, RawPage) or page.source_id != self.config.source_id:
@@ -775,6 +866,7 @@ class AuthorizedDiscordRuntimeSet:
         *,
         on_capture_page: Callable[[dict[str, Any]], None],
         load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
+        resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
         source_id = claim.get("source_id")
         if not isinstance(source_id, str) or source_id not in self._runtimes:
@@ -783,6 +875,7 @@ class AuthorizedDiscordRuntimeSet:
             claim,
             on_capture_page=on_capture_page,
             load_daily_fact_context=load_daily_fact_context,
+            resolve_author_profiles=resolve_author_profiles,
         )
 
 

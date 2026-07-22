@@ -185,6 +185,29 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-window-1/daily-fact-context?attempt=2"))
             self.assertIsNone(transport.calls[1]["body"])
 
+    def test_author_profile_resolution_is_worker_scoped_and_returns_no_messages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"author_profiles": [{
+                    "profile_id": "profile-1",
+                    "requested_author": "Priority author",
+                    "resolution_status": "resolved",
+                    "author_id": "stable-author-1",
+                    "author_display": "Priority author",
+                    "author_handle": None,
+                    "enabled": True,
+                }]}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            resolved = protocol.resolve_author_profiles("task-window-1", 2)
+
+            self.assertEqual(resolved["author_profiles"][0]["author_id"], "stable-author-1")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-window-1/resolve-author-profiles"))
+            self.assertEqual(transport.calls[1]["body"], {"attempt": 2})
+
     def test_window_page_and_range_protocols_use_task_scoped_endpoints(self) -> None:
         segment = {
             "contract_version": "v0",

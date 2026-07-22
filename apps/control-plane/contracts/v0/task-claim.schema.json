@@ -83,15 +83,40 @@
     "author_profile_snapshot": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["author_id", "author_display", "author_handle", "enabled"],
-        "properties": {
-          "author_id": { "type": "string", "minLength": 1, "maxLength": 256 },
-          "author_display": { "type": "string", "minLength": 1, "maxLength": 512 },
-          "author_handle": { "type": ["string", "null"], "maxLength": 512 },
-          "enabled": { "const": true }
-        }
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["author_id", "author_display", "author_handle", "enabled"],
+            "properties": {
+              "author_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+              "author_display": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "author_handle": { "type": ["string", "null"], "maxLength": 512 },
+              "enabled": { "const": true }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["profile_id", "requested_author", "resolution_status", "author_id", "author_display", "author_handle", "enabled"],
+            "properties": {
+              "profile_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "requested_author": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "resolution_status": { "enum": ["pending", "resolved", "ambiguous"] },
+              "author_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+              "author_display": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "author_handle": { "type": ["string", "null"], "maxLength": 512 },
+              "enabled": { "const": true }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "resolution_status": { "const": "resolved" } } },
+                "then": { "properties": { "author_id": { "type": "string", "minLength": 1, "maxLength": 256 } } },
+                "else": { "properties": { "author_id": { "type": "null" } } }
+              }
+            ]
+          }
+        ]
       }
     }
   },
