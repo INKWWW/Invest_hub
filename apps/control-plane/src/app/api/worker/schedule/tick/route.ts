@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authenticateWorker } from "../../../../../lib/auth/worker";
-import { isScheduleWindowKey, scheduleDiscordSyncTasks } from "../../../../../lib/db/repositories/tasks";
+import { scheduleDueDiscordTasks } from "../../../../../lib/db/repositories/tasks";
 
 export async function POST(request: Request) {
   const worker = await authenticateWorker(request);
@@ -15,12 +15,12 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "invalid_schedule_tick" }, { status: 422 });
   }
-  if (Object.keys(body).length !== 1 || !isScheduleWindowKey(body.window_key)) {
+  if (Object.keys(body).length !== 0) {
     return NextResponse.json({ error: "invalid_schedule_tick" }, { status: 422 });
   }
 
   try {
-    const tick = await scheduleDiscordSyncTasks(worker.id, body.window_key);
+    const tick = await scheduleDueDiscordTasks(worker.id);
     return NextResponse.json(tick);
   } catch (error) {
     if ((error as { code?: string }).code === "42501") return NextResponse.json({ error: "unauthorized" }, { status: 401 });

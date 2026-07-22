@@ -27,6 +27,7 @@ const taskMocks = vi.hoisted(() => ({
   completeWindowedCaptureRange: vi.fn(),
   recordTaskFailure: vi.fn(),
   scheduleDiscordSyncTasks: vi.fn(),
+  scheduleDueDiscordTasks: vi.fn(),
   isScheduleWindowKey: (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/.test(value),
 }));
 const windowedSyncMocks = vi.hoisted(() => ({
@@ -430,33 +431,24 @@ describe("v0 control-plane API authorization", () => {
     expect(await response.json()).toMatchObject({ worker_id: "worker-1", heartbeat_interval_seconds: 60 });
   });
 
-  it("creates only the bound Worker's scheduled source tasks and returns duplicate ticks idempotently", async () => {
+  it("lets the control plane calculate due scheduled windows without a Worker-submitted key", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
-    taskMocks.scheduleDiscordSyncTasks.mockResolvedValue({
-      window_key: "2099-01-01T08:00+08:00",
+    taskMocks.scheduleDueDiscordTasks.mockResolvedValue({
+      scheduled_at: "2099-01-01T00:00:00Z",
       tasks: [{ id: "scheduled-task-1", source_id: "source-1", idempotent: false }],
     });
 
     const first = await postScheduleTick(
-      jsonRequest("/api/worker/schedule/tick", { window_key: "2099-01-01T08:00+08:00" }, { authorization: "Bearer device-secret" }),
+      jsonRequest("/api/worker/schedule/tick", {}, { authorization: "Bearer device-secret" }),
     );
     expect(first.status).toBe(200);
     expect(await first.json()).toMatchObject({ tasks: [{ id: "scheduled-task-1", source_id: "source-1" }] });
-    expect(taskMocks.scheduleDiscordSyncTasks).toHaveBeenCalledWith("worker-1", "2099-01-01T08:00+08:00");
-
-    taskMocks.scheduleDiscordSyncTasks.mockResolvedValueOnce({
-      window_key: "2099-01-01T08:00+08:00",
-      tasks: [{ id: "scheduled-task-1", source_id: "source-1", idempotent: true }],
-    });
-    const duplicate = await postScheduleTick(
-      jsonRequest("/api/worker/schedule/tick", { window_key: "2099-01-01T08:00+08:00" }, { authorization: "Bearer device-secret" }),
-    );
-    expect(duplicate.status).toBe(200);
-    expect((await duplicate.json()).tasks[0]).toMatchObject({ id: "scheduled-task-1", idempotent: true });
+    expect(taskMocks.scheduleDueDiscordTasks).toHaveBeenCalledWith("worker-1");
+    expect(taskMocks.scheduleDiscordSyncTasks).not.toHaveBeenCalled();
   });
 
-  it("rejects unauthenticated Workers and invalid schedule window payloads", async () => {
-    const unauthenticated = await postScheduleTick(jsonRequest("/api/worker/schedule/tick", { window_key: "2099-01-01T08:00+08:00" }));
+  it("rejects unauthenticated Workers and client-supplied schedule ranges", async () => {
+    const unauthenticated = await postScheduleTick(jsonRequest("/api/worker/schedule/tick", {}));
     expect(unauthenticated.status).toBe(401);
 
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
@@ -464,7 +456,7 @@ describe("v0 control-plane API authorization", () => {
       jsonRequest("/api/worker/schedule/tick", { window_key: "not-a-window" }, { authorization: "Bearer device-secret" }),
     );
     expect(invalid.status).toBe(422);
-    expect(taskMocks.scheduleDiscordSyncTasks).not.toHaveBeenCalled();
+    expect(taskMocks.scheduleDueDiscordTasks).not.toHaveBeenCalled();
   });
 
   it("maps an attempt/lease mismatch to 409", async () => {

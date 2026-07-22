@@ -19,6 +19,12 @@ export type ScheduledTick = {
   tasks: ScheduledTask[];
 };
 
+export type DueScheduledTick = {
+  scheduled_at: string;
+  tasks: ScheduledTask[];
+  deferred_source_ids: string[];
+};
+
 const scheduleWindowPattern = /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/;
 
 export function isScheduleWindowKey(value: unknown): value is string {
@@ -70,6 +76,29 @@ export async function scheduleDiscordSyncTasks(workerId: string, windowKey: stri
     return { id: value.id, source_id: value.source_id, idempotent: value.idempotent };
   });
   return { window_key: windowKey, tasks };
+}
+
+export async function scheduleDueDiscordTasks(workerId: string, now = new Date()): Promise<DueScheduledTick> {
+  const { data, error } = await createSupabaseAdminClient().rpc("enqueue_due_discord_tasks", {
+    p_worker_id: workerId,
+    p_now: now.toISOString(),
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("invalid_scheduled_tick");
+  const tick = data as Record<string, unknown>;
+  if (typeof tick.scheduled_at !== "string" || !Array.isArray(tick.tasks)
+    || !Array.isArray(tick.deferred_source_ids) || !tick.deferred_source_ids.every((value) => typeof value === "string")) {
+    throw new Error("invalid_scheduled_tick");
+  }
+  const tasks = tick.tasks.map((task) => {
+    if (!task || typeof task !== "object" || Array.isArray(task)) throw new Error("invalid_scheduled_task");
+    const value = task as Record<string, unknown>;
+    if (typeof value.id !== "string" || typeof value.source_id !== "string" || typeof value.idempotent !== "boolean") {
+      throw new Error("invalid_scheduled_task");
+    }
+    return { id: value.id, source_id: value.source_id, idempotent: value.idempotent };
+  });
+  return { scheduled_at: tick.scheduled_at, tasks, deferred_source_ids: tick.deferred_source_ids };
 }
 
 export async function listRecentTasks(limit = 50) {
