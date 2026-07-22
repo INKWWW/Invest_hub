@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type Source = { id: string; source_key: string; display_name: string; parameter_version: string; enabled: boolean };
+type Source = { id: string; display_name: string; parameter_version: string; enabled: boolean };
 
 export function TaskCreateForm({ sources }: { sources: Source[] }) {
   const [message, setMessage] = useState<string | null>(null);
@@ -39,7 +39,7 @@ export function TaskCreateForm({ sources }: { sources: Source[] }) {
   return (
     <form action={submit}>
       <h2>新建同步任务</h2>
-      <label>来源 <select name="source_id" required>{sources.map((source) => <option key={source.id} value={source.id}>{source.display_name}（{source.source_key}）</option>)}</select></label>{" "}
+      <label>来源 <select name="source_id" required>{sources.map((source) => <option key={source.id} value={source.id}>{source.display_name}</option>)}</select></label>{" "}
       <label>参数版本 <input name="parameter_version" required defaultValue={sources[0]?.parameter_version} maxLength={128} /></label>{" "}
       <label>任务类型 <select value={mode} onChange={(event) => setMode(event.target.value as "incremental" | "history")}><option value="incremental">常规增量（固定 5 页）</option><option value="history">有界 history 补采</option></select></label>{" "}
       {mode === "history" ? <label>history 页数 <input name="max_pages" type="number" min={1} max={25} required /></label> : <p>常规增量任务固定最多 5 页。</p>}

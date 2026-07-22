@@ -213,6 +213,7 @@ describe("v0 control-plane API authorization", () => {
     }));
     const source = await patchAdminSource(jsonRequest("/api/admin/sources", {
       source_id: "source-1",
+      display_name: "Research community · #daily",
       enabled: true,
       authorized_worker_id: "worker-1",
     }));
@@ -402,9 +403,25 @@ describe("v0 control-plane API authorization", () => {
 
     const response = await patchAdminSource(jsonRequest("/api/admin/sources", {
       source_id: "source-1",
+      display_name: "Research community · #daily",
       enabled: true,
       authorized_worker_id: "worker-1",
       channel_url: "https://discord.example.invalid/channels/private",
+    }));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_source_administration" });
+    expect(sourceMocks.updateSourceAdministration).not.toHaveBeenCalled();
+  });
+
+  it("rejects numeric source labels in administrator source updates", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+
+    const response = await patchAdminSource(jsonRequest("/api/admin/sources", {
+      source_id: "source-1",
+      display_name: "Discord Source 01",
+      enabled: true,
+      authorized_worker_id: "worker-1",
     }));
 
     expect(response.status).toBe(422);

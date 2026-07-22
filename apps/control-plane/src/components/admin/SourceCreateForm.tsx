@@ -29,10 +29,10 @@ export function SourceCreateForm() {
 
   return (
     <form action={submit}>
-      <h2>新建逻辑来源</h2>
-      <p>只保存逻辑来源标识；Discord URL 和本地浏览器 Profile 只保存在 Worker 配置中。</p>
-      <label>来源标识 <input name="source_key" required maxLength={128} /></label>{" "}
-      <label>显示名称 <input name="display_name" required maxLength={128} /></label>{" "}
+      <h2>新建 Discord 来源</h2>
+      <p>显示名称必须是“社区名 · 频道名”；它是阅读页、任务和管理页唯一展示给人的来源名称。内部标识、Discord URL 和本地浏览器 Profile 不会展示。</p>
+      <label>内部来源标识 <input name="source_key" required maxLength={128} /></label>{" "}
+      <label>显示名称（社区名 · 频道名） <input name="display_name" required maxLength={128} placeholder="例如：研究社区 · #美股讨论" /></label>{" "}
       <label>参数版本 <input name="parameter_version" required maxLength={128} /></label>{" "}
       <button type="submit" disabled={pending}>{pending ? "创建中…" : "创建来源"}</button>
       {message ? <p role="status">{message}</p> : null}

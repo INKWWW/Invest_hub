@@ -38,6 +38,7 @@ describe("source administration", () => {
 
     await expect(updateSourceAdministration({
       sourceId: "source-1",
+      displayName: "Research community · #daily",
       enabled: true,
       authorizedWorkerId: "worker-1",
     })).rejects.toMatchObject({ message: "invalid_authorized_worker" } satisfies Partial<SourceAdministrationError>);
@@ -54,10 +55,15 @@ describe("source administration", () => {
 
     await expect(updateSourceAdministration({
       sourceId: "source-1",
+      displayName: "Research community · #daily",
       enabled: true,
       authorizedWorkerId: "worker-1",
     })).resolves.toMatchObject({ id: "source-1", authorized_worker_id: "worker-1" });
 
-    expect(databaseMocks.sourceUpdate).toHaveBeenCalledWith({ enabled: true, authorized_worker_id: "worker-1" });
+    expect(databaseMocks.sourceUpdate).toHaveBeenCalledWith({
+      display_name: "Research community · #daily",
+      enabled: true,
+      authorized_worker_id: "worker-1",
+    });
   });
 });
