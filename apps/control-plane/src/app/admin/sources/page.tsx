@@ -2,6 +2,7 @@ import { listSources } from "../../../lib/db/repositories/sources";
 import { AdminShell } from "../../../components/admin/AdminShell";
 import { SourceCreateForm } from "../../../components/admin/SourceCreateForm";
 import { SourceRuleForm } from "../../../components/admin/SourceRuleForm";
+import { SourceAuthorProfilesForm } from "../../../components/admin/SourceAuthorProfilesForm";
 import { SourceAdministrationForm } from "../../../components/admin/SourceAdministrationForm";
 import { listWorkers } from "../../../lib/db/repositories/workers";
 
@@ -14,7 +15,7 @@ export default async function AdminSourcesPage() {
       <SourceCreateForm />
       {sources.length > 0 ? (
         <table>
-          <thead><tr><th>Source</th><th>Type</th><th>Parameter version</th><th>State</th><th>Authorized Worker</th><th>Rules</th></tr></thead>
+          <thead><tr><th>Source</th><th>Type</th><th>Parameter version</th><th>State</th><th>Authorized Worker</th><th>Rules</th><th>作者配置</th></tr></thead>
           <tbody>
             {sources.map((source) => (
               <tr key={source.id}>
@@ -24,6 +25,7 @@ export default async function AdminSourcesPage() {
                 <td><SourceAdministrationForm sourceId={source.id} enabled={source.enabled} authorizedWorkerId={source.authorized_worker_id} workers={workers} /></td>
                 <td>{source.authorized_worker_id ?? "any enrolled Worker"}</td>
                 <td>v{source.author_rules_version}<SourceRuleForm sourceId={source.id} /></td>
+                <td><SourceAuthorProfilesForm sourceId={source.id} /></td>
               </tr>
             ))}
           </tbody>

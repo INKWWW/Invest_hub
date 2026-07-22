@@ -21,73 +21,52 @@ describe("DiscordReader", () => {
   });
 
   it("makes failure states explicit instead of calling them no-new-data", () => {
-    expect(readerStatusLabel("processing")).toContain("Processing");
-    expect(readerStatusLabel("partial_failure")).toContain("Partial failure");
-    expect(readerStatusLabel("retryable_failed")).toContain("Retryable failure");
-    expect(readerStatusLabel("failed")).toContain("Failed");
+    expect(readerStatusLabel("processing")).toContain("处理中");
+    expect(readerStatusLabel("partial_failure")).toContain("覆盖不完整");
+    expect(readerStatusLabel("retryable_failed")).toContain("可重试失败");
+    expect(readerStatusLabel("failed")).toContain("失败");
+    expect(readerStatusLabel("no_new_messages")).toContain("没有新增消息");
   });
 
-  it("renders summary-first content without serializing summary JSON or raw evidence", () => {
+  it("renders V1.1 summary-first content without raw evidence and keeps refresh admin-only", () => {
     const renderedDays: ReaderDay[] = [{
       source: { sourceKey: "source-a", displayName: "Source A" },
       naturalDate: "2099-01-02",
       status: "succeeded",
       dailySummary: {
-        id: "daily-1",
         version: 1,
-        output: {
-          topics: [{
-            title: "Earnings",
-            summary: "Guidance changed.",
-            source_message_ids: ["message-1", "message-2"],
-            author_scope: "target",
-            tickers: ["ABC"],
-          }],
-          warnings: ["Unparsed attachment"],
-          local_raw_ref: "local://must-not-render",
+        presentation: {
+          kind: "v1.1",
+          asOf: "2099-01-02T09:00:00.000Z",
+          authorCards: [{ authorDisplay: "作者甲", marketTrend: "趋势等待确认", stockJudgments: [], marketTendency: null, stockTendency: null, methodology: [], uncertainty: [], evidenceCount: 2 }],
+          topicDiscussions: [{ title: "Earnings", overview: "Guidance changed.", viewpoints: [], uncertainty: [], evidenceCount: 2 }],
+          warnings: ["存在未解析媒体"],
         },
-        coverage: { unparsed_media: true },
         history: [],
       },
       batches: [{
-        id: "batch-1",
-        inputMessageIds: ["message-1", "message-2"],
-        structuredRunIds: ["run-1"],
-        output: {
-          topics: [{
-            title: "Earnings",
-            summary: "Guidance changed.",
-            source_message_ids: ["message-1", "message-2"],
-            author_scope: "target",
-          }],
-          warnings: [],
-        },
-        coverage: { unparsed_media: true },
-      }],
-      messages: [{
-        externalMessageId: "message-1",
-        occurredAt: "2099-01-02T09:00:00.000Z",
-        authorDisplay: "Fixture Author",
-        content: "Public fixture message.",
-        hasUnparsedMedia: true,
-        unresolved: false,
-        evidenceExpired: false,
+        presentation: { kind: "legacy", topics: [], warnings: [], mediaUnparsed: false },
       }],
     }];
 
-    const html = renderToStaticMarkup(<DiscordReader days={renderedDays} />);
+    const ordinary = renderToStaticMarkup(<DiscordReader days={renderedDays} />);
+    const admin = renderToStaticMarkup(<DiscordReader days={renderedDays} manualRefreshSources={{ "source-a": "source-private-id" }} />);
 
-    expect(html).toContain("Earnings");
-    expect(html).toContain("2 evidence messages");
-    expect(html).toContain("Unparsed media");
-    expect(html).toContain("Batch summaries");
-    expect(html).toContain("<details open=\"\">");
-    expect(html).toContain("Channel");
-    expect(html).toContain("Date");
-    expect(html).not.toContain("Evidence-backed messages");
-    expect(html).not.toContain("Fixture Author");
-    expect(html).not.toContain("Public fixture message.");
-    expect(html).not.toContain("source_message_ids");
-    expect(html).not.toContain("local://");
+    expect(ordinary).toContain("截至 2099/01/02 17:00");
+    expect(ordinary).toContain("作者甲");
+    expect(ordinary).toContain("未表达");
+    expect(ordinary).toContain("频道话题");
+    expect(ordinary).toContain("存在未解析媒体");
+    expect(ordinary).toContain("批次摘要");
+    expect(ordinary).toContain("<details open=\"\">");
+    expect(ordinary).toContain("频道");
+    expect(ordinary).toContain("日期");
+    expect(ordinary).not.toContain("更新至当前时间");
+    expect(ordinary).not.toContain("source-private-id");
+    expect(admin).toContain("更新至当前时间");
+    expect(ordinary).not.toContain("Evidence-backed messages");
+    expect(ordinary).not.toContain("message-1");
+    expect(ordinary).not.toContain("author-1");
+    expect(ordinary).not.toContain("source_message_ids");
   });
 });

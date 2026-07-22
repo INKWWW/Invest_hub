@@ -180,16 +180,19 @@ describe("v0 control-plane API authorization", () => {
       source: { sourceKey: "source-1", displayName: "Fixture source" },
       naturalDate: "2099-01-01",
       status: "succeeded",
-      dailySummary: { id: "daily-1", version: 1, output: { topics: [] }, coverage: {}, history: [] },
+      dailySummary: { version: 1, presentation: { kind: "legacy", topics: [], warnings: [], mediaUnparsed: false }, history: [] },
       batches: [],
-      messages: [{ externalMessageId: "message-1", occurredAt: "2099-01-01T00:00:00Z", authorDisplay: "Author", content: "fixture", hasUnparsedMedia: false, unresolved: false, evidenceExpired: false }],
     }]);
     const response = await getDiscordReader(new Request("http://localhost/api/reader/discord?source=source-1&date=2099-01-01"));
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.days[0].messages[0].content).toBe("fixture");
+    expect(body.days[0]).not.toHaveProperty("messages");
+    expect(body.days[0].source).not.toHaveProperty("source_id");
     expect(JSON.stringify(body)).not.toContain("local_raw_ref");
+    expect(JSON.stringify(body)).not.toContain("fixture");
+    expect(JSON.stringify(body)).not.toContain("provider");
+    expect(JSON.stringify(body)).not.toContain("cursor");
     expect(JSON.stringify(body)).not.toContain("device_secret_hash");
   });
 

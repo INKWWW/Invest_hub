@@ -91,15 +91,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .reader-eyebrow { margin: 0 0 0.4rem; color: #547077; font-size: 0.86rem; font-weight: 700; }
 
-.reader-content h2, .reader-content h3 { margin: 0; color: #17252d; line-height: 1.25; }
+.reader-content h2, .reader-content h3, .reader-content h4, .reader-content h5 { margin: 0; color: #17252d; line-height: 1.25; }
 
 .reader-content h2 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.65rem, 3vw, 2.25rem); letter-spacing: -0.035em; }
 
 .reader-content h3 { font-size: 1rem; }
 
+.reader-content h4 { font-family: Georgia, "Times New Roman", serif; font-size: 1.18rem; letter-spacing: -0.02em; }
+
+.reader-content h5 { font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; }
+
 .reader-content p { line-height: 1.6; }
 
 .reader-content header > p:last-child { margin: 0.55rem 0 0; color: #63757a; font-size: 0.9rem; }
+
+.reader-section { display: grid; gap: 0.8rem; }
+
+.reader-cutoff { border-bottom: 2px solid #2d6872; padding-bottom: 0.65rem; }
 
 .reader-status { border-left: 4px solid var(--success); background: #f0f7f2; padding: 0.75rem 1rem; color: #29493d; }
 
@@ -113,9 +121,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .reader-status[data-status="failed"] { border-color: var(--danger); background: #fdf0ee; color: #763630; }
 
+.reader-status[data-status="no_new_messages"] { border-color: #547077; background: #f1f5f4; color: #405b5d; }
+
 .reader-summary, .batch-summary { border: 1px solid #dce4e0; background: #f8faf6; padding: 1.15rem; }
 
 .summary-topics { display: grid; gap: 0.85rem; }
+
+.author-cards { display: grid; gap: 0.85rem; }
+
+.author-card { border: 1px solid #dce4e0; background: #f8faf6; padding: 1rem; }
+
+.author-card dl { display: grid; grid-template-columns: minmax(7rem, 10rem) 1fr; gap: 0.5rem 0.9rem; margin: 0.9rem 0; }
+
+.author-card dt { color: #50636a; font-size: 0.82rem; font-weight: 750; }
+
+.author-card dd { margin: 0; line-height: 1.5; }
+
+.author-card ul, .viewpoint-list { margin: 0.55rem 0 0; padding-left: 1.1rem; }
+
+.author-card li + li, .viewpoint-list li + li { margin-top: 0.45rem; }
+
+.author-card li span, .viewpoint-list span { color: #416067; font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
 
 .topic-card { border-left: 3px solid #2d6872; padding: 0.35rem 0 0.35rem 1rem; }
 
@@ -141,6 +167,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .summary-warnings { border-top: 1px solid #dce4e0; margin-top: 1rem; padding-top: 1rem; }
 
+.summary-note { border-top: 1px solid #dce4e0; margin: 0.9rem 0 0; padding-top: 0.8rem; color: #6b5839; font-size: 0.9rem; }
+
 .summary-warnings ul { margin: 0.6rem 0 0; padding-left: 1.15rem; }
 
 .summary-warnings li + li { margin-top: 0.35rem; }
@@ -158,6 +186,26 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .reader-content details > p { max-width: 72ch; margin: 0.8rem 0 0; }
 
 .reader-content details .batch-summary { margin-top: 0.9rem; }
+
+.manual-refresh { border-top: 1px solid #dce4e0; display: grid; gap: 0.55rem; padding-top: 1rem; }
+
+.manual-refresh button { width: 100%; }
+
+.manual-refresh p { margin: 0; color: #52666c; font-size: 0.82rem; line-height: 1.5; }
+
+.author-profiles-form { display: grid; gap: 0.65rem; min-width: 17rem; }
+
+.author-profiles-form h3, .author-profiles-form p { margin: 0; }
+
+.author-profiles-form > p { color: #52666c; font-size: 0.85rem; line-height: 1.5; }
+
+.author-profile-list { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+
+.author-profile-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; border-top: 1px solid #dce4e0; padding-top: 0.55rem; }
+
+.author-profile-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+.author-profile-actions button { padding: 0.38rem 0.55rem; font-size: 0.78rem; }
 
 .admin-shell { min-height: 100vh; }
 
@@ -224,6 +272,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .reader-sidebar { position: static; grid-template-columns: 1fr 1fr; }
   .reader-content { gap: 1.25rem; }
   .topic-heading { align-items: flex-start; flex-direction: column; gap: 0.35rem; }
+  .author-card dl { grid-template-columns: 1fr; gap: 0.25rem; }
+  .author-card dd { margin-bottom: 0.45rem; }
+  .author-profile-list li { align-items: flex-start; flex-direction: column; }
   .admin-shell-header { align-items: flex-start; flex-direction: column; padding: 1rem; }
   .admin-content { padding: 2rem 1rem 3rem; overflow-x: auto; }
 }
