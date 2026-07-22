@@ -5,13 +5,11 @@ import json
 import os
 import stat
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import LocalWorkerConfigSet
 from .protocol import WorkerProtocol
 from .runtime import build_authorized_discord_runtime_set
-from .scheduler import due_windows
 from .worker import Worker
 
 
@@ -78,21 +76,25 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_scheduled(worker: Worker, *, once: bool, poll_seconds: int) -> int:
-    last_seen_window: str | None = None
     while True:
-        windows, truncated = due_windows(datetime.now(timezone.utc), last_seen_window)
-        if truncated:
-            print(json.dumps({"status": "schedule_catchup_bounded", "warning": "older_windows_require_admin_history_task"}, sort_keys=True))
         try:
-            for window_key in windows:
-                worker.schedule_tick(window_key)
-                last_seen_window = window_key
+            tick = worker.schedule_tick()
         except Exception as exc:
             print(json.dumps({"status": "schedule_failed", "error": type(exc).__name__}, sort_keys=True))
             return 1
 
         outcome = worker.run_once()
-        print(json.dumps({"status": outcome.status, "task_id": outcome.task_id, "error": outcome.error}, sort_keys=True))
+        scheduled_at = tick.get("scheduled_at") if isinstance(tick.get("scheduled_at"), str) else None
+        tasks = tick.get("tasks")
+        deferred_sources = tick.get("deferred_source_ids")
+        print(json.dumps({
+            "status": outcome.status,
+            "task_id": outcome.task_id,
+            "error": outcome.error,
+            "scheduled_at": scheduled_at,
+            "scheduled_task_count": len(tasks) if isinstance(tasks, list) else None,
+            "deferred_source_count": len(deferred_sources) if isinstance(deferred_sources, list) else None,
+        }, sort_keys=True))
         if once:
             return 0 if outcome.status in {"succeeded", "no_task"} else 1
         time.sleep(poll_seconds)

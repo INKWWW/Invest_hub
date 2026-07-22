@@ -39,3 +39,15 @@ V0_REAL_DISCORD_ACK=authorized V0_PYTHON_BIN=python3.11 \
 首次 enrolment 后可删除 `--enrolment-code-file` 参数；一次性邀请码不应长期保留。Worker 会使用已验证的 Browser Bridge 会话读取用户本来就有权限查看的 Discord 页面，先保存本地证据并写入远程持久化收据，再回报结果和推进 checkpoint。任何失败都会按失败类别回报为可重试状态；不会把本地空结果当作成功。
 
 仓库提交前运行 `bash scripts/v0/redact-check.sh`。真实正文、Cookie、Token、Profile 路径、Prompt 和完整 Provider 响应只允许留在本地受保护 evidence 目录，不进入 Git、控制面任务 payload 或管理员调试 API。
+
+## V1.1 本地定时 Agent
+
+V1.1 的时间窗由控制面按上海时区的 00:00、08:00、16:00、20:50 和来源 `coverage_through_at` 计算；本地 Worker 每分钟只请求一次安全的 schedule tick，不提交时间窗、范围或页数上限。错过的窗口由控制面按覆盖水位完整补投递，Worker 按来源顺序领取。
+
+macOS 常驻运行使用明确的 `com.investhub.discord-worker` label。先以 `--check-only` 验证 owner-only 的 runtime config、credential、private Prompt 和 evidence 目录；安装或卸载都必须由管理员在核对 label 与绝对路径后另行明确执行。脚本不接受目录通配符，卸载只会作用于该 label 对应的 plist。
+
+```bash
+bash scripts/v1/verify-launchd-worker.sh --check-only
+```
+
+`install-launchd-worker.sh` 需要显式 `--install`，并要求提供所有绝对路径；它不会默认写入 `~/Library/LaunchAgents`，避免误操作其他 Agent。真实安装前不得把路径、Prompt、凭据或 Profile 信息复制到 Git、聊天记录或日志中。

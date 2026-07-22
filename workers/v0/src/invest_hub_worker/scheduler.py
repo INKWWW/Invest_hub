@@ -5,8 +5,7 @@ from zoneinfo import ZoneInfo
 
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
-_WINDOW_TIMES = ((8, 0), (20, 50))
-_MAX_CATCH_UP_WINDOWS = 4
+_WINDOW_TIMES = ((0, 0), (8, 0), (16, 0), (20, 50))
 
 
 def is_schedule_window_key(value: object) -> bool:
@@ -23,50 +22,34 @@ def is_schedule_window_key(value: object) -> bool:
 
 def due_windows(
     now_utc: datetime,
-    last_seen_window: str | None,
-    *,
-    max_windows: int = _MAX_CATCH_UP_WINDOWS,
-) -> tuple[tuple[str, ...], bool]:
-    """Return chronological due windows and whether the catch-up was bounded.
+    coverage_through_at: datetime,
+) -> tuple[str, ...]:
+    """Return every Shanghai boundary in ``(coverage_through_at, now_utc]``.
 
-    The control plane owns final idempotency.  This helper only bounds the
-    local request burst after a Worker was offline, so a restart cannot turn
-    into an unbounded historical collection request.
+    This is pure, deterministic schedule arithmetic.  The control plane
+    remains the authority that uses its own server time, persists each task,
+    and serializes source coverage; this helper deliberately has no page or
+    catch-up count limit.
     """
 
     if now_utc.tzinfo is None:
         raise ValueError("now_utc must be timezone-aware")
-    if max_windows < 1:
-        raise ValueError("max_windows must be positive")
-    if last_seen_window is not None and not is_schedule_window_key(last_seen_window):
-        raise ValueError("last_seen_window must be a schedule window key")
+    if coverage_through_at.tzinfo is None:
+        raise ValueError("coverage_through_at must be timezone-aware")
+    if coverage_through_at > now_utc:
+        raise ValueError("coverage_through_at cannot be after now_utc")
 
     local_now = now_utc.astimezone(_SHANGHAI)
-    earliest = local_now - timedelta(hours=48)
+    local_coverage = coverage_through_at.astimezone(_SHANGHAI)
     candidates: list[str] = []
-    date = earliest.date()
+    date = local_coverage.date()
     while date <= local_now.date():
         for hour, minute in _WINDOW_TIMES:
             candidate = datetime(date.year, date.month, date.day, hour, minute, tzinfo=_SHANGHAI)
-            if earliest <= candidate <= local_now:
+            if local_coverage < candidate <= local_now:
                 candidates.append(_window_key(candidate))
         date += timedelta(days=1)
-
-    unseen = [window for window in candidates if last_seen_window is None or window > last_seen_window]
-    truncated = len(unseen) > max_windows
-    return tuple(unseen[-max_windows:]), truncated
-
-
-def should_enqueue(now_utc: datetime, last_seen_window: str | None) -> str | None:
-    """Return the newest due local schedule window exactly once.
-
-    Returning the latest missed window lets a Worker that was offline at a
-    scheduled time request a normal checkpoint-based catch-up task instead of
-    claiming that an empty run succeeded.
-    """
-
-    windows, _truncated = due_windows(now_utc, last_seen_window, max_windows=1)
-    return windows[0] if windows else None
+    return tuple(candidates)
 
 
 def _window_key(value: datetime) -> str:

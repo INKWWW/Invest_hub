@@ -616,6 +616,10 @@ export interface Database {
         Args: { p_worker_id: string; p_window_key: string };
         Returns: Json;
       };
+      enqueue_due_discord_tasks: {
+        Args: { p_worker_id: string; p_now: string };
+        Returns: Json;
+      };
       record_task_failure: {
         Args: { p_task_id: string; p_attempt: number; p_failure: Json; p_context: Json };
         Returns: Json;
