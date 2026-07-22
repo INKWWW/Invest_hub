@@ -22,6 +22,8 @@ const taskMocks = vi.hoisted(() => ({
   getTaskDetail: vi.fn(),
   listRecentTasks: vi.fn(),
   persistWorkerExecution: vi.fn(),
+  recordWindowedCaptureSegment: vi.fn(),
+  completeWindowedCaptureRange: vi.fn(),
   recordTaskFailure: vi.fn(),
   scheduleDiscordSyncTasks: vi.fn(),
   isScheduleWindowKey: (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/.test(value),
@@ -71,6 +73,8 @@ import { POST as postEnrol } from "./worker/enrol/route";
 import { POST as postHeartbeat } from "./worker/heartbeat/route";
 import { POST as postPersist } from "./worker/tasks/[taskId]/persist/route";
 import { POST as postResult } from "./worker/tasks/[taskId]/result/route";
+import { POST as postCaptureSegment } from "./worker/tasks/[taskId]/capture-segments/route";
+import { POST as postRangeComplete } from "./worker/tasks/[taskId]/range-complete/route";
 import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
 import { PATCH as patchAdminSource } from "./admin/sources/route";
 import { POST as postAdminRule } from "./admin/rules/route";
@@ -471,6 +475,106 @@ describe("v0 control-plane API authorization", () => {
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "lease_mismatch" });
+  });
+
+  it("persists verified capture segments and completes window ranges without using a safe checkpoint result", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.recordWindowedCaptureSegment.mockResolvedValue({
+      task_id: "task-window-1",
+      idempotent: false,
+      resume_cursor: "cursor-001",
+    });
+    taskMocks.completeWindowedCaptureRange.mockResolvedValue({
+      status: "succeeded",
+      idempotent: false,
+      task_id: "task-window-1",
+      attempt: 1,
+      coverage_through_at: "2026-07-22T08:00:00Z",
+    });
+
+    const segment = await postCaptureSegment(
+      jsonRequest("/api/worker/tasks/task-window-1/capture-segments", {
+        contract_version: "v0",
+        task_id: "task-window-1",
+        attempt: 1,
+        capture_segment: {
+          idempotency_key: "page-001",
+          request_cursor: null,
+          next_cursor: "cursor-001",
+          oldest_occurred_at: "2026-07-22T00:00:00Z",
+          newest_occurred_at: "2026-07-22T08:00:00Z",
+          response_matched: true,
+          response_fresh: true,
+        },
+      }, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-window-1" }) },
+    );
+    expect(segment.status).toBe(200);
+    expect(await segment.json()).toEqual({ task_id: "task-window-1", idempotent: false, resume_cursor: "cursor-001" });
+    expect(taskMocks.recordWindowedCaptureSegment).toHaveBeenCalledWith("task-window-1", 1, "worker-1", {
+      idempotency_key: "page-001",
+      request_cursor: null,
+      next_cursor: "cursor-001",
+      oldest_occurred_at: "2026-07-22T00:00:00Z",
+      newest_occurred_at: "2026-07-22T08:00:00Z",
+      response_matched: true,
+      response_fresh: true,
+    });
+
+    const completion = await postRangeComplete(
+      jsonRequest("/api/worker/tasks/task-window-1/range-complete", {
+        contract_version: "v0",
+        task_id: "task-window-1",
+        attempt: 1,
+        range_complete: true,
+        capture_range: {
+          mode: "window",
+          trigger: "manual",
+          timezone: "Asia/Shanghai",
+          start_at: "2026-07-22T00:00:00Z",
+          end_at: "2026-07-22T08:00:00Z",
+          scheduled_window_key: null,
+        },
+        boundary: { kind: "oldest_at_or_before_start", observed_at: "2026-07-22T00:00:00Z" },
+        summary_batch_ids: [],
+        daily_summary_ids: [],
+        no_new_data: true,
+      }, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-window-1" }) },
+    );
+    expect(completion.status).toBe(200);
+    expect(await completion.json()).toEqual({
+      status: "succeeded",
+      idempotent: false,
+      task_id: "task-window-1",
+      attempt: 1,
+      coverage_through_at: "2026-07-22T08:00:00Z",
+    });
+    expect(taskMocks.completeWindowedCaptureRange).toHaveBeenCalledWith("task-window-1", 1, "worker-1", expect.objectContaining({ range_complete: true }));
+  });
+
+  it("does not advance a range when its persistence receipt is absent", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.completeWindowedCaptureRange.mockRejectedValue({ code: "55000", message: "persistence_not_confirmed" });
+
+    const response = await postRangeComplete(
+      jsonRequest("/api/worker/tasks/task-window-1/range-complete", {
+        contract_version: "v0",
+        task_id: "task-window-1",
+        attempt: 1,
+        range_complete: true,
+        capture_range: {
+          mode: "window", trigger: "manual", timezone: "Asia/Shanghai",
+          start_at: "2026-07-22T00:00:00Z", end_at: "2026-07-22T08:00:00Z", scheduled_window_key: null,
+        },
+        boundary: { kind: "oldest_at_or_before_start", observed_at: "2026-07-22T00:00:00Z" },
+        summary_batch_ids: [], daily_summary_ids: [], no_new_data: true,
+      }, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-window-1" }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "persistence_not_confirmed" });
   });
 
   it("accepts a valid Worker persistence payload without returning its local reference", async () => {

@@ -213,6 +213,38 @@ export async function persistWorkerExecution(
   return data;
 }
 
+export async function recordWindowedCaptureSegment(
+  taskId: string,
+  attempt: number,
+  workerId: string,
+  segment: Json,
+) {
+  const { data, error } = await createSupabaseAdminClient().rpc("record_windowed_capture_segment", {
+    p_task_id: taskId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+    p_segment: segment,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function completeWindowedCaptureRange(
+  taskId: string,
+  attempt: number,
+  workerId: string,
+  completion: Json,
+) {
+  const { data, error } = await createSupabaseAdminClient().rpc("complete_windowed_capture_range", {
+    p_task_id: taskId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+    p_payload: completion,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function recordTaskFailure(
   taskId: string,
   attempt: number,

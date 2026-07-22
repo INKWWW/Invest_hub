@@ -10,10 +10,12 @@ describe("v0 contracts", () => {
     const names = [
       "heartbeat",
       "source-config",
+      "task-capture-segment",
       "task-claim",
       "task-event",
       "task-failure",
       "task-result",
+      "window-range-completion",
       "worker-enrolment",
       "worker-persistence",
     ];

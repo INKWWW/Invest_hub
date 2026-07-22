@@ -736,7 +736,7 @@ begin
     jsonb_build_object('worker_id', p_worker_id::text, 'lease_expires_at', v_lease_expires_at)
   );
 
-  return jsonb_strip_nulls(jsonb_build_object(
+  return jsonb_build_object(
     'contract_version', 'v0',
     'task_id', v_task.id::text,
     'attempt', v_attempt,
@@ -746,20 +746,21 @@ begin
     'lease_expires_at', v_lease_expires_at,
     'safe_checkpoint', v_checkpoint,
     'rule_snapshot', v_task.rule_snapshot,
-    'collection_scope', v_task.collection_scope,
+    'collection_scope', v_task.collection_scope
+  ) || case when v_task.collection_scope->>'mode' = 'window' then jsonb_build_object(
     'capture_range', v_task.capture_range,
-    'coverage_snapshot', case when v_task.collection_scope->>'mode' = 'window' then jsonb_build_object(
+    'coverage_snapshot', jsonb_build_object(
       'coverage_start_at', v_coverage.coverage_start_at,
       'coverage_through_at', v_coverage.coverage_through_at,
       'last_completed_task_id', v_coverage.last_completed_task_id
-    ) else null end,
-    'capture_progress', case when v_task.collection_scope->>'mode' = 'window' then jsonb_build_object(
+    ),
+    'capture_progress', jsonb_build_object(
       'resume_cursor', v_progress.resume_cursor,
       'page_count', v_progress.page_count,
       'range_complete', v_progress.range_complete
-    ) else null end,
-    'author_profile_snapshot', case when v_task.collection_scope->>'mode' = 'window' then v_task.author_profile_snapshot else null end
-  ));
+    ),
+    'author_profile_snapshot', v_task.author_profile_snapshot
+  ) else '{}'::jsonb end;
 end;
 $$;
 

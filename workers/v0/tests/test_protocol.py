@@ -99,6 +99,41 @@ class WorkerProtocolTests(unittest.TestCase):
             with self.assertRaises(ProtocolError):
                 protocol.claim()
 
+    def test_window_claim_preserves_nullable_coverage_state_and_resume_progress(self) -> None:
+        claim = {
+            "contract_version": "v0",
+            "task_id": "task-window-1",
+            "attempt": 1,
+            "task_type": "discord_sync",
+            "source_id": "source-1",
+            "parameter_version": "v1.1-test",
+            "lease_expires_at": "2099-01-01T00:10:00Z",
+            "safe_checkpoint": "legacy-audit-only",
+            "rule_snapshot": {"version": 0, "target_author_ids": []},
+            "collection_scope": {"mode": "window"},
+            "capture_range": {
+                "mode": "window",
+                "trigger": "manual",
+                "timezone": "Asia/Shanghai",
+                "start_at": "2099-01-01T00:00:00Z",
+                "end_at": "2099-01-01T08:00:00Z",
+                "scheduled_window_key": None,
+            },
+            "coverage_snapshot": {
+                "coverage_start_at": "2099-01-01T00:00:00Z",
+                "coverage_through_at": "2099-01-01T00:00:00Z",
+                "last_completed_task_id": None,
+            },
+            "capture_progress": {"resume_cursor": None, "page_count": 0, "range_complete": False},
+            "author_profile_snapshot": [],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, claim))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(protocol.claim()["coverage_snapshot"]["last_completed_task_id"], None)
+
     def test_persist_validates_contract_and_uses_the_task_scoped_endpoint(self) -> None:
         payload = {
             "contract_version": "v0",
@@ -138,6 +173,53 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(transport.calls[1]["body"], {"window_key": "2099-01-01T08:00+08:00"})
             with self.assertRaises(ProtocolError):
                 protocol.schedule_tick("bad-window")
+
+    def test_window_page_and_range_protocols_use_task_scoped_endpoints(self) -> None:
+        segment = {
+            "contract_version": "v0",
+            "task_id": "task-window-1",
+            "attempt": 1,
+            "capture_segment": {
+                "idempotency_key": "page-001",
+                "request_cursor": None,
+                "next_cursor": "cursor-001",
+                "oldest_occurred_at": "2026-07-22T00:00:00Z",
+                "newest_occurred_at": "2026-07-22T08:00:00Z",
+                "response_matched": True,
+                "response_fresh": True,
+            },
+        }
+        completion = {
+            "contract_version": "v0",
+            "task_id": "task-window-1",
+            "attempt": 1,
+            "range_complete": True,
+            "capture_range": {
+                "mode": "window",
+                "trigger": "manual",
+                "timezone": "Asia/Shanghai",
+                "start_at": "2026-07-22T00:00:00Z",
+                "end_at": "2026-07-22T08:00:00Z",
+                "scheduled_window_key": None,
+            },
+            "boundary": {"kind": "oldest_at_or_before_start", "observed_at": "2026-07-22T00:00:00Z"},
+            "summary_batch_ids": [],
+            "daily_summary_ids": [],
+            "no_new_data": True,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"task_id": "task-window-1", "idempotent": False, "resume_cursor": "cursor-001"}),
+                (200, {"status": "succeeded", "idempotent": False, "task_id": "task-window-1", "attempt": 1}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(protocol.record_capture_segment(segment)["resume_cursor"], "cursor-001")
+            self.assertEqual(protocol.complete_capture_range(completion)["status"], "succeeded")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-window-1/capture-segments"))
+            self.assertTrue(str(transport.calls[2]["url"]).endswith("/api/worker/tasks/task-window-1/range-complete"))
 
 
 if __name__ == "__main__":
