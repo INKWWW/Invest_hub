@@ -12,6 +12,13 @@ function hasOnlyKeys(body: Record<string, unknown>, allowed: string[]): boolean 
   return Object.keys(body).every((key) => allowed.includes(key));
 }
 
+function isCommunityChannelName(value: string): boolean {
+  const parts = value.split("·").map((part) => part.trim()).filter(Boolean);
+  return value.trim().length <= 128
+    && parts.length === 2
+    && !/^discord\s+source\s+\d+$/i.test(value.trim());
+}
+
 export async function GET() {
   const current = await requireRole("admin");
   if (!isCurrentUser(current)) return current;
@@ -28,7 +35,8 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     if (!hasOnlyKeys(body, ["source_key", "display_name", "parameter_version", "enabled"])
-      || typeof body.source_key !== "string" || typeof body.display_name !== "string" || typeof body.parameter_version !== "string") {
+      || typeof body.source_key !== "string" || typeof body.display_name !== "string" || typeof body.parameter_version !== "string"
+      || !isCommunityChannelName(body.display_name)) {
       return NextResponse.json({ error: "invalid_source" }, { status: 422 });
     }
     const source = await upsertDiscordSource({
@@ -49,14 +57,17 @@ export async function PATCH(request: Request) {
   if (!isCurrentUser(current)) return current;
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    if (!hasOnlyKeys(body, ["source_id", "enabled", "authorized_worker_id"])
+    if (!hasOnlyKeys(body, ["source_id", "display_name", "enabled", "authorized_worker_id"])
       || typeof body.source_id !== "string"
+      || typeof body.display_name !== "string"
+      || !isCommunityChannelName(body.display_name)
       || typeof body.enabled !== "boolean"
       || (typeof body.authorized_worker_id !== "string" && body.authorized_worker_id !== null)) {
       return NextResponse.json({ error: "invalid_source_administration" }, { status: 422 });
     }
     const source = await updateSourceAdministration({
       sourceId: body.source_id,
+      displayName: body.display_name.trim(),
       enabled: body.enabled,
       authorizedWorkerId: body.authorized_worker_id,
     });

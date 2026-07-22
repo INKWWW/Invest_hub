@@ -18,6 +18,7 @@ export async function listSources() {
 
 export async function updateSourceAdministration(input: {
   sourceId: string;
+  displayName: string;
   enabled: boolean;
   authorizedWorkerId: string | null;
 }) {
@@ -36,7 +37,11 @@ export async function updateSourceAdministration(input: {
 
   const { data, error } = await supabase
     .from("sources")
-    .update({ enabled: input.enabled, authorized_worker_id: input.authorizedWorkerId })
+    .update({
+      display_name: input.displayName,
+      enabled: input.enabled,
+      authorized_worker_id: input.authorizedWorkerId,
+    })
     .eq("id", input.sourceId)
     .select(sourceFields)
     .maybeSingle();
