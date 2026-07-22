@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://invest-hub.local/contracts/v0/task-capture-segment.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "task_id", "attempt", "capture_segment"],
+  "properties": {
+    "contract_version": { "const": "v0" },
+    "task_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "capture_segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idempotency_key", "request_cursor", "next_cursor", "oldest_occurred_at", "newest_occurred_at", "response_matched", "response_fresh"],
+      "properties": {
+        "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "request_cursor": { "type": ["string", "null"], "maxLength": 512 },
+        "next_cursor": { "type": ["string", "null"], "maxLength": 512 },
+        "oldest_occurred_at": { "type": ["string", "null"], "format": "date-time" },
+        "newest_occurred_at": { "type": ["string", "null"], "format": "date-time" },
+        "response_matched": { "const": true },
+        "response_fresh": { "const": true }
+      }
+    }
+  }
+}

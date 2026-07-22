@@ -1,6 +1,6 @@
 begin;
 
-select plan(31);
+select plan(32);
 
 select has_table('public', 'source_collection_coverage', 'V1.1 stores a per-source collection coverage waterline');
 select has_table('public', 'sync_task_capture_progress', 'V1.1 stores resumable progress per window task');
@@ -164,6 +164,10 @@ select is(
   (select payload -> 'capture_range' ->> 'end_at' from claimed_window_task),
   '2099-01-01T08:00:00+00:00',
   'the worker claim includes the immutable capture range'
+);
+select ok(
+  (select payload -> 'coverage_snapshot' ? 'last_completed_task_id' from claimed_window_task),
+  'a first window claim preserves the nullable last-completed task field required by its contract'
 );
 
 insert into public.worker_execution_receipts (

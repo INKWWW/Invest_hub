@@ -38,6 +38,8 @@ class FakeProtocol:
         self.heartbeat_error: Exception | None = None
         self.claim_value: dict[str, object] | None = CLAIM
         self.persisted_payloads: list[dict[str, object]] = []
+        self.capture_segments: list[dict[str, object]] = []
+        self.range_completions: list[dict[str, object]] = []
         self.reported_results: list[dict[str, object]] = []
         self.reported_failures: list[dict[str, object]] = []
         self.report_result_value: dict[str, object] = {"status": "succeeded", "idempotent": False}
@@ -65,6 +67,14 @@ class FakeProtocol:
             "summary_batch_ids": [],
             "daily_summary_ids": [],
         }
+
+    def record_capture_segment(self, payload: dict[str, object]) -> dict[str, object]:
+        self.capture_segments.append(payload)
+        return {"task_id": payload["task_id"], "idempotent": False, "resume_cursor": "cursor-001"}
+
+    def complete_capture_range(self, payload: dict[str, object]) -> dict[str, object]:
+        self.range_completions.append(payload)
+        return {"status": "succeeded", "idempotent": False, "task_id": payload["task_id"], "attempt": payload["attempt"]}
 
     def report_failure(self, failure: dict[str, object]) -> dict[str, object]:
         self.reported_failures.append(failure)
@@ -137,6 +147,60 @@ class WorkerRecoveryTests(unittest.TestCase):
         self.assertEqual(outcome.status, "succeeded")
         self.assertEqual(len(protocol.persisted_payloads), 1)
         self.assertEqual(protocol.reported_results[0]["structured_run_ids"], ["run-1"])
+
+    def test_window_completion_records_page_receipts_then_completes_without_safe_checkpoint_result(self) -> None:
+        protocol = FakeProtocol()
+        execution = {
+            "persistence": {
+                "contract_version": "v0",
+                "task_id": "task-1",
+                "attempt": 1,
+                "source_id": "source-1",
+                "raw_messages": [],
+                "canonical_messages": [],
+                "structured_runs": [],
+            },
+            "capture_segments": [{
+                "contract_version": "v0",
+                "task_id": "task-1",
+                "attempt": 1,
+                "capture_segment": {
+                    "idempotency_key": "page-001",
+                    "request_cursor": None,
+                    "next_cursor": "cursor-001",
+                    "oldest_occurred_at": "2099-01-01T00:00:00Z",
+                    "newest_occurred_at": "2099-01-01T00:00:00Z",
+                    "response_matched": True,
+                    "response_fresh": True,
+                },
+            }],
+            "range_completion": {
+                "contract_version": "v0",
+                "task_id": "task-1",
+                "attempt": 1,
+                "range_complete": True,
+                "capture_range": {
+                    "mode": "window",
+                    "trigger": "manual",
+                    "timezone": "Asia/Shanghai",
+                    "start_at": "2099-01-01T00:00:00Z",
+                    "end_at": "2099-01-01T08:00:00Z",
+                    "scheduled_window_key": None,
+                },
+                "boundary": {"kind": "oldest_at_or_before_start", "observed_at": "2099-01-01T00:00:00Z"},
+                "summary_batch_ids": [],
+                "daily_summary_ids": [],
+                "no_new_data": True,
+            },
+        }
+
+        outcome = Worker(protocol, execute=lambda _claim: execution).run_once()
+
+        self.assertEqual(outcome.status, "succeeded")
+        self.assertEqual(len(protocol.persisted_payloads), 1)
+        self.assertEqual(len(protocol.capture_segments), 1)
+        self.assertEqual(len(protocol.range_completions), 1)
+        self.assertEqual(protocol.reported_results, [])
 
 
 if __name__ == "__main__":

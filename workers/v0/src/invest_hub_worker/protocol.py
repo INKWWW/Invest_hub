@@ -141,6 +141,27 @@ class WorkerProtocol:
             raise ProtocolError("persistence was not acknowledged")
         return acknowledgement
 
+    def record_capture_segment(self, segment: dict[str, Any]) -> dict[str, Any]:
+        self._require_credential()
+        try:
+            payload = load_contract("task-capture-segment", segment)
+        except ContractError as exc:
+            raise ProtocolError("invalid capture segment") from exc
+        _, value = self._request("POST", f"api/worker/tasks/{payload['task_id']}/capture-segments", payload)
+        return self._object(value, "invalid capture segment acknowledgement")
+
+    def complete_capture_range(self, completion: dict[str, Any]) -> dict[str, Any]:
+        self._require_credential()
+        try:
+            payload = load_contract("window-range-completion", completion)
+        except ContractError as exc:
+            raise ProtocolError("invalid range completion") from exc
+        _, value = self._request("POST", f"api/worker/tasks/{payload['task_id']}/range-complete", payload)
+        acknowledgement = self._object(value, "invalid range completion acknowledgement")
+        if acknowledgement.get("status") != "succeeded":
+            raise ProtocolError("range completion was not acknowledged")
+        return acknowledgement
+
     def report_failure(self, failure: dict[str, Any]) -> dict[str, Any]:
         self._require_credential()
         try:

@@ -64,6 +64,10 @@ class Worker:
             self.preflight(claim)
             self.state = WorkerState.EXECUTING
             execution = self.execute(claim)
+            window_acknowledgement = self._complete_windowed_execution(execution)
+            if window_acknowledgement is not None:
+                self.state = WorkerState.IDLE
+                return RunOutcome("succeeded", task_id, acknowledgement=window_acknowledgement)
             result = self._persist_before_result(execution)
             self.state = WorkerState.REPORTING
             acknowledgement = self.protocol.report_result(result)
@@ -119,6 +123,40 @@ class Worker:
         result["summary_batch_ids"] = summary_batch_ids
         result["daily_summary_ids"] = daily_summary_ids
         return result
+
+    def _complete_windowed_execution(self, execution: dict[str, Any]) -> dict[str, Any] | None:
+        """Complete a V1.1 window without invoking the legacy checkpoint result API."""
+
+        completion = execution.get("range_completion")
+        if completion is None:
+            return None
+        persistence = execution.get("persistence")
+        segments = execution.get("capture_segments", [])
+        if not isinstance(completion, Mapping) or not isinstance(persistence, Mapping) or not isinstance(segments, list):
+            raise RuntimeError("invalid windowed execution bundle")
+
+        acknowledgement = self.protocol.persist(dict(persistence))
+        if acknowledgement.get("persisted") is not True:
+            raise LeaseUncertain("control plane did not acknowledge window persistence")
+        summary_batch_ids = acknowledgement.get("summary_batch_ids")
+        daily_summary_ids = acknowledgement.get("daily_summary_ids")
+        if not isinstance(summary_batch_ids, list) or not all(isinstance(value, str) and value for value in summary_batch_ids):
+            raise LeaseUncertain("control plane returned invalid window summary batch IDs")
+        if not isinstance(daily_summary_ids, list) or not all(isinstance(value, str) and value for value in daily_summary_ids):
+            raise LeaseUncertain("control plane returned invalid window daily summary IDs")
+
+        for segment in segments:
+            if not isinstance(segment, Mapping):
+                raise RuntimeError("invalid window capture segment")
+            self.protocol.record_capture_segment(dict(segment))
+
+        completion_payload = dict(completion)
+        if completion_payload.get("summary_batch_ids") != summary_batch_ids or completion_payload.get("daily_summary_ids") != daily_summary_ids:
+            raise LeaseUncertain("window completion receipts do not match persisted evidence")
+        final_acknowledgement = self.protocol.complete_capture_range(completion_payload)
+        if final_acknowledgement.get("status") != "succeeded":
+            raise LeaseUncertain("control plane did not acknowledge window completion")
+        return final_acknowledgement
 
     def _report_failure(self, claim: Mapping[str, Any], error: Exception) -> None:
         failure_class = str(getattr(error, "failure_class", "unknown"))

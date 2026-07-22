@@ -39,6 +39,8 @@ build/
 /docs/spikes/*-real.md
 __pycache__/
 *.py[cod]
+*.egg-info/
+workers/v0/.venv/
 node_modules/
 .next/
 .vercel/
