@@ -132,14 +132,21 @@ class StructuredOutputTests(unittest.TestCase):
         message_catalog = {
             "message-1": ("author-1", "Author One"),
             "message-2": ("author-2", "Author Two"),
+            "media-1": ("author-2", "Author Two"),
         }
+        fact_units = [{
+            "source_message_ids": ["message-1"],
+        }, {
+            "source_message_ids": ["message-2"],
+        }]
         validated = validate_v1_1_daily_output(
             output,
             message_catalog,
             {"author-1": "Author One"},
+            fact_units=fact_units,
             expected_natural_date="2099-01-01",
             expected_as_of="2099-01-01T08:00:00Z",
-            unparsed_media_ids={"message-2"},
+            unparsed_media_ids={"media-1"},
         )
         self.assertEqual(validated["schema_version"], "v1.1")
 
@@ -149,9 +156,41 @@ class StructuredOutputTests(unittest.TestCase):
                 invalid,
                 message_catalog,
                 {"author-1": "Author One"},
+                fact_units=fact_units,
                 expected_natural_date="2099-01-01",
                 expected_as_of="2099-01-01T08:00:00Z",
-                unparsed_media_ids={"message-2"},
+                unparsed_media_ids={"media-1"},
+            )
+
+    def test_v1_1_daily_rejects_known_same_day_evidence_outside_verified_fact_units(self) -> None:
+        output = {
+            "schema_version": "v1.1",
+            "natural_date": "2099-01-01",
+            "as_of": "2099-01-01T08:00:00Z",
+            "author_cards": [{
+                "author_id": "author-1",
+                "author_display": "Author One",
+                "core_logic": {"market_trend": None, "stock_judgments": []},
+                "operation_tendency": {"market": None, "stocks": None},
+                "methodology": [],
+                "uncertainty": [],
+                "source_message_ids": ["known-but-not-a-fact"],
+            }],
+            "topic_discussions": [],
+            "warnings": [],
+        }
+        with self.assertRaisesRegex(SchemaError, "validated fact evidence"):
+            validate_v1_1_daily_output(
+                output,
+                {
+                    "fact-message": ("author-1", "Author One"),
+                    "known-but-not-a-fact": ("author-1", "Author One"),
+                },
+                {"author-1": "Author One"},
+                fact_units=[{"source_message_ids": ["fact-message"]}],
+                expected_natural_date="2099-01-01",
+                expected_as_of="2099-01-01T08:00:00Z",
+                unparsed_media_ids=set(),
             )
 
 

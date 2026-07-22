@@ -251,6 +251,7 @@ class CodexCLIProvider:
             parsed,
             catalog,
             dict(context.configured_author_profiles),
+            fact_units=tuple(item for item in input_chunk if isinstance(item, dict)),
             expected_natural_date=str(context.expected_natural_date),
             expected_as_of=str(context.expected_as_of),
             unparsed_media_ids=set(context.unparsed_media_message_ids),

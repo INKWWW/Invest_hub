@@ -653,6 +653,7 @@ class AuthorizedDiscordRuntime:
                     response.parsed_output,
                     {message_id: (author_id, author_display) for message_id, author_id, author_display in identities},
                     author_profiles,
+                    fact_units=facts,
                     expected_natural_date=natural_date,
                     expected_as_of=as_of,
                     unparsed_media_ids=media_ids,
