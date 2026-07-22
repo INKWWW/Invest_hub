@@ -4,7 +4,7 @@ Last updated: 2026-07-22
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准，时间窗代码、远程 migration、控制面与双来源初始覆盖边界已生效。真实 Discord 范围采集、作者配置、普通用户生产审阅与 launchd 安装仍待完成。**
+**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收并应用专用 V1 数据库，控制面生产部署与真实范围验收仍待完成。**
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
@@ -12,7 +12,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位，但尚未完成重点作者选择、真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 或 V1.1 Plan 直接视为后续实现授权。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位。管理员指定作者现在可直接输入，已观察作者仅作建议；唯一 stable ID 会在任务页面持久化后解析，零候选保持 pending、多候选标记 ambiguous。生产控制面尚未部署此修订，且尚未完成真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，故仍不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 或 V1.1 Plan 直接视为后续实现授权。
 
 ## Approval status
 
@@ -36,7 +36,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [V1 Discord 正式可用 MVP 计划](superpowers/plans/2026-07-19-v1-discord-mvp.md)
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V1 implementation status：代码、本地确定性验收、专用部署、真实双来源 history/增量/checkpoint、失败隔离/恢复、普通用户阅读与视觉、真实质量抽检和部署日志审阅均已完成；结论为 V1 Discord 正式可用 MVP。
-- V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、稳定作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全的作者配置界面、管理员手动更新与内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。为同步真实 V1 数据库的既有历史，`f9aedcc` 将本地 migration 文件与远程历史对齐，随后已在专用 V1 数据库应用 V1.1 远程 migration 并核对全部历史一致。控制面已部署至专用 V1 生产项目；账号可操作性热修复 `082e5b7`、可靠日期输入 `30f6f0b` 和采集范围路由部署修复 `7afd7b6` 均已生产上线。后者修正了宽泛 Git ignore 规则导致 API 路由未进入 Vercel 构建的问题。管理员已将两个逻辑来源初始化为 2026-07-21 20:50（上海），正式页回显相同的 coverage start/through；尚未因此抓取新内容。当前控制面验证为 18 个测试文件/78 项、lint 与 production build 通过；V1.1 E2E 公开 fixture 为 5 项，另覆盖 Worker/runtime/scheduler 10 项及控制面 API/Reader/Presentation 33 项；redaction 与 diff 检查通过；代码已与 GitHub `origin/main` 同步，本文档将在本次收口同步。尚待管理员为每个来源明确选择重点作者；之后才能完成真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。
+- V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全作者配置界面、管理员手动更新入口、内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。其后用户批准作者 selector 修订：管理员可直接输入显示名/用户名，已观察作者仅作快捷建议；任务逐页持久化后，受租约保护的服务端解析唯一 stable ID，零候选 pending、多候选 ambiguous，且绝不返回原文。该修订的专用 V1 数据库 migration 已应用；本地验证为 11 个 pgTAP 文件/186 项、18 个控制面测试文件/79 项、Worker 82 项以及 lint/production build 全部通过。控制面生产尚待部署此修订；随后管理员可录入已确认的重点作者，再进行真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。真实内容、来源身份、凭据与私有 Prompt 继续不进入 Git。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。

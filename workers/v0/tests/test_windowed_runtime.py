@@ -179,8 +179,15 @@ class WindowedRuntimeTests(unittest.TestCase):
 
         claim = window_claim()
         claim["author_profile_snapshot"] = [{
-            "author_id": "author-1", "author_display": "Author One", "author_handle": None, "enabled": True,
+            "profile_id": "profile-1",
+            "requested_author": "Author One",
+            "resolution_status": "pending",
+            "author_id": None,
+            "author_display": "Author One",
+            "author_handle": None,
+            "enabled": True,
         }]
+        resolver_calls: list[bool] = []
         provider = InsightProvider()
         with tempfile.TemporaryDirectory() as directory:
             runtime = AuthorizedDiscordRuntime(
@@ -210,8 +217,19 @@ class WindowedRuntimeTests(unittest.TestCase):
                     "warnings": [],
                     "unparsed_media_message_ids": [],
                 }],
-            })
+            }, resolve_author_profiles=lambda: {
+                "author_profiles": [{
+                    "profile_id": "profile-1",
+                    "requested_author": "Author One",
+                    "resolution_status": "resolved",
+                    "author_id": "author-1",
+                    "author_display": "Author One",
+                    "author_handle": None,
+                    "enabled": True,
+                }],
+            } if not resolver_calls.append(True) else {})
 
+        self.assertEqual(resolver_calls, [True])
         self.assertEqual(provider.operations, ["v1_1_chunk", "v1_1_daily"])
         self.assertEqual(provider.daily_fact_counts, [2])
         self.assertEqual(bundle["persistence"]["structured_runs"][0]["output"]["schema_version"], "v1.1-chunk")

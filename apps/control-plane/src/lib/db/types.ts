@@ -326,7 +326,9 @@ export interface Database {
         Row: {
           id: string;
           source_id: string;
-          author_id: string;
+          requested_author: string;
+          resolution_status: "pending" | "resolved" | "ambiguous";
+          author_id: string | null;
           author_display: string;
           author_handle: string | null;
           enabled: boolean;
@@ -337,7 +339,9 @@ export interface Database {
         Insert: {
           id?: string;
           source_id: string;
-          author_id: string;
+          requested_author: string;
+          resolution_status?: "pending" | "resolved" | "ambiguous";
+          author_id?: string | null;
           author_display: string;
           author_handle?: string | null;
           enabled?: boolean;
@@ -621,6 +625,10 @@ export interface Database {
         Returns: Json;
       };
       get_window_daily_fact_context: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string };
+        Returns: Json;
+      };
+      resolve_windowed_author_profiles: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string };
         Returns: Json;
       };

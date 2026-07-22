@@ -30,5 +30,11 @@ PYTHONPATH="workers/v0/src" "$python_bin" -m unittest discover -s workers/v0/tes
 
 (
   cd apps/control-plane
-  npm test -- src/app/api/api.integration.test.ts src/components/reader/discord-reader.test.tsx src/components/reader/reader-presentation.test.ts
+  npm test -- \
+    src/app/api/api.integration.test.ts \
+    src/components/admin/source-author-profiles-form.test.tsx \
+    src/components/reader/discord-reader.test.tsx \
+    src/components/reader/reader-presentation.test.ts \
+    src/lib/contracts.test.ts \
+    src/lib/db/repositories/author-profiles.test.ts
 )

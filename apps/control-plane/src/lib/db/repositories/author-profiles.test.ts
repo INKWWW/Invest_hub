@@ -4,7 +4,7 @@ const databaseMocks = vi.hoisted(() => ({
   canonicalLimit: vi.fn(),
   profileMaybeSingle: vi.fn(),
   profileSingle: vi.fn(),
-  profileUpsert: vi.fn(),
+  profileInsert: vi.fn(),
 }));
 
 vi.mock("../supabase-server", () => ({
@@ -30,7 +30,7 @@ vi.mock("../supabase-server", () => ({
             }),
           }),
         }),
-        upsert: databaseMocks.profileUpsert,
+        insert: databaseMocks.profileInsert,
       };
     },
   }),
@@ -81,57 +81,61 @@ describe("source author profile repository", () => {
     expect(databaseMocks.canonicalLimit.getMockName()).toBe("author_display,metadata,occurred_at");
   });
 
-  it("refuses a free-text author profile when the stable author was not observed", async () => {
-    databaseMocks.canonicalLimit.mockResolvedValue({ data: [], error: null });
-
-    await expect(saveSourceAuthorProfile({
-      sourceId: "source-1",
-      authorId: "not-observed",
-      enabled: true,
-      actorId: "admin-1",
-    })).rejects.toMatchObject({ message: "unobserved_author" } satisfies Partial<SourceAuthorProfileError>);
-
-    expect(databaseMocks.profileUpsert).not.toHaveBeenCalled();
-  });
-
-  it("persists only display data derived from the selected observed stable ID", async () => {
-    databaseMocks.canonicalLimit.mockResolvedValue({
-      data: [{ author_display: "Observed author", occurred_at: "2026-07-22T00:00:00Z", metadata: { author_id: "discord-1", author_handle: "observed" } }],
-      error: null,
-    });
+  it("persists a direct selector as pending without requiring an observed author", async () => {
     databaseMocks.profileSingle.mockResolvedValue({
       data: {
+        id: "profile-1",
         source_id: "source-1",
-        author_id: "discord-1",
-        author_display: "Observed author",
-        author_handle: "observed",
-        enabled: false,
+        requested_author: "Priority author",
+        resolution_status: "pending",
+        author_id: null,
+        author_display: "Priority author",
+        author_handle: null,
+        enabled: true,
       },
       error: null,
     });
-    databaseMocks.profileUpsert.mockReturnValue({
+    databaseMocks.profileInsert.mockReturnValue({
       select: () => ({ single: databaseMocks.profileSingle }),
     });
 
     await expect(saveSourceAuthorProfile({
       sourceId: "source-1",
-      authorId: "discord-1",
-      enabled: false,
+      requestedAuthor: " Priority author ",
       actorId: "admin-1",
     })).resolves.toEqual({
+      id: "profile-1",
       sourceId: "source-1",
-      authorId: "discord-1",
-      authorDisplay: "Observed author",
-      authorHandle: "observed",
-      enabled: false,
+      requestedAuthor: "Priority author",
+      resolutionStatus: "pending",
+      authorId: null,
+      authorDisplay: "Priority author",
+      authorHandle: null,
+      enabled: true,
     });
-    expect(databaseMocks.profileUpsert).toHaveBeenCalledWith({
+    expect(databaseMocks.canonicalLimit).not.toHaveBeenCalled();
+    expect(databaseMocks.profileInsert).toHaveBeenCalledWith({
       source_id: "source-1",
-      author_id: "discord-1",
-      author_display: "Observed author",
-      author_handle: "observed",
-      enabled: false,
+      requested_author: "Priority author",
+      resolution_status: "pending",
+      author_id: null,
+      author_display: "Priority author",
+      author_handle: null,
+      enabled: true,
       created_by: "admin-1",
-    }, { onConflict: "source_id,author_id" });
+    });
+  });
+
+  it("maps a duplicate selector to a safe validation error", async () => {
+    databaseMocks.profileSingle.mockResolvedValue({ data: null, error: { code: "23505" } });
+    databaseMocks.profileInsert.mockReturnValue({
+      select: () => ({ single: databaseMocks.profileSingle }),
+    });
+
+    await expect(saveSourceAuthorProfile({
+      sourceId: "source-1",
+      requestedAuthor: "Priority author",
+      actorId: "admin-1",
+    })).rejects.toMatchObject({ message: "duplicate_author_selector" } satisfies Partial<SourceAuthorProfileError>);
   });
 });

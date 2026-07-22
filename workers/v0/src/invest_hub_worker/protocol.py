@@ -119,6 +119,16 @@ class WorkerProtocol:
         _, value = self._request("GET", f"api/worker/tasks/{task_id}/daily-fact-context?attempt={attempt}", None)
         return self._object(value, "invalid daily fact context response")
 
+    def resolve_author_profiles(self, task_id: str, attempt: int) -> dict[str, Any]:
+        self._require_credential()
+        if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            raise ProtocolError("invalid author profile resolution request")
+        _, value = self._request("POST", f"api/worker/tasks/{task_id}/resolve-author-profiles", {"attempt": attempt})
+        response = self._object(value, "invalid author profile resolution response")
+        if set(response) != {"author_profiles"} or not isinstance(response.get("author_profiles"), list):
+            raise ProtocolError("invalid author profile resolution response")
+        return response
+
     def renew(self, task_id: str, attempt: int) -> dict[str, Any]:
         self._require_credential()
         _, value = self._request("POST", f"api/worker/tasks/{task_id}/lease", {"contract_version": "v0", "attempt": attempt})

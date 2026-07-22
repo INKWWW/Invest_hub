@@ -9,8 +9,16 @@ export type ObservedAuthor = {
   authorHandle: string | null;
 };
 
-export type SourceAuthorProfile = ObservedAuthor & {
+export type AuthorResolutionStatus = "pending" | "resolved" | "ambiguous";
+
+export type SourceAuthorProfile = {
+  id: string;
   sourceId: string;
+  requestedAuthor: string;
+  resolutionStatus: AuthorResolutionStatus;
+  authorId: string | null;
+  authorDisplay: string;
+  authorHandle: string | null;
   enabled: boolean;
 };
 
@@ -21,6 +29,31 @@ function asMetadata(value: Json): Metadata | null {
 }
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+function asResolutionStatus(value: string): AuthorResolutionStatus {
+  if (value === "pending" || value === "resolved" || value === "ambiguous") return value;
+  throw new Error("invalid_author_profile_resolution_status");
+}
+function mapProfile(profile: {
+  id: string;
+  source_id: string;
+  requested_author: string;
+  resolution_status: string;
+  author_id: string | null;
+  author_display: string;
+  author_handle: string | null;
+  enabled: boolean;
+}): SourceAuthorProfile {
+  return {
+    id: profile.id,
+    sourceId: profile.source_id,
+    requestedAuthor: profile.requested_author,
+    resolutionStatus: asResolutionStatus(profile.resolution_status),
+    authorId: profile.author_id,
+    authorDisplay: profile.author_display,
+    authorHandle: profile.author_handle,
+    enabled: profile.enabled,
+  };
 }
 
 export async function listObservedAuthors(sourceId: string): Promise<ObservedAuthor[]> {
@@ -52,61 +85,67 @@ export async function listObservedAuthors(sourceId: string): Promise<ObservedAut
 export async function listSourceAuthorProfiles(sourceId: string): Promise<SourceAuthorProfile[]> {
   const { data, error } = await createSupabaseAdminClient()
     .from("source_author_profiles")
-    .select("source_id,author_id,author_display,author_handle,enabled")
+    .select("id,source_id,requested_author,resolution_status,author_id,author_display,author_handle,enabled")
     .eq("source_id", sourceId)
-    .order("author_display", { ascending: true })
-    .order("author_id", { ascending: true });
+    .order("requested_author", { ascending: true })
+    .order("id", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((profile) => ({
-    sourceId: profile.source_id,
-    authorId: profile.author_id,
-    authorDisplay: profile.author_display,
-    authorHandle: profile.author_handle,
-    enabled: profile.enabled,
-  }));
+  return (data ?? []).map(mapProfile);
 }
 
 export async function saveSourceAuthorProfile(input: {
   sourceId: string;
-  authorId: string;
-  enabled: boolean;
+  requestedAuthor: string;
   actorId: string;
 }): Promise<SourceAuthorProfile> {
-  const observed = (await listObservedAuthors(input.sourceId)).find((author) => author.authorId === input.authorId);
-  if (!observed) throw new SourceAuthorProfileError("unobserved_author");
-
+  const requestedAuthor = input.requestedAuthor.trim();
+  if (!requestedAuthor) throw new SourceAuthorProfileError("invalid_author_selector");
   const { data, error } = await createSupabaseAdminClient()
     .from("source_author_profiles")
-    .upsert({
+    .insert({
       source_id: input.sourceId,
-      author_id: observed.authorId,
-      author_display: observed.authorDisplay,
-      author_handle: observed.authorHandle,
-      enabled: input.enabled,
+      requested_author: requestedAuthor,
+      resolution_status: "pending",
+      author_id: null,
+      author_display: requestedAuthor,
+      author_handle: null,
+      enabled: true,
       created_by: input.actorId,
-    }, { onConflict: "source_id,author_id" })
-    .select("source_id,author_id,author_display,author_handle,enabled")
+    })
+    .select("id,source_id,requested_author,resolution_status,author_id,author_display,author_handle,enabled")
     .single();
-  if (error) throw error;
+  if (error) {
+    if (error.code === "23505") throw new SourceAuthorProfileError("duplicate_author_selector");
+    throw error;
+  }
+  return mapProfile(data);
+}
 
-  return {
-    sourceId: data.source_id,
-    authorId: data.author_id,
-    authorDisplay: data.author_display,
-    authorHandle: data.author_handle,
-    enabled: data.enabled,
-  };
+export async function setSourceAuthorProfileEnabled(input: {
+  sourceId: string;
+  profileId: string;
+  enabled: boolean;
+}): Promise<SourceAuthorProfile | null> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("source_author_profiles")
+    .update({ enabled: input.enabled })
+    .eq("source_id", input.sourceId)
+    .eq("id", input.profileId)
+    .select("id,source_id,requested_author,resolution_status,author_id,author_display,author_handle,enabled")
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapProfile(data) : null;
 }
 
 export async function deleteSourceAuthorProfile(input: {
   sourceId: string;
-  authorId: string;
+  profileId: string;
 }): Promise<boolean> {
   const { data, error } = await createSupabaseAdminClient()
     .from("source_author_profiles")
     .delete()
     .eq("source_id", input.sourceId)
-    .eq("author_id", input.authorId)
+    .eq("id", input.profileId)
     .select("id")
     .maybeSingle();
   if (error) throw error;

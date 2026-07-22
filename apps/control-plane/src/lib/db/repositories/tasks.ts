@@ -273,6 +273,21 @@ export async function getWindowDailyFactContext(
   return data;
 }
 
+export async function resolveWindowedAuthorProfiles(
+  taskId: string,
+  attempt: number,
+  workerId: string,
+) {
+  const { data, error } = await createSupabaseAdminClient().rpc("resolve_windowed_author_profiles", {
+    p_task_id: taskId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("invalid_resolved_author_profiles");
+  return data;
+}
+
 export async function recordWindowedCaptureSegment(
   taskId: string,
   attempt: number,

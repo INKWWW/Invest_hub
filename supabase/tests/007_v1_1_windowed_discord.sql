@@ -85,9 +85,11 @@ select throws_ok(
   'initialization rejects a non-schedule boundary'
 );
 
-insert into public.source_author_profiles (source_id, author_id, author_display, author_handle, enabled, created_by)
+insert into public.source_author_profiles (source_id, requested_author, resolution_status, author_id, author_display, author_handle, enabled, created_by)
 values (
   '00000000-0000-0000-0000-000000007021',
+  'Observed author',
+  'resolved',
   'discord-stable-author-1',
   'Observed author',
   'observed-author',
@@ -96,9 +98,11 @@ values (
 );
 
 select throws_ok(
-  $$insert into public.source_author_profiles (source_id, author_id, author_display, enabled)
+  $$insert into public.source_author_profiles (source_id, requested_author, resolution_status, author_id, author_display, enabled)
     values (
       '00000000-0000-0000-0000-000000007021',
+      'Changed display name',
+      'resolved',
       'discord-stable-author-1',
       'Changed display name',
       true
