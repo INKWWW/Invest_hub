@@ -734,6 +734,64 @@ describe("v0 control-plane API authorization", () => {
     expect(taskMocks.persistWorkerExecution).not.toHaveBeenCalled();
   });
 
+  it("returns a safe database validation category for rejected window page persistence", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    const payload = {
+      ...validPersistencePayload,
+      structured_runs: [],
+      capture_segment: {
+        idempotency_key: "page:1",
+        request_cursor: null,
+        next_cursor: "cursor-1",
+        oldest_occurred_at: "2099-01-01T00:00:00.000Z",
+        newest_occurred_at: "2099-01-01T00:00:00.000Z",
+        response_matched: true,
+        response_fresh: true,
+      },
+    };
+    taskMocks.persistWindowedCapturePage.mockRejectedValue({ code: "22023", message: "invalid_capture_segment" });
+
+    const response = await postPersist(
+      jsonRequest("/api/worker/tasks/task-1/persist", payload, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: "invalid_worker_persistence",
+      failure_code: "invalid_capture_segment",
+    });
+  });
+
+  it("returns a safe conflict category for rejected window page persistence", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    const payload = {
+      ...validPersistencePayload,
+      structured_runs: [],
+      capture_segment: {
+        idempotency_key: "page:1",
+        request_cursor: null,
+        next_cursor: "cursor-1",
+        oldest_occurred_at: "2099-01-01T00:00:00.000Z",
+        newest_occurred_at: "2099-01-01T00:00:00.000Z",
+        response_matched: true,
+        response_fresh: true,
+      },
+    };
+    taskMocks.persistWindowedCapturePage.mockRejectedValue({ code: "23505", message: "conflicting_canonical_message" });
+
+    const response = await postPersist(
+      jsonRequest("/api/worker/tasks/task-1/persist", payload, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-1" }) },
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: "conflicting_worker_persistence",
+      failure_code: "conflicting_canonical_message",
+    });
+  });
+
   it("maps a conflicting duplicate result to 409", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     taskMocks.acceptTaskResult.mockRejectedValue({ code: "23505", message: "conflicting_duplicate_result" });

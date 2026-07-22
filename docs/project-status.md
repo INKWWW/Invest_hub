@@ -4,7 +4,7 @@ Last updated: 2026-07-22
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收、专用 V1 数据库 migration 与控制面生产部署。来源面向人的名称统一采用“社区名 · 频道名”，内部逻辑标识不再出现在阅读、任务或来源列表。真实范围验收仍待完成。V2 X 指定博主信息收集与阅读 Spec 已获批准，独立 implementation plan 为 Draft、待审阅批准；任何 V2 实现、共享协议改动、部署或真实 X 采集仍须等待该 Plan 获批及逐项授权。**
+**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收、专用 V1 数据库 migration 与控制面生产部署。来源面向人的名称统一采用“社区名 · 频道名”，内部逻辑标识不再出现在阅读、任务或来源列表。真实范围验收当前被 OpenCLI Browser Bridge 无法驱动 Discord 嵌套历史列表所阻塞：任务正确保持可恢复失败，覆盖水位没有前移。V2 X 指定博主信息收集与阅读 Spec 已获批准，独立 implementation plan 为 Draft、待审阅批准；任何 V2 实现、共享协议改动、部署或真实 X 采集仍须等待该 Plan 获批及逐项授权。**
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
@@ -12,7 +12,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位。管理员指定作者现在可直接输入，已观察作者仅作建议；唯一 stable ID 会在任务页面持久化后解析，零候选保持 pending、多候选标记 ambiguous。来源名称是受保护的运行数据：页面与任务选择只显示“社区名 · 频道名”，内部 `source_key` 只用于服务端与 Worker 绑定，真实名称不进入 Git。生产控制面已部署此前修订，但尚未完成真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，故仍不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。V2 Spec 已批准，但 V2 Plan 仍待批准；V2 实现、真实 X 采集、共享协议改动或部署均不由现有 V1/V1.1 Plan 授权。媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 与模块 2–4 仍须各自完成 Spec/Plan 批准。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位。管理员指定作者现在可直接输入，已观察作者仅作建议；唯一 stable ID 会在任务页面持久化后解析，零候选保持 pending、多候选标记 ambiguous。来源名称是受保护的运行数据：页面与任务选择只显示“社区名 · 频道名”，内部 `source_key` 只用于服务端与 Worker 绑定，真实名称不进入 Git。真实时间窗验收已证明持久化重试可恢复，但当前 OpenCLI Browser Bridge 不能控制 Discord 的嵌套虚拟历史列表，故重复历史响应正确保留为 `retryable_failed`、覆盖水位不前移；未补齐该 Browser Bridge 能力前，不得继续重复真实任务或宣称 V1.1 可用。生产控制面已部署此前修订，但尚未完成真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，故仍不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。V2 Spec 已批准，但 V2 Plan 仍待批准；V2 实现、真实 X 采集、共享协议改动或部署均不由现有 V1/V1.1 Plan 授权。媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 与模块 2–4 仍须各自完成 Spec/Plan 批准。
 
 ## Approval status
 
