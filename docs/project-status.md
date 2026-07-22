@@ -1,10 +1,10 @@
 # Project Status
 
-Last updated: 2026-07-21
+Last updated: 2026-07-22
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成**
+**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准，Task 1–7 与 Task 8 的本地确定性验收/文档收口已完成；真实授权验收与发布尚未执行。**
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
 
@@ -12,7 +12,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 Plan 直接视为后续实现授权。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 尚未完成真实授权验收或发布，不能称为正式可用；真实 Discord、远程 migration、launchd 安装、生产部署和推送须逐项获得用户明确授权。任何 V2、X、媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 或模块 2–4 工作，都必须另行起草并批准相应 Spec 和 implementation plan；不得把 V1 或 V1.1 Plan 直接视为后续实现授权。
 
 ## Approval status
 
@@ -24,6 +24,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [Spike-02 未解析媒体来源链路设计](superpowers/specs/2026-07-18-spike-02-media-source-linkage-design.md)
   - [V0 基础设施与技术验证设计](superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md)
   - [V1 Discord 正式可用 MVP 设计](superpowers/specs/2026-07-19-v1-discord-mvp-design.md)
+  - [V1.1 Discord 完整时间窗采集与观点阅读设计](superpowers/specs/2026-07-22-v1.1-discord-windowed-collection-and-insight-design.md)
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
@@ -35,6 +36,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [V1 Discord 正式可用 MVP 计划](superpowers/plans/2026-07-19-v1-discord-mvp.md)
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V1 implementation status：代码、本地确定性验收、专用部署、真实双来源 history/增量/checkpoint、失败隔离/恢复、普通用户阅读与视觉、真实质量抽检和部署日志审阅均已完成；结论为 V1 Discord 正式可用 MVP。
+- V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、稳定作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全的作者配置界面、管理员手动更新与内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收与文档收口已完成。最终本地验证为 pgTAP 10 个文件/174 条、Worker 81 项、控制面 14 个文件/72 项、V1.1 E2E 公开 fixture 5 项，另由 E2E runner 触达真实 Worker/runtime/scheduler 10 项及控制面 API/Reader/Presentation 31 项，lint、production build、redaction 与 diff 检查均通过。尚未进行 V1.1 的真实采集、远程数据库迁移、launchd 安装、生产部署或推送。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
@@ -110,4 +112,4 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## Next gate
 
-V1 MVP 退出门槛已通过。下一步若启动 V2、X、媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或长期稳定性工作，必须先分别编写并批准新的 Spec 与 implementation plan；本次结论不构成生产 SLA。
+V1 MVP 退出门槛已通过。V1.1 的 Task 1–7 及 Task 8 的本地确定性验收、独立复审和文档收口已完成。此时不能将 V1.1 标记为“已验收”或“已发布”：尚缺用户再次明确授权后的真实 Discord 正常窗口与手动范围验收、普通用户真实页面审阅、远程 migration、明确 label/config 的 launchd 安装、V1 目标项目部署与生产审阅。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2、X、媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作，仍必须分别编写并批准新的 Spec 与 implementation plan；本次结论不构成生产 SLA。

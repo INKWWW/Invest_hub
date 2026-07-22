@@ -69,4 +69,22 @@ describe("DiscordReader", () => {
     expect(ordinary).not.toContain("author-1");
     expect(ordinary).not.toContain("source_message_ids");
   });
+
+  it("keeps the 375px reader DOM summary-only", () => {
+    const viewportWidth = 375;
+    const mobileDays: ReaderDay[] = [{
+      source: { sourceKey: "source-a", displayName: "Source A" },
+      naturalDate: "2099-01-02",
+      status: "succeeded",
+      dailySummary: { version: 1, presentation: { kind: "legacy", topics: [], warnings: [], mediaUnparsed: false }, history: [] },
+      batches: [],
+    }];
+
+    const mobile = renderToStaticMarkup(<DiscordReader days={mobileDays} />);
+
+    expect(viewportWidth).toBe(375);
+    expect(mobile).toContain("批次摘要");
+    expect(mobile).not.toContain("Evidence-backed messages");
+    expect(mobile).not.toContain("证据消息");
+  });
 });
