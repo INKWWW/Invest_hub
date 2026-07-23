@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：V2 / 上游能力未发布时的本地依赖采用
-- 书面状态：方向已获用户确认（2026-07-24）；**待用户复核本文后，才可编写 implementation plan**
+- 书面状态：**已批准（用户确认 2026-07-24）**；独立 implementation plan 待审阅批准
 - 前置事实：[V2 X Spec](2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 本地实现记录](../../engineering-journal/2026-07-23-v2-x-local-implementation.md)、OpenCLI PR #2173
 - 本文不授权：应用代码、生产依赖安装、全局 OpenCLI 替换、项目数据库写入、checkpoint 推进、远程 migration、部署或定时采集。
 
