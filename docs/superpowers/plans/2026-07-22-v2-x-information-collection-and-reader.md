@@ -23,6 +23,15 @@
 - 真实 X 正文、账户、URL、Cookie、Profile、私有 Prompt、完整模型响应和本地 evidence 不得进入 Git、公开 fixture、Vercel 或普通日志。
 - 本 Plan 获批前不写代码、不执行真实 X 会话、不改共享协议、不应用 migration、不部署。
 
+### 已确认的 V2 X 日内增量与恢复语义
+
+- 每位启用博主的逻辑范围截止点固定为 `08:00`、`12:00`、`16:00`、`20:00` 和**次日 `00:00`**（`Asia/Shanghai`）。次日 `00:00` 的日终任务可在 `00:05` 实际启动，但其不可变 `end_at` 仍为 `00:00`；运行时刻不得改变内容时间归属。
+- 连续覆盖范围永远从该博主的**最后成功 checkpoint**开始，而不是从上一个计划触发时刻开始。若 `12:00` 任务失败，`16:00` 任务必须补齐自该博主最后成功 checkpoint 至 `16:00` 的未确认连续范围；失败任务不得推进 checkpoint。
+- 每次任务在逻辑连续范围之前额外读取最多 30 分钟的重叠复查窗口。稳定帖子 ID 使该窗口幂等；它用于发现页面排序变化、延迟可见和临界加载问题，不能制造重复 Canonical 帖子或重复摘要输入。逻辑连续范围、重叠扫描起点和实际 `end_at` 都须保留在任务快照中。
+- 新博主首次启用时，初始连续范围为其启用当日 `00:00` 至最近一个已到达的逻辑截止点；不因此默认发起更早历史补采。若日终任务或任一后续任务跨日恢复，优先补齐最早未确认范围。
+- 帖子和每日摘要按帖子 `occurred_at` 换算后的上海自然日归属，而不是按任务运行日期归属。次日补到的前一日帖子更新前一日的追加式摘要版本。
+- 只有一个范围完整成功且该博主的任一受影响上海自然日确有新增 Canonical 帖子时，才调用 Codex CLI 生成或更新相应日期的摘要版本；已验证的完整空范围为 `no_new_data`，不调用 Provider，也不伪造新摘要版本。
+
 ## 1. 目标文件、依赖与交付顺序
 
 | 阶段 | 主要文件 | 依赖 | 可验收产物 |
@@ -52,7 +61,7 @@
 - `sources.source_type` becomes the exact union `discord | x`; `sync_tasks.task_type` becomes `discord_sync | x_sync`. Database checks reject any other value and reject a source/task type mismatch.
 - `x_source_profiles(source_id, requested_handle, account_id, display_name, resolution_status, enabled)` has one row per X source. `resolution_status` is `pending | resolved | ambiguous`; only `resolved` rows may carry a non-null `account_id`.
 - `x_post_contexts(canonical_message_id, post_type, post_url, quoted_post_id, reply_to_post_id, reposted_post_id, context_status, attachments)` records one X-specific fact row. `post_type` is `original | quote | reply | repost`; `context_status` is `complete | unavailable | deleted | unresolved`.
-- X claims use the existing window `capture_range` shape and set `task_type: "x_sync"`; the source snapshot includes only `source_type`, resolved account identity, display name and parameter version, never a URL or local profile reference.
+- X claims use the existing logical continuous `capture_range` shape and set `task_type: "x_sync"`. The task snapshot additionally preserves `scheduled_window_key`, the fixed `end_at`, `overlap_start_at` and the current checkpoint from which its continuous range began. The source snapshot includes only `source_type`, resolved account identity, display name and parameter version, never a URL or local profile reference.
 
 - [ ] **Step 1: Write failing pgTAP and contract tests.**
 
@@ -130,14 +139,14 @@
 
 **Interfaces:**
 
-- `create_windowed_x_sync_task(source_id, parameter_version, requested_by, trigger, end_at, scheduled_window_key)` creates or reuses only the oldest uncompleted `(start_at, end_at]` continuous range for that X source.
+- `create_windowed_x_sync_task(source_id, parameter_version, requested_by, trigger, end_at, scheduled_window_key)` creates or reuses only the oldest uncompleted `(start_at, end_at]` continuous range for that X source. Its `start_at` is the last successful checkpoint, never the previous scheduled trigger; its `overlap_start_at` is at most 30 minutes earlier but never before the Shanghai-day start containing `start_at`. The fixed cutoff key is one of `08:00`, `12:00`, `16:00`, `20:00` or next-day `00:00`; the last may execute at `00:05` without changing `end_at`.
 - `create_bounded_x_history_task(source_id, parameter_version, requested_by, start_at, end_at)` creates one explicit, immutable history range. A historical result only advances continuous coverage when it is exactly contiguous with the current waterline; otherwise it remains an independently traceable backfill result.
-- `XWindowedRuntime.execute(claim, on_capture_page, load_daily_fact_context)` persists each accepted page before advancing `resume_cursor`, excludes posts outside the immutable range, and returns `range_completion` only after boundary proof.
+- `XWindowedRuntime.execute(claim, on_capture_page, load_daily_fact_context)` persists each accepted page before advancing `resume_cursor`, reads the overlap window for idempotent recheck, excludes posts later than immutable `end_at`, and returns `range_completion` only after boundary proof for the logical continuous range. A newly observed stable ID inside the overlap is retained as a late-visible fact with audit linkage; a conflicting identity fails safely rather than overwriting an existing fact.
 - `range-complete` verifies task/source type, active lease, stable receipts and X post context rows before atomically moving only that source’s `coverage_through_at`.
 
 - [ ] **Step 1: Write failing range and recovery tests.**
 
-  Cover two X sources with interleaved tasks; a first task that requires more than five pages; an interrupted sixth page; identical replay; a page with posts later than `end_at`; one source with `unauthorized`; late scheduled execution; manual-task reuse; an explicit bounded history range that is non-contiguous with continuous coverage; and a result that lacks an X post-context receipt. Assert no source waterline moves until its own completion, non-contiguous history does not falsely advance coverage, and no non-X task is routed to the X runtime.
+  Cover two X sources with interleaved tasks; a first task that requires more than five pages; an interrupted sixth page; identical replay; a page with posts later than `end_at`; one source with `unauthorized`; late scheduled execution; manual-task reuse; an explicit bounded history range that is non-contiguous with continuous coverage; and a result that lacks an X post-context receipt. Add `08:00 → 12:00 → 16:00 → 20:00 → 00:00` logical cutoffs, actual `00:05` execution with fixed `00:00` end, a `12:00` failure recovered by the `16:00` task, 30-minute overlap replay with no duplicate Canonical posts, a late-visible overlap post, a new-source same-day initialization and cross-day recovery that updates the original post date. Assert no source waterline moves until its own completion, non-contiguous history does not falsely advance coverage, and no non-X task is routed to the X runtime.
 
 - [ ] **Step 2: Run the focused failures.**
 
@@ -169,7 +178,7 @@
 
 - `parse_v2_x_chunk_output(value, allowed_post_ids)` returns only validated facts: `post_id`, `fact`, `author_viewpoint`, `subjects`, `stance`, `uncertainties` and `warnings`.
 - `parse_v2_x_daily_output(value, allowed_post_ids)` returns `schema_version: "v2-x-daily"`, `natural_date`, `as_of`, `core_viewpoints`, `subjects`, `stance_changes`, `uncertainties`, `unparsed_content_notices` and `evidence_post_ids`.
-- `build_v2_x_daily_summaries` creates append-only current/history versions per X source and Shanghai date from already confirmed X facts only.
+- `build_v2_x_daily_summaries` creates append-only current/history versions per X source and Shanghai date from already confirmed X facts only. It runs only after a complete range adds new Canonical posts for that source/date; `no_new_data` and incomplete ranges do not create a Provider call or a synthetic summary version.
 
 - [ ] **Step 1: Write strict-schema failures.**
 
@@ -183,7 +192,7 @@
 
 - [ ] **Step 3: Implement strict X operations and daily versioning.**
 
-  Keep private prompts outside Git; repository templates describe only JSON shape and boundary rules. Add separate Mock/Codex operations so a provider failure remains classified. Daily generation may use only persisted facts whose evidence IDs are in the completed range; it must retain `as_of`, source/date/version, media/external-content notices and previous versions. A no-new-post range returns a safe status without inventing a daily version.
+  Keep private prompts outside Git; repository templates describe only JSON shape and boundary rules. Add separate Mock/Codex operations so a provider failure remains classified. Daily generation may use only persisted facts whose evidence IDs are in the completed range; it must retain `as_of`, source/date/version, media/external-content notices and previous versions. A same-day later range with newly accepted posts creates a new version for the post's Shanghai date; a cross-day recovery updates the original date rather than the run date. A no-new-post range returns a safe status without inventing a daily version.
 
 - [ ] **Step 4: Verify and commit.**
 
@@ -245,7 +254,7 @@
 
 - [ ] **Step 1: Write deterministic cross-layer tests.**
 
-  Cover at least two X sources; all four post types; quote/reply/repost attribution; range completion after more than five pages; interrupted resume; duplicate replay; delayed range upper-bound exclusion; source-isolated failure; daily current/history versions; no-new-data distinction; ordinary-user 403/RLS; safe reader JSON/HTML; and desktop/375px presentation. Use only artificial fixture text and links.
+  Cover at least two X sources; all four post types; quote/reply/repost attribution; range completion after more than five pages; interrupted resume; duplicate replay; delayed range upper-bound exclusion; source-isolated failure; daily current/history versions; no-new-data distinction; ordinary-user 403/RLS; safe reader JSON/HTML; and desktop/375px presentation. Add the five fixed daily cutoffs, `00:05` execution with `00:00` logical end, a failed middle window recovered by its successor, 30-minute overlap idempotency, same-day initialization, and cross-day recovery whose summary remains on the original Shanghai date. Use only artificial fixture text and links.
 
 - [ ] **Step 2: Implement the E2E runner and document deterministic evidence.**
 
@@ -284,6 +293,7 @@
 | Four post types and correct attribution | 1, 2, 4, 6 | public adapter fixture, canonical/schema tests, real authorized samples |
 | No fixed page-count success condition | 2, 3, 6 | 5+ page fixture, range receipt and recovery tests |
 | Per-author checkpoint, bounded history and failure isolation | 1, 3, 5, 6 | RPC/RLS tests, interrupted-source and history fixtures |
+| Fixed daily cutoffs, overlap recheck and cross-day recovery | 1, 3, 4, 6 | scheduler/range tests, idempotency fixtures, version-date assertions |
 | Daily Chinese versioned summaries | 4, 5, 6 | strict schema, summary history, reader tests |
 | Media/external-body non-inference | 2, 4, 5, 6 | fixture/schema/reader warnings |
 | Content-first desktop and 375px reader | 5, 6 | DTO/DOM tests and authorized visual review |
@@ -295,6 +305,7 @@ Plan self-review before implementation:
 
 - The only future shared-contract modifications occur in Task 1 and are additive, type-checked and regression-tested against Discord.
 - Every real X, remote database and deployment operation has a separate explicit authorization gate.
+- The scheduler derives every continuous range from the last successful checkpoint, not the previous trigger; its five Shanghai logical cutoffs, `00:05` day-end execution, 30-minute overlap and cross-day recovery are fixture-tested before any real acceptance.
 - No Task treats fixed page count, missing response or provider failure as a successful empty range.
 - Every Reader task excludes raw post bodies and runtime diagnostics by DTO and DOM tests, not by visual convention alone.
 - `docs/intake.md` is preserved as the factual input; the currently unstaged user change must never be staged incidentally.
