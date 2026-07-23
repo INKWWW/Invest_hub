@@ -327,7 +327,12 @@ export async function completeWindowedCaptureRange(
   workerId: string,
   completion: Json,
 ) {
-  const { data, error } = await createSupabaseAdminClient().rpc("complete_windowed_capture_range", {
+  const supabase = createSupabaseAdminClient();
+  const { data: task, error: taskError } = await supabase.from("sync_tasks").select("task_type,capture_range").eq("id", taskId).maybeSingle();
+  if (taskError) throw taskError;
+  const history = task?.task_type === "x_sync" && task.capture_range && typeof task.capture_range === "object" && !Array.isArray(task.capture_range)
+    && task.capture_range.mode === "history";
+  const { data, error } = await supabase.rpc(history ? "complete_bounded_x_history_range" : "complete_windowed_capture_range", {
     p_task_id: taskId,
     p_attempt: attempt,
     p_worker_id: workerId,

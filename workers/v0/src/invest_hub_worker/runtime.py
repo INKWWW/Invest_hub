@@ -65,23 +65,30 @@ class WindowedCaptureRange:
     @classmethod
     def from_claim(cls, claim: Mapping[str, Any]) -> "WindowedCaptureRange":
         scope = claim.get("collection_scope")
-        if not isinstance(scope, Mapping) or dict(scope) != {"mode": "window"}:
+        if not isinstance(scope, Mapping) or scope.get("mode") not in {"window", "history"} or set(scope) != {"mode"}:
             raise ValueError("window task collection_scope is invalid")
         raw_range = claim.get("capture_range")
         allowed_range_keys = {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key", "overlap_start_at"}
-        if not isinstance(raw_range, Mapping) or not {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"} <= set(raw_range) or not set(raw_range) <= allowed_range_keys:
+        if not isinstance(raw_range, Mapping) or not set(raw_range) <= allowed_range_keys:
             raise ValueError("window task capture_range is invalid")
-        if raw_range.get("mode") != "window" or raw_range.get("timezone") != "Asia/Shanghai":
+        mode = scope["mode"]
+        if raw_range.get("mode") != mode or raw_range.get("timezone") != "Asia/Shanghai":
             raise ValueError("window task capture_range is invalid")
-        if raw_range.get("trigger") not in {"scheduled", "manual", "bootstrap"}:
-            raise ValueError("window task capture_range trigger is invalid")
         scheduled_window_key = raw_range.get("scheduled_window_key")
-        if raw_range.get("trigger") in {"manual", "bootstrap"} and scheduled_window_key is not None:
-            raise ValueError("manual and bootstrap windows cannot carry a scheduled_window_key")
-        if raw_range.get("trigger") == "scheduled" and (not isinstance(scheduled_window_key, str) or not scheduled_window_key):
-            raise ValueError("scheduled window task requires a scheduled_window_key")
-        if scheduled_window_key is not None and not isinstance(scheduled_window_key, str):
-            raise ValueError("window task scheduled_window_key is invalid")
+        if mode == "history":
+            if set(raw_range) != {"mode", "trigger", "timezone", "start_at", "end_at"} or raw_range.get("trigger") != "history":
+                raise ValueError("history task capture_range is invalid")
+        else:
+            if not {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"} <= set(raw_range):
+                raise ValueError("window task capture_range is invalid")
+            if raw_range.get("trigger") not in {"scheduled", "manual", "bootstrap"}:
+                raise ValueError("window task capture_range trigger is invalid")
+            if raw_range.get("trigger") in {"manual", "bootstrap"} and scheduled_window_key is not None:
+                raise ValueError("manual and bootstrap windows cannot carry a scheduled_window_key")
+            if raw_range.get("trigger") == "scheduled" and (not isinstance(scheduled_window_key, str) or not scheduled_window_key):
+                raise ValueError("scheduled window task requires a scheduled_window_key")
+            if scheduled_window_key is not None and not isinstance(scheduled_window_key, str):
+                raise ValueError("window task scheduled_window_key is invalid")
         start_at = _required_instant(raw_range.get("start_at"), "window start_at")
         end_at = _required_instant(raw_range.get("end_at"), "window end_at")
         if start_at >= end_at:
@@ -912,8 +919,7 @@ class XWindowedRuntime:
         capture_segments: list[dict[str, Any]] = []
         duplicate_count = 0
         boundary: dict[str, str] | None = None
-        overlap_start = capture_range.overlap_start_at
-        assert overlap_start is not None
+        overlap_start = capture_range.overlap_start_at or capture_range.start_at
 
         try:
             while boundary is None:
@@ -995,7 +1001,7 @@ class XWindowedRuntime:
             raise RuntimeExecutionError("preflight", "task parameter version does not match local X config")
         try:
             capture_range = WindowedCaptureRange.from_claim(claim)
-            if capture_range.overlap_start_at is None:
+            if capture_range.capture_range.get("mode") == "window" and capture_range.overlap_start_at is None:
                 raise ValueError("X window requires overlap_start_at")
             if capture_range.capture_range.get("trigger") == "scheduled":
                 local_time = capture_range.end_at.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%H:%M")
