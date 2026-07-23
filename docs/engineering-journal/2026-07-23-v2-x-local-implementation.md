@@ -19,9 +19,11 @@
 - `cd apps/control-plane && npm test && npm run lint && npm run build`：84 项 Vitest 通过，lint 和 production build 通过。
 - `bash scripts/v2/run-v2-e2e.sh`：3 项 V2 公开 fixture E2E、5 项 V1.1 fixture 回归、11 项窗口/调度 Worker 回归和 51 项控制面聚焦测试通过；脚本不读取浏览器 Profile、真实 URL、凭据或私有 Prompt。
 
-## 尚未执行的外部动作
+## 已授权的最小真实 X Go/No-Go
 
-没有读取真实 X 帖子；没有应用远程 migration；没有部署；没有修改生产或共享环境。真实采集前仍需单独确认 owner-only 会话、测试博主数、是否允许有限历史范围和是否包含任何部署动作。
+在用户明确授权后，已对一名指定测试博主执行一次 owner-only、最多 20 条、非持久化的 OpenCLI 读取诊断。仅输出并保留了聚合字段覆盖结果：登录态、稳定 ID、时间、链接和基础类型字段均可用，并观察到引用帖；回复/转发关系字段及可证明的分页下界均不可用。结果分类为 `x_collection_unverified` / `opencli_contract`，受保护的仓库外本地证据不含账户、正文、链接、Cookie、Profile 或完整响应。
+
+没有创建云端任务；没有调用 Codex CLI；没有应用远程 migration；没有部署；没有修改生产或共享环境。真实采集、远程 migration、部署和真实普通用户验收仍须逐项单独明确授权。
 
 ## 已知受限边界
 
