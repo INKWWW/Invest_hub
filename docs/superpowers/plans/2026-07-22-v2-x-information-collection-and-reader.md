@@ -211,20 +211,21 @@
 - Create: `apps/control-plane/src/lib/db/repositories/x-sources.ts`, `apps/control-plane/src/lib/db/repositories/x-reader.ts`
 - Create: `apps/control-plane/src/app/api/admin/x/sources/route.ts`, `apps/control-plane/src/app/api/admin/x/sources/[sourceId]/coverage/route.ts`, `apps/control-plane/src/app/api/admin/x/manual-refresh/route.ts`, `apps/control-plane/src/app/api/admin/x/history/route.ts`
 - Create: `apps/control-plane/src/app/api/reader/x/route.ts`, `apps/control-plane/src/app/x/page.tsx`
-- Create: `apps/control-plane/src/components/admin/XSourceForm.tsx`, `apps/control-plane/src/components/admin/XHistoryBackfillForm.tsx`, `apps/control-plane/src/components/reader/XReader.tsx`, `apps/control-plane/src/components/reader/x-reader-presentation.ts`
-- Modify: `apps/control-plane/src/app/admin/page.tsx`, `apps/control-plane/src/components/admin/AdminShell.tsx`, `apps/control-plane/src/components/reader/ReaderStatus.tsx`, `apps/control-plane/src/app/globals.css`
+- Create: `apps/control-plane/src/components/admin/XSourceForm.tsx`, `apps/control-plane/src/components/admin/XHistoryBackfillForm.tsx`, `apps/control-plane/src/components/reader/XReader.tsx`, `apps/control-plane/src/components/reader/x-reader-presentation.ts`, `apps/control-plane/src/components/reader/ReaderSourceSwitch.tsx`, `apps/control-plane/src/components/reader/reader-source-switch.test.tsx`
+- Modify: `apps/control-plane/src/app/discord/page.tsx`, `apps/control-plane/src/app/discord/page.test.tsx`, `apps/control-plane/src/app/x/page.tsx`, `apps/control-plane/src/components/reader/DiscordReader.tsx`, `apps/control-plane/src/components/reader/ReaderStatus.tsx`, `apps/control-plane/src/app/globals.css`
 - Create/Modify: matching repository, route, component and responsive presentation tests
 
 **Interfaces:**
 
 - `createXSource({ displayName, requestedHandle, parameterVersion })` creates an enabled X source with `pending` identity until the local Worker verifies a unique account; the public response has no source URL.
 - `readXDay({ sourceKey?, date? })` returns `XReaderDay[]` containing only display name, natural date, status, a default-open `current_daily_timeline` and collapsed historical daily-presentation versions. The current timeline contains chronological `window_segments`; each segment has its window viewpoints and notices, while its per-post analyses, quote relations and `PostLink[]` of `{ type, occurredAt, href }` are collapsed evidence details.
+- `ReaderSourceSwitch({ activeSource }: { activeSource: "discord" | "x" })` is a reader-only navigation component. It renders accessible `Discord` and `X` links to `/discord` and `/x`, applies `aria-current="page"` only to the active source, and has no source data, task, credential, administrative or cross-source filter props.
 - `POST /api/admin/x/manual-refresh` accepts `{ source_id }`; server time sets `end_at`, reuses the existing active range and returns only a safe task state. Non-admin callers receive 403.
 - `POST /api/admin/x/history` accepts `{ source_id, start_at, end_at }`, validates a finite Shanghai range on the server, rejects an active overlap and returns only a safe queued task state. It does not imply that continuous coverage advanced.
 
 - [ ] **Step 1: Write failing repository/API/component tests.**
 
-  Cover admin creation/edit/disable, an unresolved identity message, coverage initialization, manual task reuse, finite historical backfill creation and overlap rejection, 401/403 responses, date/source selection, current daily timeline default-open with chronological window segments, historical daily-presentation versions default-collapsed, per-post analyses/quote relations/post links default-collapsed, immutable earlier segment text after a later range, all six Reader states, and absent raw body/internal ID/worker/prompt/provider fields in API JSON and initial HTML. Add 1280px and 375px assertions for source/date selectors and no horizontal overflow.
+  Cover admin creation/edit/disable, an unresolved identity message, coverage initialization, manual task reuse, finite historical backfill creation and overlap rejection, 401/403 responses, date/source selection, current daily timeline default-open with chronological window segments, historical daily-presentation versions default-collapsed, per-post analyses/quote relations/post links default-collapsed, immutable earlier segment text after a later range, all six Reader states, and absent raw body/internal ID/worker/prompt/provider fields in API JSON and initial HTML. Test `ReaderSourceSwitch` on both reader routes for its exact `/discord` and `/x` destinations, one active `aria-current`, visible labels, keyboard focus and absence of administrative/cross-source props or output. Add 1280px and 375px assertions for source/date selectors, source switcher and no horizontal overflow.
 
 - [ ] **Step 2: Run the focused failures.**
 
@@ -234,7 +235,7 @@
 
 - [ ] **Step 3: Implement safe queries and content-first UI.**
 
-  Build new X-specific repositories rather than branching `readDiscordDay`. Filter queries by `source_type = 'x'`, only include the completed current daily timeline plus collapsed historical presentation versions, and derive `no_new_messages` only from a confirmed complete range. XReader must render title, Shanghai date and chronological window viewpoints, then fold each segment's post analyses, quote attribution and `在 X 中打开` links; it must never render canonical content or mutate/rephrase an earlier segment. Add admin navigation without exposing configuration to ordinary readers.
+  Build new X-specific repositories rather than branching `readDiscordDay`. Filter queries by `source_type = 'x'`, only include the completed current daily timeline plus collapsed historical presentation versions, and derive `no_new_messages` only from a confirmed complete range. Render `ReaderSourceSwitch` at the top of both ordinary-reader pages with the matching active source; it is navigation only, so it never fetches, transfers or combines Discord/X data. XReader must render title, Shanghai date and chronological window viewpoints, then fold each segment's post analyses, quote attribution and `在 X 中打开` links; it must never render canonical content or mutate/rephrase an earlier segment. Do not add the switcher to the admin shell. Add admin navigation without exposing configuration to ordinary readers.
 
 - [ ] **Step 4: Verify and commit.**
 
@@ -258,7 +259,7 @@
 
 - [ ] **Step 1: Write deterministic cross-layer tests.**
 
-  Cover at least two X sources; all four post types; quote/reply/repost attribution; range completion after more than five pages; interrupted resume; duplicate replay; delayed range upper-bound exclusion; source-isolated failure; independent per-post analysis; quote-comment versus quoted-post viewpoint separation; immutable window-segment append; no-new-data distinction; ordinary-user 403/RLS; safe reader JSON/HTML; and desktop/375px presentation. Add the five fixed daily cutoffs, `00:05` execution with `00:00` logical end, a failed middle window recovered by its successor, 30-minute overlap idempotency, same-day initialization, and cross-day recovery whose segment remains on the original Shanghai date. Use only artificial fixture text and links.
+  Cover at least two X sources; all four post types; quote/reply/repost attribution; range completion after more than five pages; interrupted resume; duplicate replay; delayed range upper-bound exclusion; source-isolated failure; independent per-post analysis; quote-comment versus quoted-post viewpoint separation; immutable window-segment append; no-new-data distinction; ordinary-user 403/RLS; safe reader JSON/HTML; reader-only `Discord | X` navigation with correct active state and no cross-source payload; and desktop/375px presentation. Add the five fixed daily cutoffs, `00:05` execution with `00:00` logical end, a failed middle window recovered by its successor, 30-minute overlap idempotency, same-day initialization, and cross-day recovery whose segment remains on the original Shanghai date. Use only artificial fixture text and links.
 
 - [ ] **Step 2: Implement the E2E runner and document deterministic evidence.**
 
@@ -299,6 +300,7 @@
 | Per-author checkpoint, bounded history and failure isolation | 1, 3, 5, 6 | RPC/RLS tests, interrupted-source and history fixtures |
 | Fixed daily cutoffs, overlap recheck and cross-day recovery | 1, 3, 4, 6 | scheduler/range tests, idempotency fixtures, version-date assertions |
 | Independent per-post analyses and append-only daily viewpoint segments | 1, 4, 5, 6 | strict schemas, immutability tests, chronological Reader assertions |
+| Reader-only Discord/X source navigation | 5, 6 | two-route component/DOM/a11y tests, 1280px and 375px review |
 | Media/external-body non-inference | 2, 4, 5, 6 | fixture/schema/reader warnings |
 | Content-first desktop and 375px reader | 5, 6 | DTO/DOM tests and authorized visual review |
 | Admin-only configuration and task operations | 1, 5, 6 | route tests, RLS, ordinary-user checks |
@@ -311,6 +313,7 @@ Plan self-review before implementation:
 - Every real X, remote database and deployment operation has a separate explicit authorization gate.
 - The scheduler derives every continuous range from the last successful checkpoint, not the previous trigger; its five Shanghai logical cutoffs, `00:05` day-end execution, 30-minute overlap and cross-day recovery are fixture-tested before any real acceptance.
 - Chunking is bounded transport only: each configured-author post receives an independent, immutable analysis; quote context is separately attributed; newer window segments append without supplying older LLM prose for revision, and daily-presentation versions are deterministic segment snapshots rather than model rewrites.
+- The top-level `Discord | X` switcher is only ordinary-reader navigation; it cannot combine source data or appear in admin controls, and it is not V3 unified UX.
 - No Task treats fixed page count, missing response or provider failure as a successful empty range.
 - Every Reader task excludes raw post bodies and runtime diagnostics by DTO and DOM tests, not by visual convention alone.
 - `docs/intake.md` is preserved as the factual input; the currently unstaged user change must never be staged incidentally.
