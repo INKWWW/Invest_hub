@@ -57,6 +57,7 @@ class WindowedCaptureRange:
     start_at: datetime
     end_at: datetime
     resume_cursor: str | None
+    overlap_start_at: datetime | None = None
 
     @classmethod
     def from_claim(cls, claim: Mapping[str, Any]) -> "WindowedCaptureRange":
@@ -64,9 +65,8 @@ class WindowedCaptureRange:
         if not isinstance(scope, Mapping) or dict(scope) != {"mode": "window"}:
             raise ValueError("window task collection_scope is invalid")
         raw_range = claim.get("capture_range")
-        if not isinstance(raw_range, Mapping) or set(raw_range) != {
-            "mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key",
-        }:
+        allowed_range_keys = {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key", "overlap_start_at"}
+        if not isinstance(raw_range, Mapping) or not {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"} <= set(raw_range) or not set(raw_range) <= allowed_range_keys:
             raise ValueError("window task capture_range is invalid")
         if raw_range.get("mode") != "window" or raw_range.get("timezone") != "Asia/Shanghai":
             raise ValueError("window task capture_range is invalid")
@@ -83,6 +83,11 @@ class WindowedCaptureRange:
         end_at = _required_instant(raw_range.get("end_at"), "window end_at")
         if start_at >= end_at:
             raise ValueError("window task range is empty or inverted")
+        overlap_start_at = None
+        if "overlap_start_at" in raw_range:
+            overlap_start_at = _required_instant(raw_range.get("overlap_start_at"), "window overlap_start_at")
+            if overlap_start_at > start_at:
+                raise ValueError("window overlap cannot be after the continuous start")
         if isinstance(scheduled_window_key, str):
             scheduled_end_at = _required_instant(scheduled_window_key, "scheduled_window_key")
             local_boundary = scheduled_end_at.astimezone(ZoneInfo("Asia/Shanghai"))
@@ -101,7 +106,7 @@ class WindowedCaptureRange:
             raise ValueError("window task page_count is invalid")
         if progress.get("range_complete") is not False:
             raise ValueError("window task is already complete")
-        return cls(capture_range=dict(raw_range), start_at=start_at, end_at=end_at, resume_cursor=resume_cursor)
+        return cls(capture_range=dict(raw_range), start_at=start_at, end_at=end_at, resume_cursor=resume_cursor, overlap_start_at=overlap_start_at)
 
 
 class BrowserBridgeRuntimeInvoker:

@@ -57,7 +57,8 @@
         "timezone": { "const": "Asia/Shanghai" },
         "start_at": { "type": "string", "format": "date-time" },
         "end_at": { "type": "string", "format": "date-time" },
-        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|16:00|20:50)[+]08:00$" }
+        "overlap_start_at": { "type": "string", "format": "date-time" },
+        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|12:00|16:00|20:00|20:50)[+]08:00$" }
       }
     },
     "coverage_snapshot": {

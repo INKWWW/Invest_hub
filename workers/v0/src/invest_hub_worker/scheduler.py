@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _WINDOW_TIMES = ((0, 0), (8, 0), (16, 0), (20, 50))
+_X_WINDOW_TIMES = ((0, 0), (8, 0), (12, 0), (16, 0), (20, 0))
 
 
 def is_schedule_window_key(value: object) -> bool:
@@ -39,12 +40,48 @@ def due_windows(
     if coverage_through_at > now_utc:
         raise ValueError("coverage_through_at cannot be after now_utc")
 
+    return _due_windows(now_utc, coverage_through_at, _WINDOW_TIMES)
+
+
+def is_x_schedule_window_key(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 22 or not value.endswith("+08:00"):
+        return False
+    try:
+        local = datetime.strptime(value, "%Y-%m-%dT%H:%M+08:00")
+    except ValueError:
+        return False
+    return (local.hour, local.minute) in _X_WINDOW_TIMES
+
+
+def due_x_windows(now_utc: datetime, coverage_through_at: datetime) -> tuple[str, ...]:
+    """Return every fixed X cutoff in ``(coverage_through_at, now_utc]``.
+
+    This intentionally remains separate from the Discord cadence: X has a
+    noon cutoff and a 20:00 cutoff, while the V1.1 Discord cadence remains
+    unchanged at 20:50.
+    """
+
+    return _due_windows(now_utc, coverage_through_at, _X_WINDOW_TIMES)
+
+
+def _due_windows(
+    now_utc: datetime,
+    coverage_through_at: datetime,
+    boundaries: tuple[tuple[int, int], ...],
+) -> tuple[str, ...]:
+    if now_utc.tzinfo is None:
+        raise ValueError("now_utc must be timezone-aware")
+    if coverage_through_at.tzinfo is None:
+        raise ValueError("coverage_through_at must be timezone-aware")
+    if coverage_through_at > now_utc:
+        raise ValueError("coverage_through_at cannot be after now_utc")
+
     local_now = now_utc.astimezone(_SHANGHAI)
     local_coverage = coverage_through_at.astimezone(_SHANGHAI)
     candidates: list[str] = []
     date = local_coverage.date()
     while date <= local_now.date():
-        for hour, minute in _WINDOW_TIMES:
+        for hour, minute in boundaries:
             candidate = datetime(date.year, date.month, date.day, hour, minute, tzinfo=_SHANGHAI)
             if local_coverage < candidate <= local_now:
                 candidates.append(_window_key(candidate))
