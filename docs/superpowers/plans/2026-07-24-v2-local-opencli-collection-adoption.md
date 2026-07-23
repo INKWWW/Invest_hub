@@ -252,7 +252,7 @@
 - Modify: `docs/project-status.md`
 - Modify: `docs/engineering-journal/2026-07-23-v2-x-local-implementation.md`
 
-- [ ] **Step 1: 先为真实验收脚本写安全门禁测试/检查。**
+- [x] **Step 1: 先为真实验收脚本写安全门禁测试/检查。**
 
   新脚本必须拒绝执行，除非同时传入：
 
@@ -264,13 +264,13 @@
 
   它还必须先运行 Task 1 verify，检查 `V2_REAL_X_ACK=authorized`，并拒绝 global `opencli` 或 runtime 目录外的 executable。测试/静态检查应证明没有这些参数时不调用 `invest_hub_worker.cli`、不创建任务、无数据库写入。
 
-- [ ] **Step 2: 实现最小、一次性的真实持久化验收 runner。**
+- [x] **Step 2: 实现最小、一次性的真实持久化验收 runner。**
 
   runner 只执行一个管理员选定的、固定 `end_at` 的单博主窗口，并通过既有 Worker/控制平面路径完成：专用 runtime 验证 → 有界 Collection → raw/canonical 持久化 → 单帖 Codex CLI 结构化理解 → append-only daily segment → Reader DTO。它不得创建 scheduler、launchd、cron、自动重试循环或跨源执行。
 
   控制台只输出匿名计数、范围边界、receipt stop reason、阶段通过/失败与 redacted error code。任何失败立刻退出，保留最后安全 checkpoint；不通过 shell history、日志或 Git 记录真实 source/post/model 内容。
 
-- [ ] **Step 3: 完成完整确定性回归。**
+- [x] **Step 3: 完成完整确定性回归。**
 
   ```bash
   bash scripts/v2/run-v2-e2e.sh
@@ -283,7 +283,7 @@
 
   若任一步失败，按分类修复后从对应 Task 的失败测试重跑；不得以跳过真实 receipt 测试或降级为 `tweets` 取得通过。
 
-- [ ] **Step 4: 记录结果但保持真实运行二次授权。**
+- [x] **Step 4: 记录结果但保持真实运行二次授权。**
 
   确定性测试通过后，在 `docs/project-status.md` 记录“本地 Collection 代码/确定性验证通过，真实持久化 E2E 待管理员单独授权”；在工程日志只记录版本 SHA、测试计数、回执枚举和 redacted 结果。真实命令只在用户之后明确授权“执行真实持久化 E2E”时运行，且运行前再次展示精确命令和写入范围。
 
@@ -302,7 +302,7 @@
 - Modify: `docs/engineering-journal/2026-07-23-v2-x-local-implementation.md`
 - Modify: `docs/superpowers/specs/2026-07-24-v2-local-opencli-collection-adoption-design.md`
 
-- [ ] **Step 1: 对已实现差异做 completion review。**
+- [x] **Step 1: 对已实现差异做 completion review。**
 
   逐项比对本计划和 Spec：来源 lock、非全局性、receipt 校验、关系完整性、失败不推进、无 fallback、隐私、回归、真实验收授权。运行：
 
@@ -315,11 +315,11 @@
 
   确认 `.runtime/`、真实 fixture、数据库转储、cookies、profile 和真实 stderr 都未被追踪。发现任意越界即停止发布，并在工程日志记录 redacted 原因。
 
-- [ ] **Step 2: 形成官方版本提醒后的人工切换 checklist。**
+- [x] **Step 2: 形成官方版本提醒后的人工切换 checklist。**
 
   在 Spec/状态中保留以下固定流程：上游提醒 → 管理员查看 release/PR diff 和许可 → 在隔离 staging 构建官方版本 → 运行 Task 1–4 的确定性测试 → 管理员再次批准 → 用新的专用 executable 做一次真实最小验证 → 仅随后切换；失败则继续使用已确认本地 runtime。不得自动执行以上任一步，也不得删除 rollback runtime。
 
-- [ ] **Step 3: 提交收尾文档。**
+- [x] **Step 3: 提交收尾文档。**
 
   ```bash
   git add docs/project-status.md docs/engineering-journal/2026-07-23-v2-x-local-implementation.md docs/superpowers/specs/2026-07-24-v2-local-opencli-collection-adoption-design.md

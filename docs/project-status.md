@@ -20,7 +20,9 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 **V2 OpenCLI 上游提议（2026-07-23）：** 为补齐上述合同缺口，已创建 [OpenCLI PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，状态仅为 `proposed`。它新增独立 `twitter collection` 命令，保持 `twitter tweets` 的公开契约不变，并以人工 fixture 覆盖关系与完成回执。上游 PR 合并、可安装版本验证及新的明确授权真实 Go/No-Go 是后续三道独立门禁；在此之前官方/生产路径的 V2 仍为 `x_collection_unverified`，不得持续真实采集、推进水位、远程 migration 或部署。经用户明确授权的受保护、隔离源码级探针须单独记录，且不改变这些门禁。
 
-**V2 源码级真实验证（2026-07-24）：** 在明确授权下，已使用 PR #2173 的受保护本地源码副本完成一次隔离测试：有界读取返回 14 条帖子和 `time_boundary_reached` 回执；其中 13 条在测试窗口内，13/13 完成单帖 Codex CLI 结构化分析并通过单帖 ID、原始链接和证据范围校验，随后完成上海自然日的综合观点校验。样本均为原创帖，未覆盖真实引用帖/回复/转发。原始帖子和模型输出已删除，未创建任务、写入项目数据库、推进水位、远程迁移或部署。该结果仅证明候选源码的读取与理解链路；官方 OpenCLI 仍无此命令，Invest Hub 仍调用旧 `tweets`，故生产状态保持 No-Go。
+**V2 源码级真实验证（2026-07-24）：** 在明确授权下，已使用 PR #2173 的受保护本地源码副本完成一次隔离测试：有界读取返回 14 条帖子和 `time_boundary_reached` 回执；其中 13 条在测试窗口内，13/13 完成单帖 Codex CLI 结构化分析并通过单帖 ID、原始链接和证据范围校验，随后完成上海自然日的综合观点校验。样本均为原创帖，未覆盖真实引用帖/回复/转发。原始帖子和模型输出已删除，未创建任务、写入项目数据库、推进水位、远程迁移或部署。该结果仅证明候选源码的读取与理解链路；当时 Invest Hub 仍调用旧 `tweets`，故当时生产状态保持 No-Go。
+
+**V2 本地 Collection 受控采用（2026-07-24）：** 已在隔离 feature branch 锁定 PR #2173 的两个提交，构建 Git 忽略、非全局的专用 OpenCLI runtime，并将 V2 X Adapter/Worker 改为只接受 `twitter collection` 的 `posts + receipt`。完成回执必须精确对应窗口 `overlap_start_at`，且只允许 `time_boundary_reached` 或 `cursor_exhausted`；任何命令、回执、时间、关系或 cursor 异常都会失败且不前移水位，不会静默回退到 `tweets`。本次确定性验证通过：本地 runtime contract、100 个 Worker 测试、3 个 V2 fixture E2E、5 个 V1.1 fixture 回归、11 个窗口/调度回归、51 个控制面聚焦测试、额外 40 个 API/contract 测试，以及 17 个 pgTAP 文件/240 项；脱敏检查通过。真实持久化 E2E runner 已实现但未运行，仍需管理员之后单独明确授权。专用 runtime 构建时上游依赖审计报告 1 个 low、2 个 moderate、3 个 high 风险；未执行会改变依赖锁的自动修复，须在后续本地依赖维护中人工处理。
 
 **Discord 交接更正（2026-07-22）：** 下文 V1.1 的历史时间窗与 Browser Bridge 说明仅保留为已完成探索记录；当前不得据此继续个人账号采集、安装任务或推进 Discord coverage。下一步是管理员授权的 Bot 路线，其余范围不变。
 

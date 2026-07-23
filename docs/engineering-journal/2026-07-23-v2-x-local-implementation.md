@@ -45,4 +45,16 @@
 
 ## 已知受限边界
 
-当前 Invest Hub 实现仍仅调用已安装的 OpenCLI `twitter tweets` 能力，不直接调用 X API。该命令的公开输出若无法提供安全的 reply/repost 关系，采集会分类失败而非推断关系；待上游提议合并、发布并获授权后，真实 Go/No-Go 应首先验证 collection 命令的关系字段及范围下界是否可证明。
+截至本节原始记录所述阶段，Invest Hub 仅调用已安装的 OpenCLI `twitter tweets` 能力，不直接调用 X API。该命令的公开输出若无法提供安全的 reply/repost 关系，采集会分类失败而非推断关系；其后本地 Collection 受控采用的状态见下一节，官方版本仍须验证 collection 命令的关系字段及范围下界。
+
+## 2026-07-24 本地 Collection 受控采用实现
+
+本次实现采用 PR #2173 的受控本地源码，而非宣称它已经成为官方 OpenCLI。公开 lock 固定 fork 来源、两条完整 commit、`package-lock.json` SHA-256 与 Apache-2.0 许可；运行时只构建到 Git 忽略的 `.runtime/v2/opencli-collection/`，专用入口不会替换全局 `opencli`。安装脚本先在 staging 验证源码、hash、许可、build 和 `twitter collection --help`，全部成功后才切换 `current`，并保留旧 runtime 供人工回滚。
+
+- 项目 Adapter 已由 `twitter tweets` 切换为 `twitter collection <handle> --until <overlap lower bound>`。它只接收严格的 `posts + receipt` 对象，拒绝非完成回执、未知停止原因、不同 lower bound、无效时间、limit/cursor/page-guard 失败与非空旧 cursor；不存在 `tweets` 或第二采集器 fallback。
+- Worker 每个不可变窗口只做一次 receipt-backed 读取。只有 `time_boundary_reached` 或 `cursor_exhausted` 证明完成；raw/Canonical/page segment 持久化路径保持先于 range completion，失败不产生可推进 completion。post、quote、reply、repost 关系均保留稳定关系 ID 或明确不可用，repost 不会伪造博主评论。
+- 增加只允许显式参数的真实持久化 E2E runner。它要求本地专用 executable、Git 忽略的私有输入、`V2_REAL_X_ACK=authorized`、`V2_PYTHON_BIN` 和 `--approve-real-persistence`，只处理既有的一个任务；它不创建 scheduler、launchd、cron 或任务。本次没有执行该 runner。
+- 确定性结果：runtime contract 与真实 E2E gate 的拒绝测试通过；Worker 100 项、V2 fixture E2E 3 项、V1.1 fixture 回归 5 项、窗口/调度 Worker 回归 11 项、控制面聚焦 51 项、API/contract 40 项、pgTAP 17 个文件/240 项、脱敏检查均通过。未读取真实帖子、未调用 Codex CLI、未创建/领取任务、未写项目数据库、未推进 coverage/checkpoint、未远程 migration 或部署。
+- 受控 runtime 的 `npm ci` 审计输出为 1 个 low、2 个 moderate、3 个 high 风险。未执行 `npm audit fix` 或任何自动依赖升级，以免越过 lock 和人工维护边界。
+
+仍待单独授权的真实持久化 E2E 必须先确认已配置 X 身份与 source snapshot 的稳定 author identity 能与 Collection 输出一致，并在运行前明确列出将处理的既有任务和写入范围。官方版本出现时只提示管理员；人工复核、隔离构建、同等回归、再次明确授权和最小真实验证均完成后，才可切换，失败则保留本地 runtime 与最后安全水位。

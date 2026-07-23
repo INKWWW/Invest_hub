@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：V2 / 上游能力未发布时的本地依赖采用
-- 书面状态：**已批准（用户确认 2026-07-24）**；独立 implementation plan 待审阅批准
+- 书面状态：**已批准（用户确认 2026-07-24）**；独立 implementation plan 已批准并完成本地确定性实施（真实持久化 E2E 待再次授权）
 - 前置事实：[V2 X Spec](2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 本地实现记录](../../engineering-journal/2026-07-23-v2-x-local-implementation.md)、OpenCLI PR #2173
 - 本文不授权：应用代码、生产依赖安装、全局 OpenCLI 替换、项目数据库写入、checkpoint 推进、远程 migration、部署或定时采集。
 
@@ -73,7 +73,7 @@ implementation plan 至少必须覆盖：
 
 ## 7. 实施门禁
 
-在用户复核并批准本设计、再批准独立 implementation plan 前，不得安装或构建本地替代版本，不得修改 X Adapter/Worker/共享协议，不得写入真实数据、推进 checkpoint、部署或开启定时采集。
+本设计与独立 implementation plan 已获批准；本地专用 runtime、X Adapter/Worker 和确定性测试可以在该授权范围内实施。它**不**授权真实数据写入、checkpoint 推进、远程 migration、部署或开启定时采集。可持久化真实 E2E 仍须在执行前由管理员再次明确授权。
 
 该 Plan 必须保持为一个窄范围的 V2 依赖采用与激活计划；它不得借机扩展到 X API、浏览器第二采集器、跨来源阅读、自动回退或长期无人值守运维。
 
