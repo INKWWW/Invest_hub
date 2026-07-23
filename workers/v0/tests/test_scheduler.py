@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from invest_hub_worker.scheduler import due_windows
+from invest_hub_worker.scheduler import due_windows, due_x_windows, is_x_schedule_window_key
 
 
 class SchedulerTests(unittest.TestCase):
@@ -27,6 +27,20 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(len(windows), 20)
         self.assertEqual(windows[0], "2026-07-17T00:00+08:00")
         self.assertEqual(windows[-1], "2026-07-21T20:50+08:00")
+
+    def test_x_windows_use_five_fixed_boundaries_including_noon_and_twenty(self) -> None:
+        coverage = datetime(2026, 7, 22, 16, tzinfo=timezone.utc)  # Shanghai midnight
+        now = datetime(2026, 7, 23, 16, 5, tzinfo=timezone.utc)  # Shanghai 00:05 next day
+
+        self.assertEqual(due_x_windows(now, coverage), (
+            "2026-07-23T08:00+08:00",
+            "2026-07-23T12:00+08:00",
+            "2026-07-23T16:00+08:00",
+            "2026-07-23T20:00+08:00",
+            "2026-07-24T00:00+08:00",
+        ))
+        self.assertTrue(is_x_schedule_window_key("2026-07-23T12:00+08:00"))
+        self.assertFalse(is_x_schedule_window_key("2026-07-23T20:50+08:00"))
 
 
 if __name__ == "__main__":

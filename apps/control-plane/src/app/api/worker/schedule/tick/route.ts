@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authenticateWorker } from "../../../../../lib/auth/worker";
-import { scheduleDueDiscordTasks } from "../../../../../lib/db/repositories/tasks";
+import { scheduleDueSourceTasks } from "../../../../../lib/db/repositories/tasks";
 
 export async function POST(request: Request) {
   const worker = await authenticateWorker(request);
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const tick = await scheduleDueDiscordTasks(worker.id);
+    const tick = await scheduleDueSourceTasks(worker.id);
     return NextResponse.json(tick);
   } catch (error) {
     if ((error as { code?: string }).code === "42501") return NextResponse.json({ error: "unauthorized" }, { status: 401 });
