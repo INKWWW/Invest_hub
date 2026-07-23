@@ -123,7 +123,7 @@
 - Create: `workers/v0/tests/fixtures/opencli_collection_success.json`
 - Create: `workers/v0/tests/fixtures/opencli_collection_incomplete.json`
 
-- [ ] **Step 1: 为 Collection 命令和回执拒绝路径补充失败测试。**
+- [x] **Step 1: 为 Collection 命令和回执拒绝路径补充失败测试。**
 
   在 `test_x_active_adapter.py` 先新增下列断言：
 
@@ -136,7 +136,7 @@
 
   fixture 只使用合成 ID、虚构公开 X URL、时间和短文本；不能复制真实 X 内容。
 
-- [ ] **Step 2: 以严格的 Collection invoker 替代旧 invoker。**
+- [x] **Step 2: 以严格的 Collection invoker 替代旧 invoker。**
 
   将 `OpenCLITweetsInvoker` 重命名为 `OpenCLICollectionInvoker`，并把它的 `fetch_page` 显式参数改为：
 
@@ -164,7 +164,7 @@
 
   归一化 `relationship.kind`：`original` 不带关系；`quote` → `quoted_post_id`；`reply` → `reply_to_post_id`；`repost` → `reposted_post_id` 且当前博主 `text == ""`。关系 target 不完整时保留关系 ID（若存在）并设置 `unavailable` 或 `unresolved`，只有 `context_status == complete` 才可写入 `context_post`。让既有 `Canonicalizer._map_x` 成为第二道验证，不放宽其规则。
 
-- [ ] **Step 3: 简化 Adapter 为一份带来源的完成页面。**
+- [x] **Step 3: 简化 Adapter 为一份带来源的完成页面。**
 
   将 `XActiveAdapter.fetch_page`、`_fetch` 接受并转传 `lower_bound_at`。Collection 是本地子进程读取，不再伪装为浏览器 Network 响应：移除 `_match` / `cache_buster` 重试的依赖，改为以 `receipt` 验证的 `match_state: "collection_receipt_verified"` telemetry。`RawPage.cursor_after` 固定为 `None`，telemetry 至少写入：
 
@@ -180,7 +180,7 @@
 
   telemetry 只保存时间和枚举，不保存 posts、handle 或 URL。page ID 继续为本地随机 ID；原始内容仍只能由 Evidence Store 在真实运行时写入。
 
-- [ ] **Step 4: 跑针对性单测并提交。**
+- [x] **Step 4: 跑针对性单测并提交。**
 
   ```bash
   PYTHONPATH=workers/v0/src python3 -m unittest workers/v0/tests/test_x_active_adapter.py workers/v0/tests/test_x_canonical.py -v
@@ -198,7 +198,7 @@
 - Modify: `workers/v0/tests/test_authorized_runtime.py`
 - Modify: `workers/v0/tests/test_cli.py`
 
-- [ ] **Step 1: 先写范围完成失败测试。**
+- [x] **Step 1: 先写范围完成失败测试。**
 
   在 `test_x_windowed_runtime.py` 覆盖：
 
@@ -209,7 +209,7 @@
   - 先成功持久化 raw/canonical/capture segment，后写 range completion；任一持久化失败均不产出成功 completion；
   - 失败重试从上一个成功 checkpoint 重放相同不可变窗口，不接受旧 `resume_cursor`。
 
-- [ ] **Step 2: 将 `XWindowedRuntime` 改为 receipt-first 的单次有界读取。**
+- [x] **Step 2: 将 `XWindowedRuntime` 改为 receipt-first 的单次有界读取。**
 
   `execute_windowed` 每个窗口只调用一次 Collection connector，并将 `overlap_start = overlap_start_at or start_at` 传入 `lower_bound_at`。完成边界只从已验证 telemetry 得出：
 
@@ -226,7 +226,7 @@
 
   `build_authorized_x_runtime` 使用 `OpenCLICollectionInvoker(opencli_executable or "opencli")`。既有 `--opencli-executable` CLI 参数保持为唯一显式注入点，以便管理员将其指向 `.runtime/v2/opencli-collection/current/bin/opencli-v2-collection`；不得写死本机绝对路径。
 
-- [ ] **Step 3: 保证任务/协议边界没有被扩张。**
+- [x] **Step 3: 保证任务/协议边界没有被扩张。**
 
   不修改 Supabase SQL、共享 RPC/DTO 或 scheduler 协议。仅在 Python 局部运行时把 Collection receipt 放入已有 capture segment / range completion 的内部 evidence：时间、stop reason、pages count 和 receipt schema version 可留存；不得持久化命令行、handle、原始 JSON 或浏览器会话信息。更新授权运行时/CLI 测试，证明：
 
@@ -234,7 +234,7 @@
   - `V2_REAL_X_ACK=authorized` 门禁维持不变；
   - X 失败不会阻塞其他 source，且不进入 `tweets` 路径。
 
-- [ ] **Step 4: 跑范围与协议回归并提交。**
+- [x] **Step 4: 跑范围与协议回归并提交。**
 
   ```bash
   PYTHONPATH=workers/v0/src python3 -m unittest workers/v0/tests/test_x_windowed_runtime.py workers/v0/tests/test_authorized_runtime.py workers/v0/tests/test_cli.py workers/v0/tests/test_windowed_runtime.py -v

@@ -12,7 +12,7 @@ from .canonical import CanonicalMessage, Canonicalizer
 from .config import LocalWorkerConfig, LocalWorkerConfigSet
 from .connectors.base import ConnectorError, RawPage
 from .connectors.discord_active_adapter import DiscordActiveAdapter, normalize_channel_url
-from .connectors.x_active_adapter import OpenCLITweetsInvoker, XActiveAdapter
+from .connectors.x_active_adapter import OpenCLICollectionInvoker, XActiveAdapter
 from .evidence import LocalEvidenceStore
 from .providers.base import Provider, ProviderContext
 from .retry import RetryPolicy
@@ -914,51 +914,45 @@ class XWindowedRuntime:
     ) -> dict[str, Any]:
         del load_daily_fact_context, resolve_author_profiles
         capture_range, source_snapshot = self._validate_claim(claim)
-        cursor = capture_range.resume_cursor
+        if capture_range.resume_cursor is not None:
+            raise RuntimeExecutionError("opencli_contract", "X Collection does not accept a resumed cursor")
         candidate_by_id: dict[str, CanonicalMessage] = {}
         capture_segments: list[dict[str, Any]] = []
         duplicate_count = 0
-        boundary: dict[str, str] | None = None
         overlap_start = capture_range.overlap_start_at or capture_range.start_at
 
         try:
-            while boundary is None:
-                page = self.connector.fetch_page(self.config, cursor, end_at=capture_range.end_at)
-                self._validate_page(page, cursor)
-                mapped = self.canonicalizer.map(page)
-                page_times = [_required_instant(message.occurred_at, "X post occurred_at") for message in mapped]
-                if any(occurred_at > capture_range.end_at for occurred_at in page_times):
-                    raise RuntimeExecutionError("opencli_contract", "X page contains a post after its fixed end_at")
-                if any(message.author_id != source_snapshot["account_id"] for message in mapped):
-                    raise RuntimeExecutionError("opencli_contract", "X page author does not match the task source snapshot")
-                self.evidence.persist_raw(page)
-                local_counts = self.evidence.persist_canonical(mapped)
-                duplicate_count += int(local_counts.get("duplicate_count", 0))
+            page = self.connector.fetch_page(
+                self.config,
+                None,
+                lower_bound_at=overlap_start,
+                end_at=capture_range.end_at,
+            )
+            receipt = self._validate_page(page, overlap_start)
+            mapped = self.canonicalizer.map(page)
+            page_times = [_required_instant(message.occurred_at, "X post occurred_at") for message in mapped]
+            if any(occurred_at > capture_range.end_at for occurred_at in page_times):
+                raise RuntimeExecutionError("opencli_contract", "X page contains a post after its fixed end_at")
+            if any(message.author_id != source_snapshot["account_id"] for message in mapped):
+                raise RuntimeExecutionError("opencli_contract", "X page author does not match the task source snapshot")
+            self.evidence.persist_raw(page)
+            local_counts = self.evidence.persist_canonical(mapped)
+            duplicate_count += int(local_counts.get("duplicate_count", 0))
 
-                page_execution = self._page_execution(claim, page, mapped, page_times, cursor)
-                if on_capture_page is None:
-                    capture_segments.append(page_execution["capture_segment"])
-                else:
-                    on_capture_page(page_execution)
+            page_execution = self._page_execution(claim, page, mapped, page_times, None)
+            if on_capture_page is None:
+                capture_segments.append(page_execution["capture_segment"])
+            else:
+                on_capture_page(page_execution)
 
-                for message, occurred_at in zip(mapped, page_times, strict=True):
-                    if not (capture_range.start_at < occurred_at <= capture_range.end_at):
-                        continue
-                    if message.external_message_id in candidate_by_id:
-                        duplicate_count += 1
-                        continue
-                    candidate_by_id[message.external_message_id] = message
-
-                if not mapped:
-                    boundary = {"kind": "history_exhausted", "observed_at": _instant_text(self.clock())}
-                elif min(page_times) <= overlap_start:
-                    boundary = {"kind": "oldest_at_or_before_start", "observed_at": _instant_text(min(page_times))}
-                elif page.cursor_after is None:
-                    if page.telemetry.get("history_exhausted") is not True:
-                        raise RuntimeExecutionError("opencli_contract", "X collection cannot prove its lower boundary")
-                    boundary = {"kind": "history_exhausted", "observed_at": _instant_text(min(page_times))}
-                else:
-                    cursor = page.cursor_after
+            for message, occurred_at in zip(mapped, page_times, strict=True):
+                if not (capture_range.start_at < occurred_at <= capture_range.end_at):
+                    continue
+                if message.external_message_id in candidate_by_id:
+                    duplicate_count += 1
+                    continue
+                candidate_by_id[message.external_message_id] = message
+            boundary = self._receipt_boundary(receipt, capture_range.end_at)
         except ConnectorError as exc:
             raise RuntimeExecutionError(str(exc.code), "X collection failed") from exc
         except RuntimeExecutionError:
@@ -1019,13 +1013,47 @@ class XWindowedRuntime:
             raise RuntimeExecutionError("preflight", str(exc)) from exc
         return capture_range, normalized
 
-    def _validate_page(self, page: object, requested_cursor: str | None) -> None:
+    def _validate_page(self, page: object, lower_bound_at: datetime) -> dict[str, object]:
         if not isinstance(page, RawPage) or page.source_type != "x" or page.source_id != self.config.source_id:
             raise RuntimeExecutionError("opencli_contract", "X collection returned an invalid page")
-        if page.cursor_before != requested_cursor or (page.cursor_after is not None and page.cursor_after == requested_cursor):
-            raise RuntimeExecutionError("opencli_contract", "X page cursor does not advance")
+        if page.cursor_before is not None or page.cursor_after is not None:
+            raise RuntimeExecutionError("opencli_contract", "X Collection page cannot carry a cursor")
         if page.telemetry.get("match_state") != "matched_new":
-            raise RuntimeExecutionError("opencli_stale", "X page is not a fresh validated response")
+            if page.telemetry.get("match_state") != "collection_receipt_verified":
+                raise RuntimeExecutionError("opencli_stale", "X page is not a fresh validated response")
+        if page.telemetry.get("collection_receipt_verified") is not True:
+            raise RuntimeExecutionError("opencli_contract", "X Collection receipt is not verified")
+        stop_reason = page.telemetry.get("collection_stop_reason")
+        requested_until = page.telemetry.get("collection_requested_until")
+        oldest_seen_at = page.telemetry.get("collection_oldest_seen_at")
+        pages_fetched = page.telemetry.get("collection_pages_fetched")
+        if stop_reason not in {"time_boundary_reached", "cursor_exhausted"}:
+            raise RuntimeExecutionError("opencli_contract", "X Collection receipt stop reason is invalid")
+        try:
+            requested_at = _required_instant(requested_until, "X Collection receipt requested_until")
+            if lower_bound_at.tzinfo is None:
+                raise ValueError("X Collection lower boundary must be timezone-aware")
+            expected_at = lower_bound_at.astimezone(timezone.utc)
+            oldest_at = None if oldest_seen_at is None else _required_instant(oldest_seen_at, "X Collection receipt oldest_seen_at")
+        except ValueError as exc:
+            raise RuntimeExecutionError("opencli_contract", "X Collection receipt timestamp is invalid") from exc
+        if requested_at != expected_at:
+            raise RuntimeExecutionError("opencli_contract", "X Collection receipt lower boundary does not match the window")
+        if isinstance(pages_fetched, bool) or not isinstance(pages_fetched, int) or pages_fetched < 1:
+            raise RuntimeExecutionError("opencli_contract", "X Collection receipt page count is invalid")
+        if stop_reason == "time_boundary_reached" and (oldest_at is None or oldest_at > expected_at):
+            raise RuntimeExecutionError("opencli_contract", "X Collection receipt cannot prove the lower boundary")
+        return {"stop_reason": stop_reason, "oldest_seen_at": oldest_at}
+
+    @staticmethod
+    def _receipt_boundary(receipt: Mapping[str, object], end_at: datetime) -> dict[str, str]:
+        oldest_seen_at = receipt.get("oldest_seen_at")
+        observed_at = _instant_text(oldest_seen_at) if isinstance(oldest_seen_at, datetime) else _instant_text(end_at)
+        if receipt.get("stop_reason") == "time_boundary_reached":
+            return {"kind": "oldest_at_or_before_start", "observed_at": observed_at}
+        if receipt.get("stop_reason") == "cursor_exhausted":
+            return {"kind": "history_exhausted", "observed_at": observed_at}
+        raise RuntimeExecutionError("opencli_contract", "X Collection receipt stop reason is invalid")
 
     def _page_execution(
         self, claim: Mapping[str, Any], page: RawPage, mapped: tuple[CanonicalMessage, ...], page_times: list[datetime], cursor: str | None,
@@ -1227,7 +1255,7 @@ def build_authorized_x_runtime(
         raise ValueError("X runtime builder requires an X config")
     return XWindowedRuntime(
         config=config,
-        connector=XActiveAdapter(OpenCLITweetsInvoker(opencli_executable or "opencli")),
+        connector=XActiveAdapter(OpenCLICollectionInvoker(opencli_executable or "opencli")),
         evidence=LocalEvidenceStore(Path(evidence_dir)),
         canonicalizer=Canonicalizer(),
         provider=_codex_provider(evidence_dir),

@@ -1,0 +1,10 @@
+{
+  "posts": [],
+  "receipt": {
+    "completed": false,
+    "stop_reason": "limit_reached",
+    "requested_until": "2026-07-22T23:30:00.000Z",
+    "pages_fetched": 100,
+    "oldest_seen_at": null
+  }
+}
