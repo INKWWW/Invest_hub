@@ -22,6 +22,7 @@ class ProviderRetryTests(unittest.TestCase):
             configured_author_profiles=(("author-1", "Author One"),),
         )
         self.assertEqual(context.operation, "v1_1_chunk")
+        self.assertEqual(ProviderContext(chunk_id="x-1", prompt_version="v2", prompt_text="private", operation="v2_x_chunk").operation, "v2_x_chunk")
         with self.assertRaises(ValueError):
             ProviderContext(chunk_id="chunk-1", prompt_version="v1.1", prompt_text="private prompt", operation="arbitrary")
 

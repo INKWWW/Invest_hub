@@ -54,6 +54,78 @@ V1_1_TOPIC_FIELDS = frozenset({"title", "summary", "viewpoints", "uncertainty", 
 V1_1_VIEWPOINT_FIELDS = frozenset(
     {"author_id", "author_display", "viewpoint", "reasoning", "operation_tendency", "source_message_ids"}
 )
+V2_X_CHUNK_FIELDS = frozenset({"schema_version", "analyses"})
+V2_X_ANALYSIS_FIELDS = frozenset({"post_id", "blogger_viewpoint", "arguments", "quoted_post_viewpoint", "uncertainties", "evidence_post_ids", "post_link"})
+V2_X_WINDOW_FIELDS = frozenset({"schema_version", "natural_date", "range_task_id", "occurred_from_at", "occurred_through_at", "window_viewpoints", "analysis_ids", "evidence_post_ids", "uncertainties"})
+
+
+def parse_v2_x_chunk_output(
+    text: str,
+    allowed_post_ids: set[str],
+    allowed_context_post_ids: Mapping[str, set[str]] | set[str],
+) -> dict[str, Any]:
+    """Validate one immutable analysis per authored post.
+
+    Production callers pass a mapping from an authored post ID to the context
+    post IDs visible with that exact post.  The set form is retained only for
+    the single-post fixture boundary, where it has the same meaning.  This is
+    intentionally not a global context allow-list: a quote attached to post A
+    must never become evidence for post B merely because both were collected
+    in the same window.
+    """
+    payload = _json_object(text)
+    _require_exact_fields(payload, V2_X_CHUNK_FIELDS, "invalid_v2_x_chunk")
+    if payload.get("schema_version") != "v2-x-chunk" or not isinstance(payload.get("analyses"), list):
+        raise SchemaError("invalid_v2_x_chunk", "schema version or analyses is invalid")
+    analyses: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for value in payload["analyses"]:
+        if not isinstance(value, Mapping):
+            raise SchemaError("invalid_v2_x_analysis", "analysis must be an object")
+        _require_exact_fields(value, V2_X_ANALYSIS_FIELDS, "invalid_v2_x_analysis")
+        post_id = value["post_id"]
+        if not _non_empty_string(post_id) or post_id not in allowed_post_ids or post_id in seen:
+            raise SchemaError("invalid_v2_x_analysis", "analysis must name one unique allowed post")
+        seen.add(post_id)
+        if isinstance(allowed_context_post_ids, Mapping):
+            context_ids = allowed_context_post_ids.get(post_id)
+            if not isinstance(context_ids, set) or not all(_non_empty_string(value) for value in context_ids):
+                raise SchemaError("invalid_v2_x_chunk", "post bundle context is invalid")
+        else:
+            context_ids = allowed_context_post_ids
+        if any(value[field] is not None and not _non_empty_string(value[field]) for field in ("blogger_viewpoint", "quoted_post_viewpoint")):
+            raise SchemaError("invalid_v2_x_analysis", "viewpoints must be a string or null")
+        if not _string_list(value["arguments"]) or not _string_list(value["uncertainties"]):
+            raise SchemaError("invalid_v2_x_analysis", "arguments and uncertainties must be string arrays")
+        evidence = value["evidence_post_ids"]
+        if not _non_empty_string_list(evidence) or len(set(evidence)) != len(evidence) or not set(evidence) <= ({post_id} | context_ids):
+            raise SchemaError("evidence", "analysis evidence is outside its post bundle")
+        link = value["post_link"]
+        if not _non_empty_string(link) or not link.startswith("https://") or "/status/" not in link:
+            raise SchemaError("invalid_v2_x_analysis", "post_link must be an HTTPS post link")
+        analyses.append(dict(value))
+    if seen != allowed_post_ids:
+        raise SchemaError("invalid_v2_x_chunk", "exactly one analysis is required for every input post")
+    return {"schema_version": "v2-x-chunk", "analyses": analyses}
+
+
+def parse_v2_x_window_output(text: str, allowed_analysis_ids: set[str]) -> dict[str, Any]:
+    payload = _json_object(text)
+    _require_exact_fields(payload, V2_X_WINDOW_FIELDS, "invalid_v2_x_window")
+    if payload.get("schema_version") != "v2-x-window" or not _valid_date(payload.get("natural_date")):
+        raise SchemaError("invalid_v2_x_window", "schema version or natural date is invalid")
+    if not _non_empty_string(payload["range_task_id"]):
+        raise SchemaError("invalid_v2_x_window", "range task identity is invalid")
+    if not _valid_instant(payload["occurred_from_at"]) or not _valid_instant(payload["occurred_through_at"]) or payload["occurred_from_at"] > payload["occurred_through_at"]:
+        raise SchemaError("invalid_v2_x_window", "window instants are invalid")
+    if not _string_list(payload["window_viewpoints"]) or not _string_list(payload["uncertainties"]):
+        raise SchemaError("invalid_v2_x_window", "window text fields must be string arrays")
+    for field in ("analysis_ids", "evidence_post_ids"):
+        if not _non_empty_string_list(payload[field]) or len(set(payload[field])) != len(payload[field]):
+            raise SchemaError("invalid_v2_x_window", f"{field} must be unique and non-empty")
+    if not set(payload["analysis_ids"]) <= allowed_analysis_ids:
+        raise SchemaError("analysis", "window cites an unpersisted post analysis")
+    return dict(payload)
 
 
 def parse_structured_output(text: str) -> dict[str, Any]:

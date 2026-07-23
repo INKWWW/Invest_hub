@@ -1,24 +1,26 @@
 # Project Status
 
-Last updated: 2026-07-22
+Last updated: 2026-07-23
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；V1.1 的时间窗、作者配置、观点阅读、初始覆盖边界、数据库 migration 与控制面部署已完成。Discord 持续采集已完成本项目范围内的方案探索，但个人账号自动化进入生产存在账号与合规风险；因此 Page Fetch、页面 UI 自动化、直接接口和导出器路线均已延后，不启用 Discord 定时或手动采集。既有 Reader 与已持久化数据保持可用，但不构成持续采集能力。未来若取得频道管理员许可，将以 Bot 授权方案另立 Spec/Plan。V2 X 指定博主信息收集与阅读 Spec 已获批准，独立 implementation plan 为 Draft、待审阅批准；任何 V2 实现、共享协议改动、部署或真实 X 采集仍须等待该 Plan 获批及逐项授权。**
+**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收、专用 V1 数据库 migration 与控制面生产部署。来源面向人的名称统一采用“社区名 · 频道名”，内部逻辑标识不再出现在阅读、任务或来源列表。真实范围验收当前被 OpenCLI Browser Bridge 无法驱动 Discord 嵌套历史列表所阻塞：任务正确保持可恢复失败，覆盖水位没有前移。V2 X 指定博主信息收集与阅读 Spec 与独立 implementation plan 已获批准；本地实现已完成确定性验证，一次已授权的最小真实 X Go/No-Go 因 OpenCLI 缺少关系与范围完成字段而安全判定为 `x_collection_unverified`，未执行远程 migration、部署或发布。**
+
+**Discord 采集状态（2026-07-22 决定）：** 个人账号的 Page Fetch、页面 UI 自动化、直接接口和导出器路线均不再进入生产；不启用 Discord 定时或手动采集。既有 Reader 与已持久化数据保持可用，但不构成持续采集能力。未来仅在频道管理员明确授权 Bot 后，才以新的独立 Spec/Plan 评估重新启动；详见 [Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)。本段优先于下文历史 Browser Bridge 受限描述。
 
 Spike-01 已完成真实网页轨验证，Spike-02 在已记录的本机 Codex CLI 条件下有条件通过；随后已按批准的 V0 Spec/Plan 完成控制面、Supabase/RLS、Python 工作节点、Active Adapter、Provider 边界、管理员调试页和脱敏 E2E harness。2026-07-19 已创建隔离 Supabase/Vercel 预览、应用远程迁移并部署新控制面；受保护预览上的合成核心工作节点链路注册 → 心跳 → 领取 → 持久化 → 回报结果已通过并回读确认检查点，普通用户管理员阻断和过期租约的检查点恢复也已远程补测。同日已完成一次用户明确授权的真实 Discord 有界单页任务：首次超时不推进安全检查点，第 2 次成功采集、结构化、远程持久化、结果回报并确认非空安全检查点。V0 因此通过；它仍不是生产发布批准。
-
-## 2026-07-22 Discord 采集路线收口决定
-
-用户决定：Discord 已完成本项目范围内的采集方案探索，但个人账号在生产环境中的自动化存在账号与合规风险。因此，个人账号 Page Fetch、页面 UI 自动化、直接接口和导出器路线均不进入生产；不启用 Discord 定时或手动采集，也不继续重复真实采集尝试。既有 V1 Reader 与已持久化数据保持不变，但不构成持续采集能力。
-
-若未来取得频道管理员的明确许可，将以 Bot 授权作为新的候选路线，另行起草和批准 Spec/Plan；不得直接恢复未合并的 Page Fetch 探索实现。详细记录见 [Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)。这项收口决定解除 Discord 对后续其他模块规划的阻塞。
 
 V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、摘要与 receipt 闭环、管理员控制、正式 `/discord` 阅读页、定时窗口幂等、离线补采和公开 fixture E2E。最终本地验证为 115 条 pgTAP、54 个控制面测试、62 个 Worker 测试和 3 个 V1 E2E 测试通过。专用 Supabase/Vercel 环境已完成真实双来源 history、两轮增量去重/checkpoint、预设 `unauthorized` 失败隔离与 A 正式恢复；同 hash 重采集的可变本地 evidence 引用冲突已由远程迁移修复。其后受邀普通用户在独立正常会话完成真实阅读、桌面/手机响应式验收；两来源真实质量抽检和 production 日志独立审阅通过。因此结论为 **V1 Discord 正式可用 MVP**。2026-07-21 已在合并后的 `main` 重跑同一套回归，并同步至 GitHub `origin/main`；核对时两端 HEAD 均为 `c493256`。
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)、[Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位。管理员指定作者现在可直接输入，已观察作者仅作建议；唯一 stable ID 会在任务页面持久化后解析，零候选保持 pending、多候选标记 ambiguous。来源名称是受保护的运行数据：页面与任务选择只显示“社区名 · 频道名”，内部 `source_key` 只用于服务端与 Worker 绑定，真实名称不进入 Git。Discord 采集路线已收口：不再运行个人账号的 Page Fetch、页面 UI 自动化、直接接口或导出器采集，也不安装 Discord 定时任务；没有新的正常窗口、手动采集、coverage 前移或 Discord 生产验收。若未来取得管理员授权，将以受最小权限约束的 Bot 作为新候选路线，并从新的 Spec/Plan 开始；不得恢复或推定此前 Page Fetch 实现已获上线授权。V2 Spec 已批准，但 V2 Plan 仍待批准；V2 实现、真实 X 采集、共享协议改动或部署均不由现有 V1/V1.1 Plan 授权。媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 与模块 2–4 仍须各自完成 Spec/Plan 批准。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V1 Engineering Journal](engineering-journal/2026-07-19-v1.md)、[V1.1 Engineering Journal](engineering-journal/2026-07-22-v1.1-discord-windowed-collection.md)、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)、[V2 本地实现记录](engineering-journal/2026-07-23-v2-x-local-implementation.md) 与 [V1 Final Report](spikes/2026-07-19-v1-decision-report.md)，再确认一个单一的后续范围。V1.1 的两个来源均已从 2026-07-21 20:50（上海）建立不可变的初始覆盖水位。管理员指定作者现在可直接输入，已观察作者仅作建议；唯一 stable ID 会在任务页面持久化后解析，零候选保持 pending、多候选标记 ambiguous。来源名称是受保护的运行数据：页面与任务选择只显示“社区名 · 频道名”，内部 `source_key` 只用于服务端与 Worker 绑定，真实名称不进入 Git。真实时间窗验收已证明持久化重试可恢复，但当前 OpenCLI Browser Bridge 不能控制 Discord 的嵌套虚拟历史列表，故重复历史响应正确保留为 `retryable_failed`、覆盖水位不前移；未补齐该 Browser Bridge 能力前，不得继续重复真实任务或宣称 V1.1 可用。生产控制面已部署此前修订，但尚未完成真实 Discord 正常窗口/手动范围、普通用户生产审阅或 launchd 安装，故仍不能称为正式可用；这些外部动作仍须逐项有明确授权与证据。V2 本地实现已覆盖 X 时间窗、逐页持久化、逐帖分析、追加式窗口观点、安全阅读导航和 X 管理入口；真实 X、远程 migration、部署和真实普通用户阅读验收仍为待办，均不由本次本地验证自动授权。媒体/OCR/外部正文解析、独立用户来源或数据空间、自动 fallback、V3 与模块 2–4 仍须各自完成 Spec/Plan 批准。
+
+**V2 状态更正（2026-07-23）：** 上述 V2 “真实 X 待办”仅指完整采集与验收；最小、非持久化的真实 Go/No-Go 已在明确授权后完成，并因 OpenCLI 缺少 reply/repost 关系与范围完成证明而判定 `x_collection_unverified` / `opencli_contract`。未创建云端任务、未调用 Codex CLI、未推进水位、未远程迁移或部署。
+
+**V2 OpenCLI 上游提议（2026-07-23）：** 为补齐上述合同缺口，已创建 [OpenCLI PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，状态仅为 `proposed`。它新增独立 `twitter collection` 命令，保持 `twitter tweets` 的公开契约不变，并以人工 fixture 覆盖关系与完成回执。上游 PR 合并、可安装版本验证及新的明确授权真实 Go/No-Go 是后续三道独立门禁；在此之前 V2 仍为 `x_collection_unverified`，不得真实采集、调用 Codex CLI、推进水位、远程 migration 或部署。
+
+**Discord 交接更正（2026-07-22）：** 下文 V1.1 的历史时间窗与 Browser Bridge 说明仅保留为已完成探索记录；当前不得据此继续个人账号采集、安装任务或推进 Discord coverage。下一步是管理员授权的 Bot 路线，其余范围不变。
 
 ## Approval status
 
@@ -41,9 +43,11 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [V0 收口与远程验收实施计划](superpowers/plans/2026-07-19-v0-closure-remote-validation.md)
   - [V0 真实运行有界批次恢复计划](superpowers/plans/2026-07-19-v0-real-run-bounded-batch-recovery.md)
   - [V1 Discord 正式可用 MVP 计划](superpowers/plans/2026-07-19-v1-discord-mvp.md)
+  - [V2 X 指定博主信息收集与阅读计划](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V1 implementation status：代码、本地确定性验收、专用部署、真实双来源 history/增量/checkpoint、失败隔离/恢复、普通用户阅读与视觉、真实质量抽检和部署日志审阅均已完成；结论为 V1 Discord 正式可用 MVP。
 - V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全作者配置界面、管理员手动更新入口、内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。其后用户批准作者 selector 修订：管理员可直接输入显示名/用户名，已观察作者仅作快捷建议；任务逐页持久化后，受租约保护的服务端解析唯一 stable ID，零候选 pending、多候选 ambiguous，且绝不返回原文。该修订已应用专用 V1 数据库并部署到专用 V1 生产项目（Vercel Ready、正式域名已关联）；本地验证为 11 个 pgTAP 文件/186 项、18 个控制面测试文件/79 项、Worker 82 项以及 lint/production build 全部通过。随后管理员可录入已确认的重点作者，再进行真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。真实内容、来源身份、凭据与私有 Prompt 继续不进入 Git。
+- V2 implementation status：Plan 已获用户批准。本地实现已完成 X 独立任务/范围/30 分钟重叠、`08:00/12:00/16:00/20:00/次日00:00` 调度、逐页持久化、逐帖 Codex CLI 结构化、不可变窗口观点段、`/x` 安全阅读投影与 `/discord` / `/x` 读者导航，以及管理员 X 来源登记、覆盖水位、手动更新和不前移水位的有界历史回填。本地验证为 17 个 pgTAP 文件/240 项、Worker 100 项、控制面 84 项以及 lint/production build 通过；公开 fixture 的 V2 E2E 3 项及 V1.1 回归也通过，详见 [V2 本地确定性验收记录](spikes/2026-07-23-v2-x-local-decision-report.md)。已授权、非持久化的真实 Go/No-Go 表明 OpenCLI `twitter tweets` 可提供基础帖子字段，但缺少 reply/repost 关系和可证明下界，故被安全分类为 `x_collection_unverified` / `opencli_contract`，没有创建云端任务或推进水位。为消除这个上游合同缺口，OpenCLI PR #2173 已处于 `proposed` 状态；它不改变当前 V2 No-Go，远程 migration、部署和真实普通用户验收尚未执行。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。
@@ -58,7 +62,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## Repository state
 
-当前仓库包含项目治理文档、Spike harness、V0 控制面/Worker 验证实现，以及 V1 多来源/摘要/阅读/调度的确定性 E2E harness。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git；V1 的专用远程数据库迁移、部署、真实双来源有界 history 及两轮真实增量验收已执行，真实 evidence 留在仓库外 owner-only 目录。
+当前仓库包含项目治理文档、Spike harness、V0 控制面/Worker 验证实现，以及 V1 多来源/摘要/阅读/调度的确定性 E2E harness。真实内容、Codex Prompt、完整响应和本地 evidence 不进入 Git；V1 的专用远程数据库迁移、部署、真实双来源有界 history 及两轮真实增量验收已执行，真实 evidence 留在仓库外 owner-only 目录。V2 的本地管理入口可登记待验证 X 博主、初始化固定覆盖水位、创建手动连续更新与同一上海自然日的有界历史回填；非连续历史完成不会移动连续水位。
 
 ## Spike-01 result
 
@@ -119,4 +123,4 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## Next gate
 
-V1 MVP 退出门槛已通过。V1.1 的 Task 1–7、Task 8 本地确定性验收、远程 migration、控制面部署和双来源初始 coverage 已完成。此时仍不能将 V1.1 标记为“已验收”或“正式可用”：尚缺管理员重点作者选择后的真实 Discord 正常窗口与手动范围验收、作者配置生效、普通用户真实页面审阅和明确 label/config 的 launchd 安装。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2 X Spec 已批准、V2 Plan 待批准；在 Plan 获批前，X 实现、共享协议改动、真实 X 采集与部署仍不启动。媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作仍须分别完成 Spec/Plan 批准；本次结论不构成生产 SLA。
+V1 MVP 退出门槛已通过。V1.1 的 Task 1–7、Task 8 本地确定性验收、远程 migration、控制面部署和双来源初始 coverage 已完成。此时仍不能将 V1.1 标记为“已验收”或“正式可用”：尚缺管理员重点作者选择后的真实 Discord 正常窗口与手动范围验收、作者配置生效、普通用户真实页面审阅和明确 label/config 的 launchd 安装。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2 X Spec 与 Plan 均已批准；本地实现与公开 fixture 验收已完成，但已授权的最小真实 X Go/No-Go 因 OpenCLI 合同字段不足而为 No-Go，故不得继续真实采集、创建云端任务、推进水位、远程 migration 或部署。媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作仍须分别完成 Spec/Plan 批准；本次结论不构成生产 SLA。

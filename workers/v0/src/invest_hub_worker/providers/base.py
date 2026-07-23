@@ -26,6 +26,7 @@ class ProviderContext:
     configured_author_profiles: tuple[tuple[str, str], ...] = ()
     expected_natural_date: str | None = None
     expected_as_of: str | None = None
+    visible_context_post_ids: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.chunk_id.strip():
@@ -36,7 +37,7 @@ class ProviderContext:
             raise ValueError("attempt must be positive")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        if self.operation not in {"legacy_topics", "v1_1_chunk", "v1_1_daily"}:
+        if self.operation not in {"legacy_topics", "v1_1_chunk", "v1_1_daily", "v2_x_chunk", "v2_x_window"}:
             raise ValueError("operation must be an approved structuring operation")
         message_ids: set[str] = set()
         for identity in self.input_message_authors:

@@ -79,7 +79,24 @@ export async function scheduleDiscordSyncTasks(workerId: string, windowKey: stri
 }
 
 export async function scheduleDueDiscordTasks(workerId: string, now = new Date()): Promise<DueScheduledTick> {
-  const { data, error } = await createSupabaseAdminClient().rpc("enqueue_due_discord_tasks", {
+  return scheduleDueTasksByRpc(workerId, "enqueue_due_discord_tasks", now);
+}
+
+export async function scheduleDueXTasks(workerId: string, now = new Date()): Promise<DueScheduledTick> {
+  return scheduleDueTasksByRpc(workerId, "enqueue_due_x_tasks", now);
+}
+
+export async function scheduleDueSourceTasks(workerId: string, now = new Date()): Promise<DueScheduledTick> {
+  const [discord, x] = await Promise.all([scheduleDueDiscordTasks(workerId, now), scheduleDueXTasks(workerId, now)]);
+  return {
+    scheduled_at: discord.scheduled_at,
+    tasks: [...discord.tasks, ...x.tasks],
+    deferred_source_ids: [...discord.deferred_source_ids, ...x.deferred_source_ids],
+  };
+}
+
+async function scheduleDueTasksByRpc(workerId: string, rpcName: "enqueue_due_discord_tasks" | "enqueue_due_x_tasks", now: Date): Promise<DueScheduledTick> {
+  const { data, error } = await createSupabaseAdminClient().rpc(rpcName, {
     p_worker_id: workerId,
     p_now: now.toISOString(),
   });
@@ -310,7 +327,12 @@ export async function completeWindowedCaptureRange(
   workerId: string,
   completion: Json,
 ) {
-  const { data, error } = await createSupabaseAdminClient().rpc("complete_windowed_capture_range", {
+  const supabase = createSupabaseAdminClient();
+  const { data: task, error: taskError } = await supabase.from("sync_tasks").select("task_type,capture_range").eq("id", taskId).maybeSingle();
+  if (taskError) throw taskError;
+  const history = task?.task_type === "x_sync" && task.capture_range && typeof task.capture_range === "object" && !Array.isArray(task.capture_range)
+    && task.capture_range.mode === "history";
+  const { data, error } = await supabase.rpc(history ? "complete_bounded_x_history_range" : "complete_windowed_capture_range", {
     p_task_id: taskId,
     p_attempt: attempt,
     p_worker_id: workerId,

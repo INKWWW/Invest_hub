@@ -29,7 +29,7 @@ const taskMocks = vi.hoisted(() => ({
   completeWindowedCaptureRange: vi.fn(),
   recordTaskFailure: vi.fn(),
   scheduleDiscordSyncTasks: vi.fn(),
-  scheduleDueDiscordTasks: vi.fn(),
+  scheduleDueSourceTasks: vi.fn(),
   isScheduleWindowKey: (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/.test(value),
 }));
 const windowedSyncMocks = vi.hoisted(() => ({
@@ -490,7 +490,7 @@ describe("v0 control-plane API authorization", () => {
 
   it("lets the control plane calculate due scheduled windows without a Worker-submitted key", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
-    taskMocks.scheduleDueDiscordTasks.mockResolvedValue({
+    taskMocks.scheduleDueSourceTasks.mockResolvedValue({
       scheduled_at: "2099-01-01T00:00:00Z",
       tasks: [{ id: "scheduled-task-1", source_id: "source-1", idempotent: false }],
     });
@@ -500,7 +500,7 @@ describe("v0 control-plane API authorization", () => {
     );
     expect(first.status).toBe(200);
     expect(await first.json()).toMatchObject({ tasks: [{ id: "scheduled-task-1", source_id: "source-1" }] });
-    expect(taskMocks.scheduleDueDiscordTasks).toHaveBeenCalledWith("worker-1");
+    expect(taskMocks.scheduleDueSourceTasks).toHaveBeenCalledWith("worker-1");
     expect(taskMocks.scheduleDiscordSyncTasks).not.toHaveBeenCalled();
   });
 
@@ -513,7 +513,7 @@ describe("v0 control-plane API authorization", () => {
       jsonRequest("/api/worker/schedule/tick", { window_key: "not-a-window" }, { authorization: "Bearer device-secret" }),
     );
     expect(invalid.status).toBe(422);
-    expect(taskMocks.scheduleDueDiscordTasks).not.toHaveBeenCalled();
+    expect(taskMocks.scheduleDueSourceTasks).not.toHaveBeenCalled();
   });
 
   it("returns only safe daily fact context to the Worker holding the current lease", async () => {

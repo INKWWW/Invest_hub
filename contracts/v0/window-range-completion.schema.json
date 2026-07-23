@@ -19,7 +19,8 @@
         "timezone": { "const": "Asia/Shanghai" },
         "start_at": { "type": "string", "format": "date-time" },
         "end_at": { "type": "string", "format": "date-time" },
-        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|16:00|20:50)[+]08:00$" }
+        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|12:00|16:00|20:00|20:50)[+]08:00$" },
+        "overlap_start_at": { "type": "string", "format": "date-time" }
       }
     },
     "boundary": {
@@ -40,6 +41,52 @@
       "type": "array",
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "x_post_context_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    },
+    "x_daily_segment_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "x_post_analyses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["post_id", "analysis_id", "analysis_version", "blogger_viewpoint", "arguments", "quoted_post_viewpoint", "uncertainties", "evidence_post_ids", "post_link"],
+        "properties": {
+          "post_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "analysis_id": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "analysis_version": { "const": 1 },
+          "blogger_viewpoint": { "type": ["string", "null"], "minLength": 1 },
+          "arguments": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "quoted_post_viewpoint": { "type": ["string", "null"], "minLength": 1 },
+          "uncertainties": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "evidence_post_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+          "post_link": { "type": "string", "pattern": "^https://", "maxLength": 2048 }
+        }
+      }
+    },
+    "x_daily_segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["natural_date", "occurred_from_at", "occurred_through_at", "window_viewpoints", "analysis_ids", "evidence_post_ids", "uncertainties"],
+        "properties": {
+          "natural_date": { "type": "string", "format": "date" },
+          "occurred_from_at": { "type": "string", "format": "date-time" },
+          "occurred_through_at": { "type": "string", "format": "date-time" },
+          "window_viewpoints": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "analysis_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 300 } },
+          "evidence_post_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+          "uncertainties": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        }
+      }
     },
     "no_new_data": { "type": "boolean" }
   }

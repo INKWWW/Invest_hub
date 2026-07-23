@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** Draft — 待用户审阅批准。批准前不得执行任何一个实现任务；真实 X 采集、远程 migration、部署和发布还需要在相应任务开始前取得明确授权。
+**Plan status:** 已批准，实施中。真实 X 采集、远程 migration、部署和发布仍需在相应任务开始前取得独立明确授权。
 
 **Spec:** [V2 X 指定博主信息收集与阅读 Spec](../specs/2026-07-22-v2-x-information-collection-and-reader-design.md)（已批准）
 
@@ -11,6 +11,13 @@
 **Architecture:** X 作为 `sources` 中独立的 `source_type`，其博主身份与帖子上下文通过 X 专用扩展表保存，而不是复用 Discord 作者规则。控制面继续生成不可变的 `(start_at, end_at]` 范围并在完成回执后推进水位；本地 Worker 通过一个受限的 X Active Adapter 逐页持久化，直到抵达下界或验证历史耗尽。X Reader 只读取安全摘要投影和帖子类型/时间/原始链接，管理员操作、原文与运行诊断保持隔离。
 
 **Tech Stack:** 现有 Next.js App Router + TypeScript 控制面、Supabase/Postgres/RLS/pgTAP、Python 3.11+ Worker、OpenCLI Browser Bridge、Codex CLI/Mock Provider、Vitest、Python `unittest`、既有 V1.1 时间窗与脱敏检查链路。
+
+## 0. 实施进度（2026-07-23）
+
+- Task 1、2 的本地契约、公开 fixture 和受限 Adapter 已完成并独立提交；Task 3、4 的窗口调度、逐页持久化、原子完成和逐帖/窗口理解已完成本地实现与确定性验证。
+- Task 5 已完成普通阅读者的 `/x` 安全投影与 `/discord` / `/x` 顶部导航，以及 X 管理创建、身份待验证提示、覆盖水位初始化、手动更新和同一上海自然日的有界历史回填入口。非连续历史回填完成后保留独立证据与阅读段，但不会前移连续水位。
+- 现有 OpenCLI `twitter tweets` 被用作唯一的实际访问命令候选。它若缺少回复/转发的关系字段，运行时必须以 `opencli_contract` 失败，绝不把未知关系猜成原创帖或推进覆盖水位。
+- Task 6 的公开 fixture 跨层 E2E 已完成。一次已授权、非持久化的真实 X Go/No-Go 已以 `x_collection_unverified` / `opencli_contract` 结束：基础帖子字段可读，但回复/转发关系及可证明的分页下界不可用；未创建云端任务、未调用 Codex CLI、未执行远程 migration 或部署。真实采集、远程 migration、部署和真实普通用户阅读验收均保持 pending，且需要分别授权。
 
 ## Global Constraints
 
@@ -118,9 +125,9 @@
 
   Extend the config schema without weakening `0600` checks. Implement request matching and one bounded retry in `XActiveAdapter`; keep X URL, browser profile and raw payload reference local. Reuse `RawPage` only as a transport envelope, and add X metadata validation in `Canonicalizer` without changing Discord mapping semantics.
 
-- [ ] **Step 4: Perform the real X Go/No-Go check only after explicit authorization.**
+- [x] **Step 4: Perform the real X Go/No-Go check only after explicit authorization.**
 
-  With one user-authorized, owner-only X profile and one configured account, run the adapter’s non-persisting diagnostic path. Record only category coverage, page-boundary result, response freshness outcome and failure class in protected local evidence. If the adapter cannot obtain fresh, type-complete, time-bounded data, record `x_collection_unverified`; do not create a cloud task, apply a remote migration, deploy or introduce a fallback collector.
+  With one user-authorized, owner-only X profile and one configured account, run the adapter’s non-persisting diagnostic path. Record only category coverage, page-boundary result, response freshness outcome and failure class in protected local evidence. **2026-07-23 result:** logged-in access and a bounded sample’s basic identity/time/link/type fields were available, including at least one quote; reply/repost relationship fields and a lower-bound/page-completion proof were unavailable. The result is `x_collection_unverified` with `opencli_contract`; no cloud task, Codex CLI invocation, remote migration, deployment or fallback collector followed.
 
 - [ ] **Step 5: Verify and commit.**
 
