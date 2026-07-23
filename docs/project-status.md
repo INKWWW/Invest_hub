@@ -1,10 +1,10 @@
 # Project Status
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收、专用 V1 数据库 migration 与控制面生产部署。来源面向人的名称统一采用“社区名 · 频道名”，内部逻辑标识不再出现在阅读、任务或来源列表。真实范围验收当前被 OpenCLI Browser Bridge 无法驱动 Discord 嵌套历史列表所阻塞：任务正确保持可恢复失败，覆盖水位没有前移。V2 X 指定博主信息收集与阅读 Spec 与独立 implementation plan 已获批准；本地实现已完成确定性验证，一次已授权的最小真实 X Go/No-Go 因 OpenCLI 缺少关系与范围完成字段而安全判定为 `x_collection_unverified`，未执行远程 migration、部署或发布。**
+**V1 Discord 正式可用 MVP 已完成；V1.1 完整时间窗采集与观点阅读 Spec/Plan 已批准。时间窗与双来源初始覆盖边界已生效；“指定作者可直接配置、采集后安全解析身份”的修订已完成本地验收、专用 V1 数据库 migration 与控制面生产部署。来源面向人的名称统一采用“社区名 · 频道名”，内部逻辑标识不再出现在阅读、任务或来源列表。真实范围验收当前被 OpenCLI Browser Bridge 无法驱动 Discord 嵌套历史列表所阻塞：任务正确保持可恢复失败，覆盖水位没有前移。V2 X 指定博主信息收集与阅读 Spec 与独立 implementation plan 已获批准；本地实现与公开 fixture 验证已完成。旧 `twitter tweets` 最小真实 Go/No-Go 安全判定为 `x_collection_unverified`；其后一次经授权、非持久化的 PR 源码级真实抓取与 Codex CLI 总结验证通过，但官方命令尚未合并发布，V2 仍未获生产 Go。**
 
 **Discord 采集状态（2026-07-22 决定）：** 个人账号的 Page Fetch、页面 UI 自动化、直接接口和导出器路线均不再进入生产；不启用 Discord 定时或手动采集。既有 Reader 与已持久化数据保持可用，但不构成持续采集能力。未来仅在频道管理员明确授权 Bot 后，才以新的独立 Spec/Plan 评估重新启动；详见 [Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)。本段优先于下文历史 Browser Bridge 受限描述。
 
@@ -18,7 +18,9 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 **V2 状态更正（2026-07-23）：** 上述 V2 “真实 X 待办”仅指完整采集与验收；最小、非持久化的真实 Go/No-Go 已在明确授权后完成，并因 OpenCLI 缺少 reply/repost 关系与范围完成证明而判定 `x_collection_unverified` / `opencli_contract`。未创建云端任务、未调用 Codex CLI、未推进水位、未远程迁移或部署。
 
-**V2 OpenCLI 上游提议（2026-07-23）：** 为补齐上述合同缺口，已创建 [OpenCLI PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，状态仅为 `proposed`。它新增独立 `twitter collection` 命令，保持 `twitter tweets` 的公开契约不变，并以人工 fixture 覆盖关系与完成回执。上游 PR 合并、可安装版本验证及新的明确授权真实 Go/No-Go 是后续三道独立门禁；在此之前 V2 仍为 `x_collection_unverified`，不得真实采集、调用 Codex CLI、推进水位、远程 migration 或部署。
+**V2 OpenCLI 上游提议（2026-07-23）：** 为补齐上述合同缺口，已创建 [OpenCLI PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，状态仅为 `proposed`。它新增独立 `twitter collection` 命令，保持 `twitter tweets` 的公开契约不变，并以人工 fixture 覆盖关系与完成回执。上游 PR 合并、可安装版本验证及新的明确授权真实 Go/No-Go 是后续三道独立门禁；在此之前官方/生产路径的 V2 仍为 `x_collection_unverified`，不得持续真实采集、推进水位、远程 migration 或部署。经用户明确授权的受保护、隔离源码级探针须单独记录，且不改变这些门禁。
+
+**V2 源码级真实验证（2026-07-24）：** 在明确授权下，已使用 PR #2173 的受保护本地源码副本完成一次隔离测试：有界读取返回 14 条帖子和 `time_boundary_reached` 回执；其中 13 条在测试窗口内，13/13 完成单帖 Codex CLI 结构化分析并通过单帖 ID、原始链接和证据范围校验，随后完成上海自然日的综合观点校验。样本均为原创帖，未覆盖真实引用帖/回复/转发。原始帖子和模型输出已删除，未创建任务、写入项目数据库、推进水位、远程迁移或部署。该结果仅证明候选源码的读取与理解链路；官方 OpenCLI 仍无此命令，Invest Hub 仍调用旧 `tweets`，故生产状态保持 No-Go。
 
 **Discord 交接更正（2026-07-22）：** 下文 V1.1 的历史时间窗与 Browser Bridge 说明仅保留为已完成探索记录；当前不得据此继续个人账号采集、安装任务或推进 Discord coverage。下一步是管理员授权的 Bot 路线，其余范围不变。
 

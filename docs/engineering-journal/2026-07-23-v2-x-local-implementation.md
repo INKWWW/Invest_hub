@@ -25,6 +25,17 @@
 
 没有创建云端任务；没有调用 Codex CLI；没有应用远程 migration；没有部署；没有修改生产或共享环境。真实采集、远程 migration、部署和真实普通用户验收仍须逐项单独明确授权。
 
+## 2026-07-24 源码级真实抓取与总结验证
+
+在用户明确授权后，使用 OpenCLI PR #2173 的受保护本地源码副本（不是已安装的官方 OpenCLI）进行了一次隔离、非持久化的真实验证。验证范围仅为一名已配置测试博主、固定的 RFC3339 时间下界和最多 100 条的只读读取；不创建项目任务、不写项目数据库、不推进 coverage/checkpoint、不执行远程 migration 或部署。
+
+- 登录态复核通过；有界命令返回 14 条帖子、1 页，并给出 `time_boundary_reached` 的完成回执。
+- 其中 13 条位于测试时间窗内。每条均由本机 Codex CLI 单独产生 V2 结构化分析，并通过精确的单帖 ID、原始 HTTPS 帖子链接与证据范围校验；随后按上海自然日完成一条每日综合观点，并校验其仅引用本窗口逐帖分析和帖子证据。
+- 本次真实样本均为原创帖；引用帖、回复、转发仍只有公开 fixture 覆盖，尚未获得真实样本验证。
+- 原始帖子、模型原始输出和临时诊断均在测试结束后删除；日志只保留聚合计数、完成回执类别、验证范围和结论，不保留账户、正文、链接、Cookie、Profile 或完整响应。
+
+该结果证明 PR 源码可在已登录会话中完成一次有界读取与 Codex CLI 结构化理解；它**不**构成 V2 生产 Go。PR 仍须由 OpenCLI 上游维护者合并并发布可安装版本；Invest Hub 仍须以官方 `twitter collection` 命令及完成回执替换当前旧 `twitter tweets` 调用，并在新的批准 Plan 下完成可持久化的真实端到端验收。
+
 ## OpenCLI 上游能力提议
 
 - 状态：`proposed`。已创建 [OpenCLI PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，新增独立的 `opencli twitter collection <username> --until <RFC3339> -f json`；既有 `twitter tweets` 的参数、columns 与行数组输出保持不变。
