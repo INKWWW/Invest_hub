@@ -61,6 +61,29 @@ class Provider:
 
 
 class XWindowedRuntimeTests(unittest.TestCase):
+    def test_explicit_history_range_uses_start_boundary_without_a_continuous_overlap(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:
+                return RawPage(
+                    page_id="history-page", source_id="x-source", source_type="x", cursor_before=cursor, cursor_after=None,
+                    raw_payload_ref="local://x/history-page", telemetry={"match_state": "matched_new", "history_exhausted": True}, messages=(
+                        {"id": "post-new", "author": {"id": "account-1", "name": "Fixture"}, "text": "作者评论", "created_at": "2026-07-23T00:10:00Z", "url": "https://x.com/fixture/status/1", "post_type": "quote", "quoted_post_id": "context-1", "context_status": "complete", "context_post": {"id": "context-1", "author": {"id": "other", "name": "Other"}, "text": "引用帖子正文", "url": "https://x.com/other/status/2"}, "attachments": []},
+                        {"id": "post-before-history", "author": {"id": "account-1", "name": "Fixture"}, "text": "范围前帖子", "created_at": "2026-07-22T23:20:00Z", "url": "https://x.com/fixture/status/3", "post_type": "original", "context_status": "complete", "attachments": []},
+                    ),
+                )
+
+        history_claim = claim()
+        history_claim["collection_scope"] = {"mode": "history"}
+        history_claim["capture_range"] = {
+            "mode": "history", "trigger": "history", "timezone": "Asia/Shanghai",
+            "start_at": "2026-07-23T00:00:00Z", "end_at": "2026-07-23T08:00:00Z",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = XWindowedRuntime(config=source_config(), connector=Connector(), evidence=LocalEvidenceStore(Path(directory) / "evidence"), canonicalizer=Canonicalizer(), provider=Provider(), prompt_template="private")
+            completion = runtime.execute_windowed(history_claim)["range_completion"]
+        self.assertEqual(completion["capture_range"]["mode"], "history")
+        self.assertEqual(completion["boundary"]["kind"], "oldest_at_or_before_start")
+
     def test_page_is_durable_before_per_post_analysis_and_completion_only_contains_new_posts(self) -> None:
         class Connector:
             def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:

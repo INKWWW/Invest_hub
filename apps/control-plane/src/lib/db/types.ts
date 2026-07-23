@@ -725,11 +725,27 @@ export interface Database {
         };
         Returns: Json;
       };
+      create_bounded_x_history_task: {
+        Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_start_at: string; p_end_at: string };
+        Returns: Json;
+      };
+      create_x_source: {
+        Args: { p_source_key: string; p_display_name: string; p_requested_handle: string; p_parameter_version: string; p_actor_id: string };
+        Returns: Json;
+      };
+      initialize_x_collection_coverage: {
+        Args: { p_source_id: string; p_actor_id: string; p_boundary: string };
+        Returns: Json;
+      };
       record_windowed_capture_segment: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_segment: Json };
         Returns: Json;
       };
       complete_windowed_capture_range: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
+        Returns: Json;
+      };
+      complete_bounded_x_history_range: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
         Returns: Json;
       };

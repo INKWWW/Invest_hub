@@ -9,12 +9,13 @@
 - X 页面须先获得持久化确认才可继续；固定 `end_at` 以后的帖子、未证明下界的结果、身份不一致与缺失关系字段都安全失败，不推进水位。
 - 对每一条新帖子独立调用 Codex CLI 的受限结构化操作；窗口观点只接收本窗口新生成的已验证逐帖分析。此前窗口的模型文字不作为输入，数据库以追加段保存结果。
 - 增加 `/x` 安全阅读页、`/api/reader/x` 和顶部来源导航。阅读页默认显示每日综合观点，逐帖观点、论据、引用帖观点与原始 X 链接折叠在证据明细中；不返回原文、内部 ID、本地引用、Prompt、Provider 或凭据。
+- 增加管理员 X 来源登记、待验证身份提示、覆盖水位初始化、手动更新与有界历史回填。历史范围要求已过去、同一上海自然日且不与该博主活动范围重叠；历史完成复用严格逐帖证据校验，只有恰好与连续水位相接时才可推进水位。
 
 ## 本地验证
 
 - `SUPABASE_DISABLE_TELEMETRY=1 supabase db reset`
-- `SUPABASE_DISABLE_TELEMETRY=1 supabase test db`：14 个文件、226 项断言通过。
-- `PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_*.py' -v`：99 项通过。
+- `SUPABASE_DISABLE_TELEMETRY=1 supabase test db`：17 个文件、240 项断言通过。
+- `PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_*.py' -v`：100 项通过。
 - `cd apps/control-plane && npm test && npm run lint && npm run build`：84 项 Vitest 通过，lint 和 production build 通过。
 
 ## 尚未执行的外部动作
