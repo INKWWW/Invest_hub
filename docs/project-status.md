@@ -16,6 +16,8 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 **V2 状态更正（2026-07-23）：** 上述 V2 “真实 X 待办”仅指完整采集与验收；最小、非持久化的真实 Go/No-Go 已在明确授权后完成，并因 OpenCLI 缺少 reply/repost 关系与范围完成证明而判定 `x_collection_unverified` / `opencli_contract`。未创建云端任务、未调用 Codex CLI、未推进水位、未远程迁移或部署。
 
+**V2 OpenCLI 上游提议（2026-07-23）：** 为补齐上述合同缺口，已创建 [OpenCLI PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，状态仅为 `proposed`。它新增独立 `twitter collection` 命令，保持 `twitter tweets` 的公开契约不变，并以人工 fixture 覆盖关系与完成回执。上游 PR 合并、可安装版本验证及新的明确授权真实 Go/No-Go 是后续三道独立门禁；在此之前 V2 仍为 `x_collection_unverified`，不得真实采集、调用 Codex CLI、推进水位、远程 migration 或部署。
+
 ## Approval status
 
 - Approved specification：
@@ -41,7 +43,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V1 implementation status：代码、本地确定性验收、专用部署、真实双来源 history/增量/checkpoint、失败隔离/恢复、普通用户阅读与视觉、真实质量抽检和部署日志审阅均已完成；结论为 V1 Discord 正式可用 MVP。
 - V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全作者配置界面、管理员手动更新入口、内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。其后用户批准作者 selector 修订：管理员可直接输入显示名/用户名，已观察作者仅作快捷建议；任务逐页持久化后，受租约保护的服务端解析唯一 stable ID，零候选 pending、多候选 ambiguous，且绝不返回原文。该修订已应用专用 V1 数据库并部署到专用 V1 生产项目（Vercel Ready、正式域名已关联）；本地验证为 11 个 pgTAP 文件/186 项、18 个控制面测试文件/79 项、Worker 82 项以及 lint/production build 全部通过。随后管理员可录入已确认的重点作者，再进行真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。真实内容、来源身份、凭据与私有 Prompt 继续不进入 Git。
-- V2 implementation status：Plan 已获用户批准。本地实现已完成 X 独立任务/范围/30 分钟重叠、`08:00/12:00/16:00/20:00/次日00:00` 调度、逐页持久化、逐帖 Codex CLI 结构化、不可变窗口观点段、`/x` 安全阅读投影与 `/discord` / `/x` 读者导航，以及管理员 X 来源登记、覆盖水位、手动更新和不前移水位的有界历史回填。本地验证为 17 个 pgTAP 文件/240 项、Worker 100 项、控制面 84 项以及 lint/production build 通过；公开 fixture 的 V2 E2E 3 项及 V1.1 回归也通过，详见 [V2 本地确定性验收记录](spikes/2026-07-23-v2-x-local-decision-report.md)。已授权、非持久化的真实 Go/No-Go 表明 OpenCLI `twitter tweets` 可提供基础帖子字段，但缺少 reply/repost 关系和可证明下界，故被安全分类为 `x_collection_unverified` / `opencli_contract`，没有创建云端任务或推进水位。远程 migration、部署和真实普通用户验收尚未执行。
+- V2 implementation status：Plan 已获用户批准。本地实现已完成 X 独立任务/范围/30 分钟重叠、`08:00/12:00/16:00/20:00/次日00:00` 调度、逐页持久化、逐帖 Codex CLI 结构化、不可变窗口观点段、`/x` 安全阅读投影与 `/discord` / `/x` 读者导航，以及管理员 X 来源登记、覆盖水位、手动更新和不前移水位的有界历史回填。本地验证为 17 个 pgTAP 文件/240 项、Worker 100 项、控制面 84 项以及 lint/production build 通过；公开 fixture 的 V2 E2E 3 项及 V1.1 回归也通过，详见 [V2 本地确定性验收记录](spikes/2026-07-23-v2-x-local-decision-report.md)。已授权、非持久化的真实 Go/No-Go 表明 OpenCLI `twitter tweets` 可提供基础帖子字段，但缺少 reply/repost 关系和可证明下界，故被安全分类为 `x_collection_unverified` / `opencli_contract`，没有创建云端任务或推进水位。为消除这个上游合同缺口，OpenCLI PR #2173 已处于 `proposed` 状态；它不改变当前 V2 No-Go，远程 migration、部署和真实普通用户验收尚未执行。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
 `intake.md` 中的技术方向、版本范围和实现建议属于前期讨论输入；其中标注为建议或待 Spike/Spec 确认的事项，尚未自动成为生产实现决策。Spike-01 和 Spike-02 的结论只作为后续设计输入。

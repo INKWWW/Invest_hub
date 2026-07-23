@@ -8,6 +8,8 @@
 
 **Tech Stack:** OpenCLI ESM JavaScript、Vitest adapter tests、TypeScript typecheck、OpenCLI manifest/validation gates、GitHub pull request。
 
+**Execution status (2026-07-23):** 已完成并提交上游 [PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，状态为 `proposed`；未合并、未发布、未进行真实 X Go/No-Go，故不得据此接入或启用 V2。
+
 ## Global Constraints
 
 - 只修改 OpenCLI 上游 Twitter Adapter；不改 Invest Hub runtime、共享协议、远程迁移、部署或真实数据。
@@ -76,7 +78,7 @@ type CollectionResponse = {
 - Produces local branch `feat/twitter-collection-command` at the recorded `upstream/main` SHA.
 - Keeps the existing unpushed `feat/twitter-collection-receipt` exploratory branch intact; it is neither pushed nor deleted.
 
-- [ ] **Step 1: Inspect and preserve the rejected mode-switch work.**
+- [x] **Step 1: Inspect and preserve the rejected mode-switch work.**
 
   Run in the existing OpenCLI workspace:
 
@@ -88,7 +90,7 @@ type CollectionResponse = {
 
   Expected: only the rejected `twitter tweets --collection-receipt` exploration is present. Do not push it, amend it, reset it, or copy its mode-switch interface into the new branch.
 
-- [ ] **Step 2: Create a clean branch from current upstream main.**
+- [x] **Step 2: Create a clean branch from current upstream main.**
 
   Run:
 
@@ -105,7 +107,7 @@ type CollectionResponse = {
 
   Expected: the printed SHA is the sole PR base; no rejected flag exists in the clean checkout.
 
-- [ ] **Step 3: Verify the clean baseline.**
+- [x] **Step 3: Verify the clean baseline.**
 
   Run:
 
@@ -132,7 +134,7 @@ type CollectionResponse = {
 - `fetchUserTimelinePage(page, context, cursor, count)` returns normalized UserTweets payload or a typed execution failure.
 - `tweets.js` retains its existing CLI registration and `__test__` helpers, delegating only transport setup/page fetch.
 
-- [ ] **Step 1: Write a failing default-command regression test.**
+- [x] **Step 1: Write a failing default-command regression test.**
 
   Add this import and test to `clis/twitter/tweets.test.js`:
 
@@ -153,7 +155,7 @@ type CollectionResponse = {
   });
   ```
 
-- [ ] **Step 2: Run the test to verify the absent shared module.**
+- [x] **Step 2: Run the test to verify the absent shared module.**
 
   Run:
 
@@ -163,7 +165,7 @@ type CollectionResponse = {
 
   Expected: FAIL because `./user-timeline.js` does not yet exist; the current registry assertion documents the unchanged public contract.
 
-- [ ] **Step 3: Create the shared transport module and refactor only internals.**
+- [x] **Step 3: Create the shared transport module and refactor only internals.**
 
   In `clis/twitter/user-timeline.js`, move the current UserTweets/UserByScreenName query metadata, URL builders, logged-in-profile discovery, `ct0` lookup, and page-context fetch construction. Export `buildUserTweetsUrl`, `USER_TWEETS_PAGE_SIZE`, `MAX_USER_TWEETS_PAGES`, `DEFAULT_USER_TWEETS_PAGE_DELAY_SECONDS`, and:
 
@@ -187,7 +189,7 @@ type CollectionResponse = {
 
   Update `tweets.js` to import the helpers, preserve its local `normalizeLimit` and `normalizePageDelaySeconds` functions (including their current messages), and pass `{ allowLoggedInDefault: true }`. Preserve its current delay, cursor loop, partial-read behavior, `applyTopByEngagement` call and default output exactly. The collection command will use its own validators, named `normalizeCollectionLimit` and `normalizeCollectionPageDelaySeconds`, whose error messages name `twitter collection`.
 
-- [ ] **Step 4: Verify the refactor has no public effect.**
+- [x] **Step 4: Verify the refactor has no public effect.**
 
   Run:
 
@@ -199,7 +201,7 @@ type CollectionResponse = {
 
   Expected: all pass, and the test proves no collection parameter or column appears on `twitter tweets`.
 
-- [ ] **Step 5: Commit the shared transport extraction.**
+- [x] **Step 5: Commit the shared transport extraction.**
 
   ```bash
   git add clis/twitter/user-timeline.js clis/twitter/tweets.js clis/twitter/tweets.test.js
@@ -218,7 +220,7 @@ type CollectionResponse = {
 - `normalizeUntil(raw)`, `extractRelationship(result)`, `parseCollectionPage(payload, seen)`, and `paginateCollection(input)` are exported under `__test__`.
 - `paginateCollection` never returns an incomplete receipt; it throws a typed `CommandExecutionError` for `twitter_collection_limit_reached`, `twitter_collection_page_guard_hit`, `twitter_collection_repeated_cursor`, `twitter_collection_invalid_timestamp`, or `twitter_collection_unresolved_relationship`.
 
-- [ ] **Step 1: Write failing tests with artificial GraphQL objects.**
+- [x] **Step 1: Write failing tests with artificial GraphQL objects.**
 
   Create `clis/twitter/collection.test.js` with tests equivalent to:
 
@@ -253,7 +255,7 @@ type CollectionResponse = {
 
   Add explicit tests for invalid RFC3339 `--until`, malformed `created_at`, collection-specific `limit` and page-delay validation, limit reached, page guard, incomplete repost target, and command-level `{ posts, receipt }` JSON response. Fixtures must include a stable ID, a non-sensitive synthetic handle, and valid X-style timestamp strings; they must not copy a real post, account, link, cursor, cookie, or response.
 
-- [ ] **Step 2: Run collection tests and verify they fail.**
+- [x] **Step 2: Run collection tests and verify they fail.**
 
   Run:
 
@@ -263,7 +265,7 @@ type CollectionResponse = {
 
   Expected: FAIL because the collection Adapter and helper exports do not exist.
 
-- [ ] **Step 3: Implement collection-only relation and receipt semantics.**
+- [x] **Step 3: Implement collection-only relation and receipt semantics.**
 
   Register the command exactly as follows:
 
@@ -295,7 +297,7 @@ type CollectionResponse = {
 
   Use payload fields for relationships: `quoted_status_result` plus `quoted_status_id_str`; `in_reply_to_status_id_str`, `in_reply_to_screen_name`, `in_reply_to_user_id_str`; and nested `retweeted_status_result`. Do not classify a text-only `RT` prefix as complete. Each page obtains 100 rows, persists no response, and stops successfully only when a timestamp is at or before `until`, or no cursor exists. Do not return cursor tokens.
 
-- [ ] **Step 4: Run focused verification and generate the manifest.**
+- [x] **Step 4: Run focused verification and generate the manifest.**
 
   Run:
 
@@ -310,7 +312,7 @@ type CollectionResponse = {
 
   Expected: all pass. The manifest exposes only the two collection output columns, and `twitter tweets` remains unchanged.
 
-- [ ] **Step 5: Commit the new command.**
+- [x] **Step 5: Commit the new command.**
 
   ```bash
   git add clis/twitter/collection.js clis/twitter/collection.test.js cli-manifest.json
@@ -328,7 +330,7 @@ type CollectionResponse = {
 - Produces a GitHub PR from `INKWWW:feat/twitter-collection-command` to `jackwener:main`.
 - PR body and Invest Hub record contain only public command semantics, commit SHA, PR URL, version and test aggregate; no account, content, URL, cursor, credentials or raw payload.
 
-- [ ] **Step 1: Run the complete upstream quality gate.**
+- [x] **Step 1: Run the complete upstream quality gate.**
 
   Run:
 
@@ -339,14 +341,15 @@ type CollectionResponse = {
   npm run check:silent-column-drop
   npm run check:typed-error-lint
   npm run build
-  ./dist/src/main.js validate twitter/tweets twitter/collection
+  ./dist/src/main.js validate twitter/tweets
+  ./dist/src/main.js validate twitter/collection
   git diff --check
   git status --short
   ```
 
   Expected: every command exits 0. Upstream warnings unrelated to Twitter remain visible but are not fixed in this PR.
 
-- [ ] **Step 2: Perform the output-boundary review.**
+- [x] **Step 2: Perform the output-boundary review.**
 
   Run:
 
@@ -357,7 +360,7 @@ type CollectionResponse = {
 
   Expected: auth material is used only inside page-context fetch construction; no output object, generated manifest or fixture exposes it. Cursor may exist only as private control flow, never in receipt or fixture data.
 
-- [ ] **Step 3: Push and create the PR.**
+- [x] **Step 3: Push and create the PR.**
 
   Create `/private/tmp/opencli-x-collection-pr-summary.md` with this exact structure:
 
@@ -390,7 +393,7 @@ type CollectionResponse = {
     --body-file /private/tmp/opencli-x-collection-pr-summary.md
   ```
 
-- [ ] **Step 4: Record the proposed upstream capability without claiming V2 Go.**
+- [x] **Step 4: Record the proposed upstream capability without claiming V2 Go.**
 
   Update the Invest Hub V2 journal and project status with PR URL, head SHA, base SHA, tested version, and `proposed` status. State that V2 remains `x_collection_unverified` until upstream merge, an installable version and a separately authorized real Go/No-Go. Then commit documentation separately:
 

@@ -25,6 +25,13 @@
 
 没有创建云端任务；没有调用 Codex CLI；没有应用远程 migration；没有部署；没有修改生产或共享环境。真实采集、远程 migration、部署和真实普通用户验收仍须逐项单独明确授权。
 
+## OpenCLI 上游能力提议
+
+- 状态：`proposed`。已创建 [OpenCLI PR #2173](https://github.com/jackwener/OpenCLI/pull/2173)，新增独立的 `opencli twitter collection <username> --until <RFC3339> -f json`；既有 `twitter tweets` 的参数、columns 与行数组输出保持不变。
+- PR 基线为 OpenCLI `1.8.6` 的 `5256711a25458e537c5a63d2a6f9c7fd36d0d1eb`，提议提交为 `584934ed` 与 `b8589347`。公开人工 fixture 覆盖原创、引用、回复、转发、时间下界、cursor 耗尽、重复 cursor、limit、页数保护、时间错误与命令 envelope。
+- 上游验证：Twitter 聚焦 27 项测试、完整 Adapter 474 个文件/4,977 项测试、TypeScript typecheck、manifest build、两个命令的单独注册校验、silent-column-drop 与 typed-error gate 均通过。
+- 这不是 V2 Go。只有 PR 合并、包含能力的可安装版本可验证，并在新的明确授权下完成最小真实 Go/No-Go 后，才可考虑 V2 的后续接入；此前仍不得真实采集、调用 Codex CLI、推进水位、远程 migration 或部署。
+
 ## 已知受限边界
 
-实现仅调用 OpenCLI 的 `twitter tweets` 能力，不直接调用 X API。该命令的公开输出若无法提供安全的 reply/repost 关系，采集会分类失败而非推断关系；真实 Go/No-Go 验收应首先验证这些关系字段及范围下界是否可证明。
+当前 Invest Hub 实现仍仅调用已安装的 OpenCLI `twitter tweets` 能力，不直接调用 X API。该命令的公开输出若无法提供安全的 reply/repost 关系，采集会分类失败而非推断关系；待上游提议合并、发布并获授权后，真实 Go/No-Go 应首先验证 collection 命令的关系字段及范围下界是否可证明。
