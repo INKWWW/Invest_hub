@@ -31,6 +31,7 @@
 - 新博主首次启用时，初始连续范围为其启用当日 `00:00` 至最近一个已到达的逻辑截止点；不因此默认发起更早历史补采。若日终任务或任一后续任务跨日恢复，优先补齐最早未确认范围。
 - 帖子和每日摘要按帖子 `occurred_at` 换算后的上海自然日归属，而不是按任务运行日期归属。次日补到的前一日帖子更新前一日的追加式摘要版本。
 - 只有一个范围完整成功且该博主的任一受影响上海自然日确有新增 Canonical 帖子时，才调用 Codex CLI 生成或更新相应日期的摘要版本；已验证的完整空范围为 `no_new_data`，不调用 Provider，也不伪造新摘要版本。
+- Codex CLI 的语义输出采用“逐帖不可变分析 → 窗口不可变综合观点 → 确定性追加式每日视图”。后续调用不得把既有 LLM 结论作为可编辑输入；后续帖子只能追加新的区段或明确的后续变化，绝不回写已展示的逐帖分析或窗口观点。新的每日视图版本只由既有区段按时间顺序确定性拼接而成，旧版本保留并默认折叠。
 
 ## 1. 目标文件、依赖与交付顺序
 
@@ -61,11 +62,13 @@
 - `sources.source_type` becomes the exact union `discord | x`; `sync_tasks.task_type` becomes `discord_sync | x_sync`. Database checks reject any other value and reject a source/task type mismatch.
 - `x_source_profiles(source_id, requested_handle, account_id, display_name, resolution_status, enabled)` has one row per X source. `resolution_status` is `pending | resolved | ambiguous`; only `resolved` rows may carry a non-null `account_id`.
 - `x_post_contexts(canonical_message_id, post_type, post_url, quoted_post_id, reply_to_post_id, reposted_post_id, context_status, attachments)` records one X-specific fact row. `post_type` is `original | quote | reply | repost`; `context_status` is `complete | unavailable | deleted | unresolved`.
+- `x_post_analyses(canonical_message_id, analysis_version, blogger_viewpoint, arguments, quoted_post_viewpoint, uncertainties, evidence_refs)` is append-only and has exactly one accepted analysis for each `(canonical_message_id, analysis_version)`. A quote analysis stores the configured blogger's added commentary separately from the visible quoted-post viewpoint; unavailable context is represented explicitly, never inferred.
+- `x_daily_viewpoint_segments(source_id, natural_date, range_task_id, segment_version, occurred_from_at, occurred_through_at, window_viewpoints, post_analysis_refs, evidence_refs)` is append-only. One completed range may create at most one segment per affected source/date; later ranges append a new segment and cannot mutate prior segment text or references. The existing/additive daily-presentation version records a deterministic ordered snapshot of these segment identities, not a new LLM rewrite of their prose.
 - X claims use the existing logical continuous `capture_range` shape and set `task_type: "x_sync"`. The task snapshot additionally preserves `scheduled_window_key`, the fixed `end_at`, `overlap_start_at` and the current checkpoint from which its continuous range began. The source snapshot includes only `source_type`, resolved account identity, display name and parameter version, never a URL or local profile reference.
 
 - [ ] **Step 1: Write failing pgTAP and contract tests.**
 
-  Cover acceptance/rejection of `x`/`x_sync`, rejection of a Discord source with `x_sync`, one source-to-profile mapping, pending/resolved/ambiguous constraints, every permitted post type, context-link consistency, unique `(source_id, external_message_id)`, a one-year raw retention expiry, user RLS denial, and range-completion rejection when a task lacks its matching X post facts.
+  Cover acceptance/rejection of `x`/`x_sync`, rejection of a Discord source with `x_sync`, one source-to-profile mapping, pending/resolved/ambiguous constraints, every permitted post type, context-link consistency, unique `(source_id, external_message_id)`, a one-year raw retention expiry, user RLS denial, and range-completion rejection when a task lacks its matching X post facts. Add immutable per-post-analysis and per-window-segment constraints, quote-comment versus quoted-post viewpoint separation, and rejection of an update that would overwrite an accepted analysis or segment.
 
 - [ ] **Step 2: Run the focused failures.**
 
@@ -75,7 +78,7 @@
 
 - [ ] **Step 3: Implement the minimum additive migration and typed contract changes.**
 
-  Alter only constraints and add X-specific tables/RLS/policies; do not rewrite existing Discord rows or replace current V1.1 range functions. Extend persistence validation so an X row carries exactly one permitted post type, an HTTPS X post URL, zero or one matching context relation, attachment metadata without body extraction, and no `local_raw_ref` in reader-facing data. Define rollback as disabling X sources and stopping uncompleted `x_sync` tasks while retaining completed X facts, summary versions and task events; do not drop tables or delete Discord/X history as a rollback shortcut.
+  Alter only constraints and add X-specific tables/RLS/policies; do not rewrite existing Discord rows or replace current V1.1 range functions. Extend persistence validation so an X row carries exactly one permitted post type, an HTTPS X post URL, zero or one matching context relation, attachment metadata without body extraction, and no `local_raw_ref` in reader-facing data. Add append-only per-post analysis and per-window viewpoint-segment facts, each linked to its input Canonical/context identities and range task. Define rollback as disabling X sources and stopping uncompleted `x_sync` tasks while retaining completed X facts, analysis/segment versions and task events; do not drop tables or delete Discord/X history as a rollback shortcut.
 
 - [ ] **Step 4: Verify and commit.**
 
@@ -164,11 +167,11 @@
 
   Commit: `feat(v2): run X collection in recoverable windows`.
 
-## 5. Task 4 — X 事实层、每日摘要与版本证据
+## 5. Task 4 — X 逐帖理解、窗口观点与追加式证据
 
 **Files:**
 
-- Create: `workers/v0/prompts/v2_x_chunk.md`, `workers/v0/prompts/v2_x_daily.md`
+- Create: `workers/v0/prompts/v2_x_chunk.md`, `workers/v0/prompts/v2_x_window.md`
 - Modify: `workers/v0/src/invest_hub_worker/structured.py`, `workers/v0/src/invest_hub_worker/summaries.py`
 - Modify: `workers/v0/src/invest_hub_worker/providers/base.py`, `workers/v0/src/invest_hub_worker/providers/codex_cli.py`, `workers/v0/src/invest_hub_worker/providers/mock.py`
 - Modify: `workers/v0/src/invest_hub_worker/runtime.py`
@@ -176,13 +179,14 @@
 
 **Interfaces:**
 
-- `parse_v2_x_chunk_output(value, allowed_post_ids)` returns only validated facts: `post_id`, `fact`, `author_viewpoint`, `subjects`, `stance`, `uncertainties` and `warnings`.
-- `parse_v2_x_daily_output(value, allowed_post_ids)` returns `schema_version: "v2-x-daily"`, `natural_date`, `as_of`, `core_viewpoints`, `subjects`, `stance_changes`, `uncertainties`, `unparsed_content_notices` and `evidence_post_ids`.
-- `build_v2_x_daily_summaries` creates append-only current/history versions per X source and Shanghai date from already confirmed X facts only. It runs only after a complete range adds new Canonical posts for that source/date; `no_new_data` and incomplete ranges do not create a Provider call or a synthetic summary version.
+- A `PostBundle` contains one configured-author post's stable identity, type, occurred time, text and X link, plus only its actually visible quote/reply context. A transport chunk contains 1–100 independent `PostBundle`s in chronological order; the `100` upper bound follows the current Codex CLI capacity candidate. An over-budget bundle stands alone and is classified rather than silently truncated. Chunk transport must never permit cross-post attribution.
+- `parse_v2_x_chunk_output(value, allowed_post_ids, allowed_context_post_ids)` returns exactly one immutable analysis per input configured-author post: `post_id`, `blogger_viewpoint`, `arguments`, `uncertainties`, `evidence_post_ids`, `post_link`, and, only for visible quote context, a separately attributed `quoted_post_viewpoint`. Every evidence or context identity must belong to this bundle; a normal repost has no `blogger_viewpoint`.
+- `parse_v2_x_window_output(value, allowed_analysis_ids)` returns `schema_version: "v2-x-window"`, `natural_date`, immutable `range_task_id`, `occurred_from_at`, `occurred_through_at`, `window_viewpoints`, `analysis_ids`, `evidence_post_ids` and `uncertainties`. It receives only this completed range's validated per-post analyses, never prior LLM prose.
+- `build_v2_x_daily_viewpoint_timeline` appends immutable source/date window segments from confirmed range facts only, then deterministically creates a new daily-presentation version by ordering their identities and unchanged text. A later range adds a new segment; it cannot rewrite previous segments. `no_new_data` and incomplete ranges do not create a Provider call or a synthetic segment.
 
 - [ ] **Step 1: Write strict-schema failures.**
 
-  Reject unknown post IDs, a reposted original claimed as the configured author’s statement, quote text merged into the author comment, a reply whose unavailable parent is invented, any media/OCR/external-body conclusion, missing uncertainty fields, out-of-range timestamps and a daily output that cites an unpersisted post. Include Mock fixtures for no new posts, no attributable viewpoint, mixed post types and unavailable context.
+  Reject unknown post IDs or context IDs, a reposted original claimed as the configured author’s statement, quote text merged into the author comment, a quoted-post viewpoint returned when quote context is unavailable, a reply whose unavailable parent is invented, cross-post evidence IDs, any media/OCR/external-body conclusion, missing uncertainty fields, out-of-range timestamps and a window output that cites an unpersisted analysis. Include Mock fixtures for no new posts, no attributable viewpoint, mixed post types, visible quotes, unavailable context, a later contrary post and an attempted overwrite of an earlier segment.
 
 - [ ] **Step 2: Run the focused failures.**
 
@@ -190,15 +194,15 @@
 
   Expected before implementation: no `v2-x-*` schema exists and X posts can be interpreted only by Discord-oriented summaries.
 
-- [ ] **Step 3: Implement strict X operations and daily versioning.**
+- [ ] **Step 3: Implement strict per-post operations and append-only window segments.**
 
-  Keep private prompts outside Git; repository templates describe only JSON shape and boundary rules. Add separate Mock/Codex operations so a provider failure remains classified. Daily generation may use only persisted facts whose evidence IDs are in the completed range; it must retain `as_of`, source/date/version, media/external-content notices and previous versions. A same-day later range with newly accepted posts creates a new version for the post's Shanghai date; a cross-day recovery updates the original date rather than the run date. A no-new-post range returns a safe status without inventing a daily version.
+  Keep private prompts outside Git; repository templates describe only JSON shape and boundary rules. Add separate Mock/Codex operations so a provider failure remains classified. Use chunking solely as bounded transport: each post is analyzed independently, and a visible quote is separately attributed from the blogger's comment. After all per-post analyses for a complete range persist, generate one immutable window viewpoint segment from those analyses only. A same-day later range appends a segment for the post's Shanghai date; a cross-day recovery appends to the original date rather than the run date. Then deterministically build the new current daily presentation by appending the new segment to prior segment identities; do not provide prior segment prose to Codex CLI and do not overwrite it. A no-new-post range returns a safe status without inventing a segment or daily-presentation version.
 
 - [ ] **Step 4: Verify and commit.**
 
   Run the Step 2 command and `git diff --check`.
 
-  Commit: `feat(v2): summarize X authors by day`.
+  Commit: `feat(v2): add X post analyses and viewpoint timeline`.
 
 ## 6. Task 5 — X 管理入口与安全阅读体验
 
@@ -214,13 +218,13 @@
 **Interfaces:**
 
 - `createXSource({ displayName, requestedHandle, parameterVersion })` creates an enabled X source with `pending` identity until the local Worker verifies a unique account; the public response has no source URL.
-- `readXDay({ sourceKey?, date? })` returns `XReaderDay[]` containing only display name, natural date, status, current daily presentation, collapsed history and `PostLink[]` of `{ type, occurredAt, href }`.
+- `readXDay({ sourceKey?, date? })` returns `XReaderDay[]` containing only display name, natural date, status, a default-open `current_daily_timeline` and collapsed historical daily-presentation versions. The current timeline contains chronological `window_segments`; each segment has its window viewpoints and notices, while its per-post analyses, quote relations and `PostLink[]` of `{ type, occurredAt, href }` are collapsed evidence details.
 - `POST /api/admin/x/manual-refresh` accepts `{ source_id }`; server time sets `end_at`, reuses the existing active range and returns only a safe task state. Non-admin callers receive 403.
 - `POST /api/admin/x/history` accepts `{ source_id, start_at, end_at }`, validates a finite Shanghai range on the server, rejects an active overlap and returns only a safe queued task state. It does not imply that continuous coverage advanced.
 
 - [ ] **Step 1: Write failing repository/API/component tests.**
 
-  Cover admin creation/edit/disable, an unresolved identity message, coverage initialization, manual task reuse, finite historical backfill creation and overlap rejection, 401/403 responses, date/source selection, current summary default-open, post links default-collapsed, history default-collapsed, all six Reader states, and absent raw body/internal ID/worker/prompt/provider fields in API JSON and initial HTML. Add 1280px and 375px assertions for source/date selectors and no horizontal overflow.
+  Cover admin creation/edit/disable, an unresolved identity message, coverage initialization, manual task reuse, finite historical backfill creation and overlap rejection, 401/403 responses, date/source selection, current daily timeline default-open with chronological window segments, historical daily-presentation versions default-collapsed, per-post analyses/quote relations/post links default-collapsed, immutable earlier segment text after a later range, all six Reader states, and absent raw body/internal ID/worker/prompt/provider fields in API JSON and initial HTML. Add 1280px and 375px assertions for source/date selectors and no horizontal overflow.
 
 - [ ] **Step 2: Run the focused failures.**
 
@@ -230,7 +234,7 @@
 
 - [ ] **Step 3: Implement safe queries and content-first UI.**
 
-  Build new X-specific repositories rather than branching `readDiscordDay`. Filter queries by `source_type = 'x'`, only include completed/current daily versions, and derive `no_new_messages` only from a confirmed complete range. XReader must render title, Shanghai date, summary, uncertainty/media notices, collapsed `在 X 中打开` links and history; it must never render canonical content. Add admin navigation without exposing configuration to ordinary readers.
+  Build new X-specific repositories rather than branching `readDiscordDay`. Filter queries by `source_type = 'x'`, only include the completed current daily timeline plus collapsed historical presentation versions, and derive `no_new_messages` only from a confirmed complete range. XReader must render title, Shanghai date and chronological window viewpoints, then fold each segment's post analyses, quote attribution and `在 X 中打开` links; it must never render canonical content or mutate/rephrase an earlier segment. Add admin navigation without exposing configuration to ordinary readers.
 
 - [ ] **Step 4: Verify and commit.**
 
@@ -254,7 +258,7 @@
 
 - [ ] **Step 1: Write deterministic cross-layer tests.**
 
-  Cover at least two X sources; all four post types; quote/reply/repost attribution; range completion after more than five pages; interrupted resume; duplicate replay; delayed range upper-bound exclusion; source-isolated failure; daily current/history versions; no-new-data distinction; ordinary-user 403/RLS; safe reader JSON/HTML; and desktop/375px presentation. Add the five fixed daily cutoffs, `00:05` execution with `00:00` logical end, a failed middle window recovered by its successor, 30-minute overlap idempotency, same-day initialization, and cross-day recovery whose summary remains on the original Shanghai date. Use only artificial fixture text and links.
+  Cover at least two X sources; all four post types; quote/reply/repost attribution; range completion after more than five pages; interrupted resume; duplicate replay; delayed range upper-bound exclusion; source-isolated failure; independent per-post analysis; quote-comment versus quoted-post viewpoint separation; immutable window-segment append; no-new-data distinction; ordinary-user 403/RLS; safe reader JSON/HTML; and desktop/375px presentation. Add the five fixed daily cutoffs, `00:05` execution with `00:00` logical end, a failed middle window recovered by its successor, 30-minute overlap idempotency, same-day initialization, and cross-day recovery whose segment remains on the original Shanghai date. Use only artificial fixture text and links.
 
 - [ ] **Step 2: Implement the E2E runner and document deterministic evidence.**
 
@@ -294,7 +298,7 @@
 | No fixed page-count success condition | 2, 3, 6 | 5+ page fixture, range receipt and recovery tests |
 | Per-author checkpoint, bounded history and failure isolation | 1, 3, 5, 6 | RPC/RLS tests, interrupted-source and history fixtures |
 | Fixed daily cutoffs, overlap recheck and cross-day recovery | 1, 3, 4, 6 | scheduler/range tests, idempotency fixtures, version-date assertions |
-| Daily Chinese versioned summaries | 4, 5, 6 | strict schema, summary history, reader tests |
+| Independent per-post analyses and append-only daily viewpoint segments | 1, 4, 5, 6 | strict schemas, immutability tests, chronological Reader assertions |
 | Media/external-body non-inference | 2, 4, 5, 6 | fixture/schema/reader warnings |
 | Content-first desktop and 375px reader | 5, 6 | DTO/DOM tests and authorized visual review |
 | Admin-only configuration and task operations | 1, 5, 6 | route tests, RLS, ordinary-user checks |
@@ -306,6 +310,7 @@ Plan self-review before implementation:
 - The only future shared-contract modifications occur in Task 1 and are additive, type-checked and regression-tested against Discord.
 - Every real X, remote database and deployment operation has a separate explicit authorization gate.
 - The scheduler derives every continuous range from the last successful checkpoint, not the previous trigger; its five Shanghai logical cutoffs, `00:05` day-end execution, 30-minute overlap and cross-day recovery are fixture-tested before any real acceptance.
+- Chunking is bounded transport only: each configured-author post receives an independent, immutable analysis; quote context is separately attributed; newer window segments append without supplying older LLM prose for revision, and daily-presentation versions are deterministic segment snapshots rather than model rewrites.
 - No Task treats fixed page count, missing response or provider failure as a successful empty range.
 - Every Reader task excludes raw post bodies and runtime diagnostics by DTO and DOM tests, not by visual convention alone.
 - `docs/intake.md` is preserved as the factual input; the currently unstaged user change must never be staged incidentally.
