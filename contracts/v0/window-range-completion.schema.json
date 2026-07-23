@@ -41,6 +41,16 @@
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1, "maxLength": 128 }
     },
+    "x_post_context_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    },
+    "x_daily_segment_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
     "no_new_data": { "type": "boolean" }
   }
 }

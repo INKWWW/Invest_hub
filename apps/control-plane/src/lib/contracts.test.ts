@@ -150,6 +150,56 @@ describe("v0 contracts", () => {
     expect(claim.author_profile_snapshot[0]).toMatchObject({ profile_id: "profile-1", author_id: null });
   });
 
+  it("accepts an X window claim only with a safe resolved-account snapshot", () => {
+    const claim = parseContract<{ task_type: string; source_snapshot: { source_type: string; account_id: string } }>("task-claim", {
+      contract_version: "v0",
+      task_id: "x-window-001",
+      attempt: 1,
+      task_type: "x_sync",
+      source_id: "x-source-001",
+      parameter_version: "v2-test",
+      lease_expires_at: "2026-07-23T08:10:00Z",
+      safe_checkpoint: null,
+      rule_snapshot: { version: 0, target_author_ids: [] },
+      collection_scope: { mode: "window" },
+      capture_range: {
+        mode: "window", trigger: "scheduled", timezone: "Asia/Shanghai",
+        start_at: "2026-07-23T00:00:00Z", end_at: "2026-07-23T08:00:00Z", scheduled_window_key: "2026-07-23T08:00+08:00",
+      },
+      coverage_snapshot: { coverage_start_at: "2026-07-23T00:00:00Z", coverage_through_at: "2026-07-23T00:00:00Z", last_completed_task_id: null },
+      capture_progress: { resume_cursor: null, page_count: 0, range_complete: false },
+      author_profile_snapshot: [],
+      source_snapshot: { source_type: "x", account_id: "account-001", display_name: "X author", parameter_version: "v2-test" },
+    });
+
+    expect(claim).toMatchObject({ task_type: "x_sync", source_snapshot: { source_type: "x", account_id: "account-001" } });
+  });
+
+  it("accepts typed X post context while rejecting a mismatched relation", () => {
+    const base = {
+      contract_version: "v0",
+      task_id: "x-window-001",
+      attempt: 1,
+      source_id: "x-source-001",
+      raw_messages: [],
+      canonical_messages: [],
+      structured_runs: [],
+    };
+    const xContext = {
+      external_message_id: "x-post-001",
+      post_type: "quote",
+      post_url: "https://x.com/author/status/100",
+      quoted_post_id: "quoted-001",
+      reply_to_post_id: null,
+      reposted_post_id: null,
+      context_status: "complete",
+      attachments: [],
+    };
+
+    expect(parseContract<{ x_post_contexts: unknown[] }>("worker-persistence", { ...base, x_post_contexts: [xContext] }).x_post_contexts).toHaveLength(1);
+    expect(() => parseContract("worker-persistence", { ...base, x_post_contexts: [{ ...xContext, reply_to_post_id: "reply-001" }] })).toThrow(/invalid worker-persistence contract/);
+  });
+
   it("accepts a verified V1.1 page receipt while rejecting unknown persistence fields", () => {
     const payload = parseContract<{
       capture_segment: { idempotency_key: string; response_matched: boolean; response_fresh: boolean };
