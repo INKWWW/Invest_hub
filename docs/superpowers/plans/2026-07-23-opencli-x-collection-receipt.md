@@ -1,5 +1,7 @@
 # OpenCLI X Collection Receipt Implementation Plan
 
+> **Superseded on 2026-07-23.** OpenCLI's columns contract makes a mode-switching envelope on `twitter tweets` unsuitable. The confirmed replacement is the independent [`twitter collection` command plan](2026-07-23-opencli-x-collection-command.md). Do not execute this Plan further.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 向 OpenCLI 上游的 `twitter tweets` 增加兼容的 collection receipt 模式，使时间范围采集器能可靠识别四类帖子关系并证明到达时间下界。

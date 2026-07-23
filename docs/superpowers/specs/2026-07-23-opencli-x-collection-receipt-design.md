@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：V2 依赖的 OpenCLI 上游兼容性增强
-- 书面状态：**设计已确认，待用户审阅本文并批准独立 implementation plan**
+- 书面状态：**设计已确认（2026-07-23 修订为独立命令），待用户审阅本文并批准独立 implementation plan**
 - 日期：2026-07-23
 - 上游目标：[jackwener/OpenCLI](https://github.com/jackwener/OpenCLI)
 - 关联：[V2 X Spec](2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](../plans/2026-07-22-v2-x-information-collection-and-reader.md)
@@ -14,15 +14,15 @@
 
 V2 的 X Adapter 必须证明每个不可变时间范围已经抵达下界，且必须正确区分原创、引用、回复与无附加评论的普通转发。当前 OpenCLI `twitter tweets` 已能读取基础帖子字段和引用帖摘要，但对外丢弃了回复/转发关系及分页停止事实；项目侧因此无法把成功读取固定数量帖子误判为完整时间范围。
 
-目标是在不改变既有 `opencli twitter tweets` 默认用户体验的前提下，增加一个显式、可验证、非敏感的 collection receipt 模式，使可靠的下游采集器能判断关系归因和范围完成。
+目标是在不改变既有 `opencli twitter tweets` 用户体验和 columns 契约的前提下，新增独立、可验证、非敏感的 `opencli twitter collection` 命令，使可靠的下游采集器能判断关系归因和范围完成。
 
 ## 2. 范围与非目标
 
 ### 范围
 
-- 修改 OpenCLI 上游的 Twitter `tweets` Adapter 及其人工测试 fixture；
-- 新增 opt-in `--collection-receipt` 模式与 `--until <RFC3339>` 下界参数；
-- 在该模式输出规范化的帖子关系和单次读取回执；
+- 新增 OpenCLI 上游的独立只读命令 `twitter collection` 及其人工测试 fixture；
+- 该命令接受 `--until <RFC3339>` 下界参数；
+- 该命令输出规范化的帖子关系和单次读取回执；
 - 以公开人工 GraphQL fixture 验证关系、分页和失败语义；
 - 在上游合并并发布可安装版本后，再由 Invest Hub 以独立变更接入并重新进行授权真实 Go/No-Go。
 
@@ -31,14 +31,20 @@ V2 的 X Adapter 必须证明每个不可变时间范围已经抵达下界，且
 - 不调用直接 X REST API，不导出 Cookie、CSRF、Bearer token、cursor token、Profile 或完整请求头；
 - 不用 DOM 抓取或第二套浏览器采集器替代现有 OpenCLI Cookie/页面会话路径；
 - 不把 X 原文、账户、链接或真实响应写入任何公开 fixture、提交或工程文档；
-- 不改变 `twitter tweets` 未启用 `--collection-receipt` 时的参数、返回行或排序；
+- 不改变 `twitter tweets` 的参数、返回行、columns、排序或 `top-by-engagement` 行为；
 - 不使 V2 在 receipt 不完整时降级为成功、无新增或 checkpoint 前进。
 
 ## 3. 设计决策
 
-### 3.1 保持默认模式兼容
+### 3.1 以独立命令保持既有输出兼容
 
-默认模式继续返回既有按时间倒序的帖子行数组。`--collection-receipt` 是显式 opt-in；只有该模式返回下列 envelope：
+既有 `opencli twitter tweets` 继续返回原有按时间倒序的帖子行数组。新增的 collection 命令是唯一返回下列 envelope 的命令：
+
+```text
+opencli twitter collection <username> --until <RFC3339> [--limit N] [--page-delay N] -f json
+```
+
+collection 命令的 columns 仅为 `posts`、`receipt`；调用方应使用 JSON 格式读取该 envelope，而不是把复杂嵌套结构投影成 `tweets` 的表格行。
 
 ```json
 {
@@ -53,11 +59,11 @@ V2 的 X Adapter 必须证明每个不可变时间范围已经抵达下界，且
 }
 ```
 
-`--until` 表示可靠性下界：Adapter 只有观察到至少一条 `created_at <= until` 的帖子，或确认 timeline cursor 已耗尽，才可令 `receipt.completed=true`。它不是按页面数、滚动次数或 `limit` 计数的成功替代。
+`twitter collection --until` 表示可靠性下界：Adapter 只有观察到至少一条 `created_at <= until` 的帖子，或确认 timeline cursor 已耗尽，才可令 `receipt.completed=true`。它不是按页面数、滚动次数或 `limit` 计数的成功替代。
 
 ### 3.2 规范化关系事实
 
-collection 模式中的每条帖子增加：
+collection 命令中的每条帖子增加：
 
 ```json
 {
@@ -85,7 +91,7 @@ collection 模式中的每条帖子增加：
 
 `receipt.completed` 只能为真于：
 
-1. 已抵达 `--until` 的时间下界；或
+1. 已抵达 `twitter collection --until` 的时间下界；或
 2. timeline cursor 确认耗尽，且本次读取没有协议、时间解析或页面错误。
 
 成功原因仅可为 `time_boundary_reached` 或 `cursor_exhausted`。`limit_reached`、`page_guard_hit`、重复 cursor、请求错误、GraphQL 形状变化、缺失/不可解析时间或关系无法确定均不得返回完成回执；应以现有 OpenCLI typed error 或明确的非完成状态结束。不得在已读取部分页面后静默返回一个看似完整的数组。
@@ -112,7 +118,7 @@ OpenCLI 仍仅是访问层。上游 receipt 证明的是一次网页读取的关
 3. 多页读取抵达时间下界时返回 `time_boundary_reached`；
 4. 没有更多 cursor 时返回 `cursor_exhausted`；
 5. `limit`、页数保护、重复 cursor、请求错误和时间解析错误绝不宣称完成；
-6. 未启用新 flag 的既有 `tweets` 输出保持完全兼容；
+6. 既有 `tweets` 输出保持完全兼容，且 `collection` 的 envelope columns 为 `posts`、`receipt`；
 7. Adapter 注册校验与上游相关测试通过。
 
 实际 X 验证须在 PR 合入、可安装版本确认、Browser Bridge 健康并再次取得明确授权后进行；只保留脱敏计数、状态和失败类别。
@@ -125,7 +131,7 @@ OpenCLI 仍仅是访问层。上游 receipt 证明的是一次网页读取的关
 
 ## 6. Spec 自检
 
-- 默认输出兼容与 collection 模式的新增 envelope 已明确分离。
+- 既有 `tweets` 输出与独立 `collection` envelope 已明确分离，符合 OpenCLI columns 契约。
 - 时间范围完成不依赖页数、滚动次数或单纯 limit。
 - 关系事实、上下文不可见和普通转发观点归因均有保守边界。
 - 未引入直接 API、普通用户 Token、第二套采集器、共享协议改动或真实数据持久化。
