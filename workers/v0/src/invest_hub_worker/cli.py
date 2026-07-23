@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import LocalWorkerConfigSet
 from .protocol import WorkerProtocol
-from .runtime import build_authorized_discord_runtime_set
+from .runtime import build_authorized_runtime_set
 from .worker import Worker
 
 
@@ -41,14 +41,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     acknowledgement_variable = "V1_REAL_DISCORD_ACK" if args.command == "run-scheduled" else "V0_REAL_DISCORD_ACK"
-    if os.environ.get(acknowledgement_variable) != "authorized":
-        print(json.dumps({"status": "refused", "reason": "real_discord_requires_explicit_authorization"}))
-        return 2
     if args.command == "run-scheduled" and args.poll_seconds < 1:
         print(json.dumps({"status": "refused", "reason": "poll_seconds_must_be_positive"}))
         return 2
 
     config = LocalWorkerConfigSet.load(Path(args.config))
+    has_discord = any(source.source_type == "discord" for source in config.sources)
+    has_x = any(source.source_type == "x" for source in config.sources)
+    if has_discord and os.environ.get(acknowledgement_variable) != "authorized":
+        print(json.dumps({"status": "refused", "reason": "real_discord_requires_explicit_authorization"}))
+        return 2
+    if has_x and os.environ.get("V2_REAL_X_ACK") != "authorized":
+        print(json.dumps({"status": "refused", "reason": "real_x_requires_explicit_authorization"}))
+        return 2
     credential_path = Path(args.credential)
     protocol = WorkerProtocol(config.control_plane_url, credential_path, worker_name=args.worker_name)
     if protocol.credential is None:
@@ -60,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     evidence_dir = Path(args.evidence_dir)
     evidence_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(evidence_dir, 0o700)
-    runtime = build_authorized_discord_runtime_set(
+    runtime = build_authorized_runtime_set(
         config=config,
         evidence_dir=evidence_dir,
         prompt_path=Path(args.prompt_path),

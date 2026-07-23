@@ -714,6 +714,17 @@ export interface Database {
         };
         Returns: Json;
       };
+      create_windowed_x_sync_task: {
+        Args: {
+          p_source_id: string;
+          p_parameter_version: string;
+          p_requested_by: string | null;
+          p_trigger: string;
+          p_end_at: string;
+          p_scheduled_window_key: string | null;
+        };
+        Returns: Json;
+      };
       record_windowed_capture_segment: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_segment: Json };
         Returns: Json;
@@ -727,6 +738,10 @@ export interface Database {
         Returns: Json;
       };
       enqueue_due_discord_tasks: {
+        Args: { p_worker_id: string; p_now: string };
+        Returns: Json;
+      };
+      enqueue_due_x_tasks: {
         Args: { p_worker_id: string; p_now: string };
         Returns: Json;
       };

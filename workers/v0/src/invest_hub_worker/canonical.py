@@ -100,6 +100,28 @@ class Canonicalizer:
             context_status = str(item.get("context_status") or "complete")
             if context_status not in {"complete", "unavailable", "deleted", "unresolved"}:
                 raise CanonicalValidationError(f"X context status is invalid for {external_id}")
+            context_post = item.get("context_post")
+            compact_context: dict[str, Any] | None = None
+            if context_post is not None:
+                if not isinstance(context_post, dict) or expected_relation is None:
+                    raise CanonicalValidationError(f"X context post is invalid for {external_id}")
+                context_id = str(context_post.get("id") or "")
+                if context_id != str(item.get(expected_relation) or ""):
+                    raise CanonicalValidationError(f"X context post does not match relation for {external_id}")
+                context_url = str(context_post.get("url") or "")
+                parsed_context_url = urlparse(context_url)
+                if parsed_context_url.scheme != "https" or (parsed_context_url.hostname or "").lower() not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"} or "/status/" not in parsed_context_url.path:
+                    raise CanonicalValidationError(f"X context URL is invalid for {external_id}")
+                context_author = context_post.get("author") if isinstance(context_post.get("author"), dict) else {}
+                compact_context = {
+                    "id": context_id,
+                    "author_id": str(context_author.get("id") or "") or None,
+                    "author_name": str(context_author.get("name") or "") or None,
+                    "text": str(context_post.get("text") or ""),
+                    "url": context_url,
+                }
+            if context_status == "complete" and expected_relation is not None and compact_context is None:
+                raise CanonicalValidationError(f"X complete context content is required for {external_id}")
             messages.append(CanonicalMessage(
                 source_id=page.source_id, external_message_id=external_id, author_id=author_id,
                 author_name=str(author.get("name") or ""), occurred_at=occurred_at, content=content,
@@ -109,6 +131,7 @@ class Canonicalizer:
                     "post_type": post_type, "post_url": post_url, "quoted_post_id": str(item.get("quoted_post_id") or "") or None,
                     "reply_to_post_id": str(item.get("reply_to_post_id") or "") or None, "reposted_post_id": str(item.get("reposted_post_id") or "") or None,
                     "context_status": context_status, "attachments": [value for value in attachments if isinstance(value, dict)],
+                    "context_post": compact_context,
                 }},
             ))
         return tuple(messages)

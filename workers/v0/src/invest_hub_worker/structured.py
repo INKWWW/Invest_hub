@@ -59,7 +59,20 @@ V2_X_ANALYSIS_FIELDS = frozenset({"post_id", "blogger_viewpoint", "arguments", "
 V2_X_WINDOW_FIELDS = frozenset({"schema_version", "natural_date", "range_task_id", "occurred_from_at", "occurred_through_at", "window_viewpoints", "analysis_ids", "evidence_post_ids", "uncertainties"})
 
 
-def parse_v2_x_chunk_output(text: str, allowed_post_ids: set[str], allowed_context_post_ids: set[str]) -> dict[str, Any]:
+def parse_v2_x_chunk_output(
+    text: str,
+    allowed_post_ids: set[str],
+    allowed_context_post_ids: Mapping[str, set[str]] | set[str],
+) -> dict[str, Any]:
+    """Validate one immutable analysis per authored post.
+
+    Production callers pass a mapping from an authored post ID to the context
+    post IDs visible with that exact post.  The set form is retained only for
+    the single-post fixture boundary, where it has the same meaning.  This is
+    intentionally not a global context allow-list: a quote attached to post A
+    must never become evidence for post B merely because both were collected
+    in the same window.
+    """
     payload = _json_object(text)
     _require_exact_fields(payload, V2_X_CHUNK_FIELDS, "invalid_v2_x_chunk")
     if payload.get("schema_version") != "v2-x-chunk" or not isinstance(payload.get("analyses"), list):
@@ -74,12 +87,18 @@ def parse_v2_x_chunk_output(text: str, allowed_post_ids: set[str], allowed_conte
         if not _non_empty_string(post_id) or post_id not in allowed_post_ids or post_id in seen:
             raise SchemaError("invalid_v2_x_analysis", "analysis must name one unique allowed post")
         seen.add(post_id)
+        if isinstance(allowed_context_post_ids, Mapping):
+            context_ids = allowed_context_post_ids.get(post_id)
+            if not isinstance(context_ids, set) or not all(_non_empty_string(value) for value in context_ids):
+                raise SchemaError("invalid_v2_x_chunk", "post bundle context is invalid")
+        else:
+            context_ids = allowed_context_post_ids
         if any(value[field] is not None and not _non_empty_string(value[field]) for field in ("blogger_viewpoint", "quoted_post_viewpoint")):
             raise SchemaError("invalid_v2_x_analysis", "viewpoints must be a string or null")
         if not _string_list(value["arguments"]) or not _string_list(value["uncertainties"]):
             raise SchemaError("invalid_v2_x_analysis", "arguments and uncertainties must be string arrays")
         evidence = value["evidence_post_ids"]
-        if not _non_empty_string_list(evidence) or len(set(evidence)) != len(evidence) or not set(evidence) <= ({post_id} | allowed_context_post_ids):
+        if not _non_empty_string_list(evidence) or len(set(evidence)) != len(evidence) or not set(evidence) <= ({post_id} | context_ids):
             raise SchemaError("evidence", "analysis evidence is outside its post bundle")
         link = value["post_link"]
         if not _non_empty_string(link) or not link.startswith("https://") or "/status/" not in link:

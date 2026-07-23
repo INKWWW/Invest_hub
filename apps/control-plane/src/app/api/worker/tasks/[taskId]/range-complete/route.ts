@@ -14,6 +14,8 @@ type RangeCompletionPayload = {
   boundary: Json;
   summary_batch_ids: string[];
   daily_summary_ids: string[];
+  x_post_analyses?: Json[];
+  x_daily_segments?: Json[];
   no_new_data: boolean;
 };
 

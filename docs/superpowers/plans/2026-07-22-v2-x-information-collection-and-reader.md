@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** Draft — 待用户审阅批准。批准前不得执行任何一个实现任务；真实 X 采集、远程 migration、部署和发布还需要在相应任务开始前取得明确授权。
+**Plan status:** 已批准，实施中。真实 X 采集、远程 migration、部署和发布仍需在相应任务开始前取得独立明确授权。
 
 **Spec:** [V2 X 指定博主信息收集与阅读 Spec](../specs/2026-07-22-v2-x-information-collection-and-reader-design.md)（已批准）
 
@@ -11,6 +11,13 @@
 **Architecture:** X 作为 `sources` 中独立的 `source_type`，其博主身份与帖子上下文通过 X 专用扩展表保存，而不是复用 Discord 作者规则。控制面继续生成不可变的 `(start_at, end_at]` 范围并在完成回执后推进水位；本地 Worker 通过一个受限的 X Active Adapter 逐页持久化，直到抵达下界或验证历史耗尽。X Reader 只读取安全摘要投影和帖子类型/时间/原始链接，管理员操作、原文与运行诊断保持隔离。
 
 **Tech Stack:** 现有 Next.js App Router + TypeScript 控制面、Supabase/Postgres/RLS/pgTAP、Python 3.11+ Worker、OpenCLI Browser Bridge、Codex CLI/Mock Provider、Vitest、Python `unittest`、既有 V1.1 时间窗与脱敏检查链路。
+
+## 0. 实施进度（2026-07-23）
+
+- Task 1、2 的本地契约、公开 fixture 和受限 Adapter 已完成并独立提交；Task 3、4 的窗口调度、逐页持久化、原子完成和逐帖/窗口理解已完成本地实现与确定性验证。
+- Task 5 已完成普通阅读者的 `/x` 安全投影与 `/discord` / `/x` 顶部导航；X 管理创建、人工刷新和历史回填入口仍未实现。
+- 现有 OpenCLI `twitter tweets` 被用作唯一的实际访问命令候选。它若缺少回复/转发的关系字段，运行时必须以 `opencli_contract` 失败，绝不把未知关系猜成原创帖或推进覆盖水位。
+- 尚未执行真实 X 采集、远程 migration、部署、真实普通用户阅读验收或 V2 专用 E2E；这些均保持 pending。
 
 ## Global Constraints
 

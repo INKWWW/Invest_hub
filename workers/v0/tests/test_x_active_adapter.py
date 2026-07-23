@@ -7,7 +7,7 @@ from pathlib import Path
 
 from invest_hub_worker.config import LocalWorkerConfig
 from invest_hub_worker.connectors.base import ConnectorError
-from invest_hub_worker.connectors.x_active_adapter import XActiveAdapter
+from invest_hub_worker.connectors.x_active_adapter import OpenCLITweetsInvoker, XActiveAdapter
 
 
 class FakeXInvoker:
@@ -52,3 +52,25 @@ class XActiveAdapterTests(unittest.TestCase):
         with self.assertRaises(ConnectorError) as caught:
             XActiveAdapter(FakeXInvoker(response, response)).fetch_page(source_config(), None)
         self.assertEqual(caught.exception.code, "opencli_missing")
+
+    def test_existing_opencli_tweets_capability_is_the_only_live_transport(self) -> None:
+        commands: list[list[str]] = []
+
+        class Result:
+            returncode = 0
+            stdout = json.dumps([{
+                "id": "1", "author": "Fixture", "created_at": "2026-07-23T00:01:00Z", "text": "fixture",
+                "url": "https://x.com/fixture/status/1", "is_retweet": False, "media_urls": [],
+                "quoted_tweet": {"id": "2", "author": "Quoted", "text": "quoted", "url": "https://x.com/quoted/status/2"},
+            }])
+
+        def runner(command: list[str], **_kwargs: object) -> Result:
+            commands.append(command)
+            return Result()
+
+        invoker = OpenCLITweetsInvoker("opencli", runner=runner)
+        page = XActiveAdapter(invoker).fetch_page(source_config(), None, end_at=datetime(2026, 7, 23, 8, tzinfo=timezone.utc))
+
+        self.assertEqual(commands[0][:4], ["opencli", "twitter", "tweets", "fixture"])
+        self.assertEqual(page.messages[0]["post_type"], "quote")
+        self.assertTrue(page.telemetry["history_exhausted"])

@@ -14,10 +14,12 @@ class XCanonicalTests(unittest.TestCase):
     def test_x_quote_relation_is_preserved_without_merging_context_content(self) -> None:
         message = Canonicalizer().map(x_page({
             "id": "post-1", "author": {"id": "author-1", "name": "Author"}, "text": "comment", "created_at": "2026-07-23T00:00:00Z",
-            "url": "https://x.com/author/status/1", "post_type": "quote", "quoted_post_id": "quoted-1", "context_status": "complete", "attachments": [],
+            "url": "https://x.com/author/status/1", "post_type": "quote", "quoted_post_id": "quoted-1", "context_status": "complete",
+            "context_post": {"id": "quoted-1", "author": {"id": "author-2", "name": "Quoted"}, "text": "quoted view", "url": "https://x.com/quoted/status/2"}, "attachments": [],
         }))[0]
         self.assertEqual(message.metadata["x"]["post_type"], "quote")
         self.assertEqual(message.metadata["x"]["quoted_post_id"], "quoted-1")
+        self.assertEqual(message.metadata["x"]["context_post"]["text"], "quoted view")
         self.assertEqual(message.content, "comment")
 
     def test_x_repost_cannot_fabricate_an_author_comment(self) -> None:
