@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from .connectors.base import RawPage
 
@@ -27,6 +29,8 @@ class CanonicalMessage:
 
 class Canonicalizer:
     def map(self, page: RawPage) -> tuple[CanonicalMessage, ...]:
+        if page.source_type == "x":
+            return self._map_x(page)
         ids = {str(item.get("id")) for item in page.messages if item.get("id") is not None}
         messages: list[CanonicalMessage] = []
         for item in page.messages:
@@ -56,4 +60,55 @@ class Canonicalizer:
                     metadata={"raw_payload_ref": page.raw_payload_ref},
                 )
             )
+        return tuple(messages)
+
+    def _map_x(self, page: RawPage) -> tuple[CanonicalMessage, ...]:
+        seen_ids: set[str] = set()
+        messages: list[CanonicalMessage] = []
+        for item in page.messages:
+            external_id = str(item.get("id") or "")
+            if not external_id or external_id in seen_ids:
+                raise CanonicalValidationError("X post id must be stable and unique per page")
+            seen_ids.add(external_id)
+            author = item.get("author") if isinstance(item.get("author"), dict) else {}
+            author_id = str(author.get("id") or "")
+            if not author_id:
+                raise CanonicalValidationError(f"X author id is required for {external_id}")
+            occurred_at = str(item.get("created_at") or "")
+            try:
+                parsed_time = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise CanonicalValidationError(f"X post time is invalid for {external_id}") from exc
+            if parsed_time.tzinfo is None:
+                raise CanonicalValidationError(f"X post time must include a timezone for {external_id}")
+            post_type = str(item.get("post_type") or "")
+            if post_type not in {"original", "quote", "reply", "repost"}:
+                raise CanonicalValidationError(f"X post type is invalid for {external_id}")
+            post_url = str(item.get("url") or "")
+            url = urlparse(post_url)
+            if url.scheme != "https" or (url.hostname or "").lower() not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"} or "/status/" not in url.path:
+                raise CanonicalValidationError(f"X post URL is invalid for {external_id}")
+            relation_names = {"quote": "quoted_post_id", "reply": "reply_to_post_id", "repost": "reposted_post_id"}
+            relation_values = {name: item.get(name) for name in relation_names.values()}
+            expected_relation = relation_names.get(post_type)
+            if any((name == expected_relation) != bool(value) for name, value in relation_values.items()):
+                raise CanonicalValidationError(f"X post context relation is invalid for {external_id}")
+            content = str(item.get("text") or "")
+            if post_type == "repost" and content:
+                raise CanonicalValidationError("X repost cannot fabricate a blogger comment")
+            attachments = item.get("attachments") if isinstance(item.get("attachments"), list) else []
+            context_status = str(item.get("context_status") or "complete")
+            if context_status not in {"complete", "unavailable", "deleted", "unresolved"}:
+                raise CanonicalValidationError(f"X context status is invalid for {external_id}")
+            messages.append(CanonicalMessage(
+                source_id=page.source_id, external_message_id=external_id, author_id=author_id,
+                author_name=str(author.get("name") or ""), occurred_at=occurred_at, content=content,
+                reply_to_message_id=str(item.get("reply_to_post_id") or "") or None, quote=None,
+                attachments=tuple(value for value in attachments if isinstance(value, dict)),
+                metadata={"raw_payload_ref": page.raw_payload_ref, "x": {
+                    "post_type": post_type, "post_url": post_url, "quoted_post_id": str(item.get("quoted_post_id") or "") or None,
+                    "reply_to_post_id": str(item.get("reply_to_post_id") or "") or None, "reposted_post_id": str(item.get("reposted_post_id") or "") or None,
+                    "context_status": context_status, "attachments": [value for value in attachments if isinstance(value, dict)],
+                }},
+            ))
         return tuple(messages)

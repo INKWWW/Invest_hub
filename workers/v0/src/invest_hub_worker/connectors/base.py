@@ -19,6 +19,7 @@ class RawPage:
     messages: tuple[dict[str, Any], ...]
     raw_payload_ref: str
     telemetry: dict[str, Any] = field(default_factory=dict)
+    source_type: str = "discord"
 
 
 class Connector(Protocol):
