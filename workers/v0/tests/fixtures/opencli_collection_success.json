@@ -1,0 +1,67 @@
+{
+  "posts": [
+    {
+      "id": "original-1",
+      "author": "Fixture",
+      "name": "Fixture Author",
+      "text": "artificial original",
+      "created_at": "2026-07-23T00:10:00Z",
+      "url": "https://x.com/fixture/status/1",
+      "media_urls": [],
+      "relationship": {"kind": "original", "target": null}
+    },
+    {
+      "id": "quote-1",
+      "author": "Fixture",
+      "name": "Fixture Author",
+      "text": "artificial quote comment",
+      "created_at": "2026-07-23T00:11:00Z",
+      "url": "https://x.com/fixture/status/2",
+      "media_urls": [],
+      "quoted_tweet": {
+        "id": "quoted-1",
+        "author": "Quoted",
+        "name": "Quoted Author",
+        "text": "artificial quoted viewpoint",
+        "url": "https://x.com/quoted/status/3"
+      },
+      "relationship": {
+        "kind": "quote",
+        "target": {"post_id": "quoted-1", "author_handle": "Quoted", "author_id": "quoted-author", "url": "https://x.com/quoted/status/3", "context_status": "complete"}
+      }
+    },
+    {
+      "id": "reply-1",
+      "author": "Fixture",
+      "name": "Fixture Author",
+      "text": "artificial reply",
+      "created_at": "2026-07-23T00:12:00Z",
+      "url": "https://x.com/fixture/status/4",
+      "media_urls": [],
+      "relationship": {
+        "kind": "reply",
+        "target": {"post_id": "parent-1", "author_handle": "Parent", "author_id": "parent-author", "url": "https://x.com/parent/status/5", "context_status": "unavailable"}
+      }
+    },
+    {
+      "id": "repost-1",
+      "author": "Fixture",
+      "name": "Fixture Author",
+      "text": "source text that must not become a blogger comment",
+      "created_at": "2026-07-23T00:13:00Z",
+      "url": "https://x.com/fixture/status/6",
+      "media_urls": [],
+      "relationship": {
+        "kind": "repost",
+        "target": {"post_id": "reposted-1", "author_handle": "Original", "author_id": "original-author", "url": "https://x.com/original/status/7", "context_status": "unavailable"}
+      }
+    }
+  ],
+  "receipt": {
+    "completed": true,
+    "stop_reason": "time_boundary_reached",
+    "requested_until": "2026-07-22T23:30:00.000Z",
+    "pages_fetched": 2,
+    "oldest_seen_at": "2026-07-22T23:29:00.000Z"
+  }
+}

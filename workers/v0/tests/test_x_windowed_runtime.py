@@ -13,6 +13,10 @@ from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
 from invest_hub_worker.runtime import RuntimeExecutionError, XWindowedRuntime
 
 
+LOWER_BOUND = datetime(2026, 7, 22, 23, 30, tzinfo=timezone.utc)
+END_AT = datetime(2026, 7, 23, 8, tzinfo=timezone.utc)
+
+
 def source_config() -> LocalWorkerConfig:
     return LocalWorkerConfig.from_mapping({
         "control_plane_url": "https://control.example.invalid", "source_id": "x-source",
@@ -35,6 +39,28 @@ def claim() -> dict[str, object]:
         "capture_progress": {"resume_cursor": None, "page_count": 0, "range_complete": False},
         "author_profile_snapshot": [],
         "source_snapshot": {"source_type": "x", "account_id": "account-1", "display_name": "Fixture", "parameter_version": "v2-test"},
+    }
+
+
+def receipt_telemetry(stop_reason: str, oldest_seen_at: str | None) -> dict[str, object]:
+    return {
+        "match_state": "collection_receipt_verified",
+        "collection_receipt_verified": True,
+        "collection_stop_reason": stop_reason,
+        "collection_requested_until": "2026-07-22T23:30:00Z",
+        "collection_oldest_seen_at": oldest_seen_at,
+        "collection_pages_fetched": 2,
+        "history_exhausted": stop_reason == "cursor_exhausted",
+    }
+
+
+def quote_post() -> dict[str, object]:
+    return {
+        "id": "post-new", "author": {"id": "account-1", "name": "Fixture"}, "text": "作者评论",
+        "created_at": "2026-07-23T00:10:00Z", "url": "https://x.com/fixture/status/1",
+        "post_type": "quote", "quoted_post_id": "context-1", "context_status": "complete",
+        "context_post": {"id": "context-1", "author": {"id": "other", "name": "Other"}, "text": "引用帖子正文", "url": "https://x.com/other/status/2"},
+        "attachments": [],
     }
 
 
@@ -61,83 +87,64 @@ class Provider:
 
 
 class XWindowedRuntimeTests(unittest.TestCase):
-    def test_explicit_history_range_uses_start_boundary_without_a_continuous_overlap(self) -> None:
-        class Connector:
-            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:
-                return RawPage(
-                    page_id="history-page", source_id="x-source", source_type="x", cursor_before=cursor, cursor_after=None,
-                    raw_payload_ref="local://x/history-page", telemetry={"match_state": "matched_new", "history_exhausted": True}, messages=(
-                        {"id": "post-new", "author": {"id": "account-1", "name": "Fixture"}, "text": "作者评论", "created_at": "2026-07-23T00:10:00Z", "url": "https://x.com/fixture/status/1", "post_type": "quote", "quoted_post_id": "context-1", "context_status": "complete", "context_post": {"id": "context-1", "author": {"id": "other", "name": "Other"}, "text": "引用帖子正文", "url": "https://x.com/other/status/2"}, "attachments": []},
-                        {"id": "post-before-history", "author": {"id": "account-1", "name": "Fixture"}, "text": "范围前帖子", "created_at": "2026-07-22T23:20:00Z", "url": "https://x.com/fixture/status/3", "post_type": "original", "context_status": "complete", "attachments": []},
-                    ),
-                )
+    def runtime(self, connector: object, directory: str) -> XWindowedRuntime:
+        return XWindowedRuntime(
+            config=source_config(), connector=connector, evidence=LocalEvidenceStore(Path(directory) / "evidence"),
+            canonicalizer=Canonicalizer(), provider=Provider(), prompt_template="private",
+        )
 
-        history_claim = claim()
-        history_claim["collection_scope"] = {"mode": "history"}
-        history_claim["capture_range"] = {
-            "mode": "history", "trigger": "history", "timezone": "Asia/Shanghai",
-            "start_at": "2026-07-23T00:00:00Z", "end_at": "2026-07-23T08:00:00Z",
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            runtime = XWindowedRuntime(config=source_config(), connector=Connector(), evidence=LocalEvidenceStore(Path(directory) / "evidence"), canonicalizer=Canonicalizer(), provider=Provider(), prompt_template="private")
-            completion = runtime.execute_windowed(history_claim)["range_completion"]
-        self.assertEqual(completion["capture_range"]["mode"], "history")
-        self.assertEqual(completion["boundary"]["kind"], "oldest_at_or_before_start")
-
-    def test_page_is_durable_before_per_post_analysis_and_completion_only_contains_new_posts(self) -> None:
+    def test_receipt_uses_overlap_start_as_lower_boundary_and_completes_the_window(self) -> None:
         class Connector:
-            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:
-                if cursor is not None or end_at != datetime(2026, 7, 23, 8, tzinfo=timezone.utc):
-                    raise AssertionError("X runtime requested an unexpected collection page")
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                if cursor is not None or lower_bound_at != LOWER_BOUND or end_at != END_AT:
+                    raise AssertionError("X runtime did not request the immutable Collection range")
                 return RawPage(
                     page_id="x-page-1", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
-                    raw_payload_ref="local://x/x-page-1", telemetry={"match_state": "matched_new", "history_exhausted": True},
-                    messages=(
-                        {"id": "post-new", "author": {"id": "account-1", "name": "Fixture"}, "text": "作者评论", "created_at": "2026-07-23T00:10:00Z", "url": "https://x.com/fixture/status/1", "post_type": "quote", "quoted_post_id": "context-1", "context_status": "complete", "context_post": {"id": "context-1", "author": {"id": "other", "name": "Other"}, "text": "引用帖子正文", "url": "https://x.com/other/status/2"}, "attachments": []},
-                        {"id": "post-overlap", "author": {"id": "account-1", "name": "Fixture"}, "text": "重叠旧帖", "created_at": "2026-07-22T23:20:00Z", "url": "https://x.com/fixture/status/3", "post_type": "original", "context_status": "complete", "attachments": []},
-                    ),
+                    raw_payload_ref="local://x/x-page-1", telemetry=receipt_telemetry("time_boundary_reached", "2026-07-22T23:29:00Z"),
+                    messages=(quote_post(),),
                 )
 
-        pages: list[dict[str, object]] = []
-        provider = Provider()
         with tempfile.TemporaryDirectory() as directory:
-            runtime = XWindowedRuntime(config=source_config(), connector=Connector(), evidence=LocalEvidenceStore(Path(directory) / "evidence"), canonicalizer=Canonicalizer(), provider=provider, prompt_template="private")
-            bundle = runtime.execute_windowed(claim(), on_capture_page=pages.append)
-
-        self.assertEqual(provider.operations, ["v2_x_chunk", "v2_x_window"])
-        self.assertEqual(len(pages), 1)
-        persistence = pages[0]["persistence"]
-        self.assertEqual({row["external_message_id"] for row in persistence["x_post_contexts"]}, {"post-new", "post-overlap"})
-        self.assertEqual(persistence["raw_messages"][0]["retention_expires_at"], "2027-07-23T00:10:00Z")
-        completion = bundle["range_completion"]
-        self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
-        self.assertEqual(completion["x_daily_segments"][0]["analysis_ids"], ["post-new@1"])
+            completion = self.runtime(Connector(), directory).execute_windowed(claim())["range_completion"]
         self.assertEqual(completion["boundary"]["kind"], "oldest_at_or_before_start")
+        self.assertEqual(completion["boundary"]["observed_at"], "2026-07-22T23:29:00Z")
+        self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
+
+    def test_cursor_exhausted_empty_page_is_a_valid_no_new_data_completion(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                return RawPage(
+                    page_id="empty", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/empty", telemetry=receipt_telemetry("cursor_exhausted", None), messages=(),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            completion = self.runtime(Connector(), directory).execute_windowed(claim())["range_completion"]
+        self.assertEqual(completion["boundary"]["kind"], "history_exhausted")
+        self.assertTrue(completion["no_new_data"])
+
+    def test_unverified_receipt_cannot_advance_the_window(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                return RawPage(
+                    page_id="invalid", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/invalid", telemetry={"match_state": "matched_new", "history_exhausted": True}, messages=(quote_post(),),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeExecutionError, "receipt"):
+                self.runtime(Connector(), directory).execute_windowed(claim())
 
     def test_post_after_fixed_end_is_rejected_without_advancing_the_range(self) -> None:
         class Connector:
-            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:
-                return RawPage(page_id="future", source_id="x-source", source_type="x", cursor_before=cursor, cursor_after=None,
-                               raw_payload_ref="local://x/future", telemetry={"match_state": "matched_new", "history_exhausted": True}, messages=(
-                                   {"id": "future", "author": {"id": "account-1"}, "text": "future", "created_at": "2026-07-23T08:01:00Z", "url": "https://x.com/fixture/status/9", "post_type": "original", "context_status": "complete", "attachments": []},
-                               ))
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                future = {"id": "future", "author": {"id": "account-1"}, "text": "future", "created_at": "2026-07-23T08:01:00Z", "url": "https://x.com/fixture/status/9", "post_type": "original", "context_status": "complete", "attachments": []}
+                return RawPage(page_id="future", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                               raw_payload_ref="local://x/future", telemetry=receipt_telemetry("time_boundary_reached", "2026-07-22T23:29:00Z"), messages=(future,))
 
         with tempfile.TemporaryDirectory() as directory:
-            runtime = XWindowedRuntime(config=source_config(), connector=Connector(), evidence=LocalEvidenceStore(Path(directory) / "evidence"), canonicalizer=Canonicalizer(), provider=Provider(), prompt_template="private")
             with self.assertRaisesRegex(RuntimeExecutionError, "fixed end_at"):
-                runtime.execute_windowed(claim())
-
-    def test_unproven_history_cap_does_not_advance_the_window(self) -> None:
-        class Connector:
-            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:
-                return RawPage(page_id="cap", source_id="x-source", source_type="x", cursor_before=cursor, cursor_after=None,
-                               raw_payload_ref="local://x/cap", telemetry={"match_state": "matched_new", "history_exhausted": False}, messages=(
-                                   {"id": "cap", "author": {"id": "account-1"}, "text": "cap", "created_at": "2026-07-23T00:10:00Z", "url": "https://x.com/fixture/status/10", "post_type": "original", "context_status": "complete", "attachments": []},
-                               ))
-        with tempfile.TemporaryDirectory() as directory:
-            runtime = XWindowedRuntime(config=source_config(), connector=Connector(), evidence=LocalEvidenceStore(Path(directory) / "evidence"), canonicalizer=Canonicalizer(), provider=Provider(), prompt_template="private")
-            with self.assertRaisesRegex(RuntimeExecutionError, "cannot prove"):
-                runtime.execute_windowed(claim())
+                self.runtime(Connector(), directory).execute_windowed(claim())
 
 
 if __name__ == "__main__":
