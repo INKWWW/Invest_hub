@@ -1,0 +1,8 @@
+Usage: opencli twitter collection <username> --until <RFC3339> [options]
+
+Fetch a user timeline with relationship facts and a bounded completion receipt.
+
+Options:
+  --until <timestamp>  RFC3339 lower time boundary that must be reached
+  --limit <count>      Safety ceiling for collected posts
+  --page-delay <sec>   Delay between timeline pages

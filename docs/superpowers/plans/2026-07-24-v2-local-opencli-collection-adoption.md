@@ -32,7 +32,7 @@
 - Modify: `.gitignore`
 - Modify: `scripts/v2/run-v2-e2e.sh`
 
-- [ ] **Step 1: 写出先失败的锁定合同测试。**
+- [x] **Step 1: 写出先失败的锁定合同测试。**
 
   `scripts/v2/test-local-opencli-collection-contract.mjs` 只读取 lock 文件和传入的本地 executable，不读取登录态。它必须断言：锁文件字段完整、两个完整 Git SHA、`package_lock_sha256`、Apache-2.0、运行时相对目录、`twitter collection` 命令名，以及成功回执的四个允许字段。传入假的 executable 或缺少 `collection` 命令时以非零退出。
 
@@ -55,7 +55,7 @@
 
   预期：在 lock 和 fixture 尚不存在时失败；测试不得联网、不得调用 X。
 
-- [ ] **Step 2: 以非秘密 metadata 固化来源和验收面。**
+- [x] **Step 2: 以非秘密 metadata 固化来源和验收面。**
 
   新建 `tools/opencli-v2-collection.lock.json`。它只包含公开 provenance 和合同，不含本机路径、账号或 URL：
 
@@ -75,7 +75,7 @@
 
   在 `.gitignore` 保持 `.runtime/` 规则有效；如需更明确注释，只添加 `.runtime/v2/opencli-collection/`，不得取消整体忽略。
 
-- [ ] **Step 3: 实现候选构建、验证后切换的安装脚本。**
+- [x] **Step 3: 实现候选构建、验证后切换的安装脚本。**
 
   `scripts/v2/install-local-opencli-collection.sh` 必须：
 
@@ -93,13 +93,13 @@
 
   运行时布局固定为 `current/source/`（受控源码）与 `current/bin/`（专用入口）；脚本先检查 `current/source/dist/src/main.js` 存在和 Node 主版本不低于 20。
 
-- [ ] **Step 4: 实现只读验证脚本并接入确定性 V2 回归。**
+- [x] **Step 4: 实现只读验证脚本并接入确定性 V2 回归。**
 
   `scripts/v2/verify-local-opencli-collection.sh` 不构建、不下载、不访问 X。它接受相同 lock/runtime 参数，运行以下检查：文件哈希、`git rev-parse HEAD`、Node 版本、`--help` 的 `collection`/`--until`，以及 Node 合同测试。它打印公开版本/commit/通过项，绝不打印浏览器 profile、环境变量、命令完整 stderr 或网页内容。
 
   在 `scripts/v2/run-v2-e2e.sh` 中把静态合同测试作为最先执行的步骤；只有调用者显式提供已验证的专用 executable 时才运行 `verify-local-opencli-collection.sh`。普通 CI 和默认 E2E 必须仍能在没有本地构建、没有 X 登录的环境中通过。
 
-- [ ] **Step 5: 运行 Task 1 验证并提交。**
+- [x] **Step 5: 运行 Task 1 验证并提交。**
 
   ```bash
   node scripts/v2/test-local-opencli-collection-contract.mjs --lock tools/opencli-v2-collection.lock.json --fixture-help workers/v0/tests/fixtures/opencli_twitter_collection_help.txt

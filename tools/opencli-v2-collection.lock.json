@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "source_repository": "https://github.com/INKWWW/OpenCLI.git",
+  "base_commit": "584934edf245f4ecb8e617433bdcea9c65ec23c3",
+  "collection_commit": "b8589347d4b6a3effae5fd2198115f59ab053946",
+  "package_lock_sha256": "e149339d464cf4f19c651fcae19471d67e1f29ad87502ae2d8e6b1e2fcf1f54e",
+  "license": "Apache-2.0",
+  "runtime_dir": ".runtime/v2/opencli-collection",
+  "command": "twitter collection",
+  "success_stop_reasons": [
+    "time_boundary_reached",
+    "cursor_exhausted"
+  ]
+}
