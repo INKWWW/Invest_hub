@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 from .errors import ConfigError
 
 
-_FIELDS = {
+_LEGACY_FIELDS = {
     "control_plane_url",
     "source_id",
     "channel_url",
@@ -21,19 +21,35 @@ _FIELDS = {
     "opencli_contract_version",
     "parameter_version",
 }
+_FIELDS = {
+    "control_plane_url",
+    "source_id",
+    "source_type",
+    "source_url",
+    "profile_ref",
+    "opencli_contract_version",
+    "parameter_version",
+}
 _CONFIG_SET_FIELDS = {"control_plane_url", "sources"}
-_SOURCE_FIELDS = _FIELDS - {"control_plane_url"}
 
 
 @dataclass(frozen=True)
 class LocalWorkerConfig:
     control_plane_url: str
     source_id: str
-    channel_url: str
+    source_type: str
+    source_url: str
     profile_ref: str
     opencli_contract_version: str
     parameter_version: str
     config_hash: str
+
+    @property
+    def channel_url(self) -> str:
+        """Compatibility accessor for the Discord-only Active Adapter."""
+        if self.source_type != "discord":
+            raise ConfigError("channel_url is only defined for a Discord source")
+        return self.source_url
 
     @classmethod
     def load(cls, path: Path) -> "LocalWorkerConfig":
@@ -57,6 +73,9 @@ class LocalWorkerConfig:
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> "LocalWorkerConfig":
+        if set(value) == _LEGACY_FIELDS:
+            value = {**value, "source_type": "discord", "source_url": value["channel_url"]}
+            value.pop("channel_url")
         unknown = set(value) - _FIELDS
         missing = _FIELDS - set(value)
         if unknown:
@@ -72,9 +91,17 @@ class LocalWorkerConfig:
             raise ConfigError("control_plane_url must be an absolute HTTP(S) URL")
         if control.scheme == "http" and control.hostname not in {"127.0.0.1", "localhost", "::1"}:
             raise ConfigError("control_plane_url must use HTTPS outside localhost")
-        channel = urlparse(value["channel_url"])
-        if channel.scheme != "https" or not channel.netloc:
-            raise ConfigError("channel_url must be an absolute HTTPS URL")
+        source_type = value["source_type"]
+        if source_type not in {"discord", "x"}:
+            raise ConfigError("source_type must be discord or x")
+        source_url = urlparse(value["source_url"])
+        if source_url.scheme != "https" or not source_url.netloc:
+            raise ConfigError("source_url must be an absolute HTTPS URL")
+        host = (source_url.hostname or "").lower()
+        if source_type == "discord" and host != "discord.com":
+            raise ConfigError("Discord source_url must use discord.com")
+        if source_type == "x" and host not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
+            raise ConfigError("X source_url must use x.com or twitter.com")
 
         canonical = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return cls(config_hash=hashlib.sha256(canonical).hexdigest(), **value)
@@ -83,6 +110,7 @@ class LocalWorkerConfig:
         return {
             "config_hash": self.config_hash,
             "source_id": self.source_id,
+            "source_type": self.source_type,
             "opencli_contract_version": self.opencli_contract_version,
             "parameter_version": self.parameter_version,
         }
@@ -134,12 +162,6 @@ class LocalWorkerConfigSet:
         for source in sources_value:
             if not isinstance(source, dict):
                 raise ConfigError("worker config source must be an object")
-            unknown_source = set(source) - _SOURCE_FIELDS
-            missing_source = _SOURCE_FIELDS - set(source)
-            if unknown_source:
-                raise ConfigError(f"unknown worker source fields: {sorted(unknown_source)}")
-            if missing_source:
-                raise ConfigError(f"missing worker source fields: {sorted(missing_source)}")
             source_config = LocalWorkerConfig.from_mapping({"control_plane_url": control_plane_url, **source})
             if source_config.source_id in seen_source_ids:
                 raise ConfigError("worker config source_id values must be unique")

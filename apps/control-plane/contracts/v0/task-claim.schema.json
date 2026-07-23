@@ -8,7 +8,7 @@
     "contract_version": { "const": "v0" },
     "task_id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "attempt": { "type": "integer", "minimum": 1 },
-    "task_type": { "const": "discord_sync" },
+    "task_type": { "enum": ["discord_sync", "x_sync"] },
     "source_id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "parameter_version": { "type": "string", "minLength": 1, "maxLength": 128 },
     "lease_expires_at": { "type": "string", "format": "date-time" },
@@ -57,7 +57,8 @@
         "timezone": { "const": "Asia/Shanghai" },
         "start_at": { "type": "string", "format": "date-time" },
         "end_at": { "type": "string", "format": "date-time" },
-        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|16:00|20:50)[+]08:00$" }
+        "overlap_start_at": { "type": "string", "format": "date-time" },
+        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|12:00|16:00|20:00|20:50)[+]08:00$" }
       }
     },
     "coverage_snapshot": {
@@ -118,6 +119,17 @@
           }
         ]
       }
+    },
+    "source_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "account_id", "display_name", "parameter_version"],
+      "properties": {
+        "source_type": { "const": "x" },
+        "account_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "display_name": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "parameter_version": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
     }
   },
   "allOf": [
@@ -140,6 +152,16 @@
           "author_profile_snapshot": {}
         },
         "required": ["capture_range", "coverage_snapshot", "capture_progress", "author_profile_snapshot"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "task_type": { "const": "x_sync" } },
+        "required": ["task_type"]
+      },
+      "then": {
+        "properties": { "source_snapshot": {} },
+        "required": ["source_snapshot"]
       }
     }
   ]

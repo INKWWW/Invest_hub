@@ -15,6 +15,8 @@ from ..structured import (
     parse_structured_output,
     parse_v1_1_chunk_output,
     parse_v1_1_daily_output,
+    parse_v2_x_chunk_output,
+    parse_v2_x_window_output,
     validate_structured_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -245,6 +247,11 @@ class CodexCLIProvider:
                 catalog,
                 set(context.unparsed_media_message_ids),
             )
+
+        if context.operation == "v2_x_chunk":
+            return parse_v2_x_chunk_output(raw_text, set(context.input_message_ids), set(context.visible_context_post_ids))
+        if context.operation == "v2_x_window":
+            return parse_v2_x_window_output(raw_text, set(context.input_message_ids))
 
         parsed = parse_v1_1_daily_output(raw_text)
         return validate_v1_1_daily_output(

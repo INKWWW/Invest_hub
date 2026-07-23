@@ -100,7 +100,7 @@ export interface Database {
         Row: {
           id: string;
           source_key: string;
-          source_type: "discord";
+          source_type: "discord" | "x";
           display_name: string;
           parameter_version: string;
           enabled: boolean;
@@ -113,7 +113,7 @@ export interface Database {
         Insert: {
           id?: string;
           source_key: string;
-          source_type: "discord";
+          source_type: "discord" | "x";
           display_name: string;
           parameter_version: string;
           enabled?: boolean;
@@ -129,7 +129,7 @@ export interface Database {
       sync_tasks: {
         Row: {
           id: string;
-          task_type: "discord_sync";
+          task_type: "discord_sync" | "x_sync";
           source_id: string;
           status: TaskStatus;
           parameter_version: string;
@@ -142,12 +142,13 @@ export interface Database {
           collection_scope: Json;
           capture_range: Json | null;
           author_profile_snapshot: Json;
+          x_source_snapshot: Json | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
-          task_type: "discord_sync";
+          task_type: "discord_sync" | "x_sync";
           source_id: string;
           status?: TaskStatus;
           parameter_version: string;
@@ -160,6 +161,7 @@ export interface Database {
           collection_scope?: Json;
           capture_range?: Json | null;
           author_profile_snapshot?: Json;
+          x_source_snapshot?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -550,6 +552,110 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["daily_summaries"]["Insert"]>;
         Relationships: [];
       };
+      x_source_profiles: {
+        Row: {
+          source_id: string;
+          requested_handle: string;
+          account_id: string | null;
+          display_name: string;
+          resolution_status: "pending" | "resolved" | "ambiguous";
+          enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          source_id: string;
+          requested_handle: string;
+          account_id?: string | null;
+          display_name: string;
+          resolution_status?: "pending" | "resolved" | "ambiguous";
+          enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_source_profiles"]["Insert"]>;
+        Relationships: [];
+      };
+      x_post_contexts: {
+        Row: {
+          canonical_message_id: string;
+          post_type: "original" | "quote" | "reply" | "repost";
+          post_url: string;
+          quoted_post_id: string | null;
+          reply_to_post_id: string | null;
+          reposted_post_id: string | null;
+          context_status: "complete" | "unavailable" | "deleted" | "unresolved";
+          attachments: Json;
+          created_at: string;
+        };
+        Insert: {
+          canonical_message_id: string;
+          post_type: "original" | "quote" | "reply" | "repost";
+          post_url: string;
+          quoted_post_id?: string | null;
+          reply_to_post_id?: string | null;
+          reposted_post_id?: string | null;
+          context_status: "complete" | "unavailable" | "deleted" | "unresolved";
+          attachments?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_post_contexts"]["Insert"]>;
+        Relationships: [];
+      };
+      x_post_analyses: {
+        Row: {
+          canonical_message_id: string;
+          analysis_version: number;
+          blogger_viewpoint: string | null;
+          arguments: Json;
+          quoted_post_viewpoint: string | null;
+          uncertainties: Json;
+          evidence_refs: Json;
+          created_at: string;
+        };
+        Insert: {
+          canonical_message_id: string;
+          analysis_version: number;
+          blogger_viewpoint?: string | null;
+          arguments: Json;
+          quoted_post_viewpoint?: string | null;
+          uncertainties: Json;
+          evidence_refs: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_post_analyses"]["Insert"]>;
+        Relationships: [];
+      };
+      x_daily_viewpoint_segments: {
+        Row: {
+          id: string;
+          source_id: string;
+          natural_date: string;
+          range_task_id: string;
+          segment_version: number;
+          occurred_from_at: string;
+          occurred_through_at: string;
+          window_viewpoints: Json;
+          post_analysis_refs: Json;
+          evidence_refs: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          natural_date: string;
+          range_task_id: string;
+          segment_version: number;
+          occurred_from_at: string;
+          occurred_through_at: string;
+          window_viewpoints: Json;
+          post_analysis_refs: Json;
+          evidence_refs: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_daily_viewpoint_segments"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Enums: Record<string, never>;
@@ -608,6 +714,29 @@ export interface Database {
         };
         Returns: Json;
       };
+      create_windowed_x_sync_task: {
+        Args: {
+          p_source_id: string;
+          p_parameter_version: string;
+          p_requested_by: string | null;
+          p_trigger: string;
+          p_end_at: string;
+          p_scheduled_window_key: string | null;
+        };
+        Returns: Json;
+      };
+      create_bounded_x_history_task: {
+        Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_start_at: string; p_end_at: string };
+        Returns: Json;
+      };
+      create_x_source: {
+        Args: { p_source_key: string; p_display_name: string; p_requested_handle: string; p_parameter_version: string; p_actor_id: string };
+        Returns: Json;
+      };
+      initialize_x_collection_coverage: {
+        Args: { p_source_id: string; p_actor_id: string; p_boundary: string };
+        Returns: Json;
+      };
       record_windowed_capture_segment: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_segment: Json };
         Returns: Json;
@@ -616,11 +745,19 @@ export interface Database {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
         Returns: Json;
       };
+      complete_bounded_x_history_range: {
+        Args: { p_task_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
+        Returns: Json;
+      };
       enqueue_scheduled_discord_tasks: {
         Args: { p_worker_id: string; p_window_key: string };
         Returns: Json;
       };
       enqueue_due_discord_tasks: {
+        Args: { p_worker_id: string; p_now: string };
+        Returns: Json;
+      };
+      enqueue_due_x_tasks: {
         Args: { p_worker_id: string; p_now: string };
         Returns: Json;
       };

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { DiscordReader } from "../../components/reader/DiscordReader";
+import { ReaderSourceNavigation } from "../../components/reader/ReaderSourceNavigation";
 import { SessionControls } from "../../components/auth/SessionControls";
 import { getCurrentUser } from "../../lib/auth/current-user";
 import { readDiscordDay } from "../../lib/db/repositories/reader";
@@ -21,6 +22,7 @@ export default async function DiscordPage() {
       </div>
       <h1>Discord 日度研判</h1>
       <p>按频道和日期阅读已生成的观点与话题。</p>
+      <ReaderSourceNavigation active="discord" />
     </header>
     <DiscordReader days={days} manualRefreshSources={manualRefreshSources} />
   </main>;

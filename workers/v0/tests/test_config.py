@@ -107,6 +107,23 @@ class LocalWorkerConfigTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 LocalWorkerConfigSet.load(self.write_config(directory, self.valid_payload()))
 
+    def test_x_source_uses_an_owner_only_source_url_and_redacts_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            payload = {
+                "control_plane_url": "https://control.example.invalid",
+                "source_id": "x-source-1",
+                "source_type": "x",
+                "source_url": "https://x.com/example_author",
+                "profile_ref": "/private/x-profile",
+                "opencli_contract_version": "v2",
+                "parameter_version": "v2-test",
+            }
+            config = LocalWorkerConfig.load(self.write_config(directory, payload))
+
+        self.assertEqual(config.source_type, "x")
+        self.assertEqual(config.source_url, "https://x.com/example_author")
+        self.assertNotIn("example_author", json.dumps(config.redacted()))
+
 
 if __name__ == "__main__":
     unittest.main()

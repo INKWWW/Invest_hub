@@ -12,12 +12,15 @@ from .canonical import CanonicalMessage, Canonicalizer
 from .config import LocalWorkerConfig, LocalWorkerConfigSet
 from .connectors.base import ConnectorError, RawPage
 from .connectors.discord_active_adapter import DiscordActiveAdapter, normalize_channel_url
+from .connectors.x_active_adapter import OpenCLITweetsInvoker, XActiveAdapter
 from .evidence import LocalEvidenceStore
 from .providers.base import Provider, ProviderContext
 from .retry import RetryPolicy
 from .structured import (
     SchemaError,
     parse_v1_1_chunk_output,
+    parse_v2_x_chunk_output,
+    parse_v2_x_window_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
 )
@@ -57,36 +60,48 @@ class WindowedCaptureRange:
     start_at: datetime
     end_at: datetime
     resume_cursor: str | None
+    overlap_start_at: datetime | None = None
 
     @classmethod
     def from_claim(cls, claim: Mapping[str, Any]) -> "WindowedCaptureRange":
         scope = claim.get("collection_scope")
-        if not isinstance(scope, Mapping) or dict(scope) != {"mode": "window"}:
+        if not isinstance(scope, Mapping) or scope.get("mode") not in {"window", "history"} or set(scope) != {"mode"}:
             raise ValueError("window task collection_scope is invalid")
         raw_range = claim.get("capture_range")
-        if not isinstance(raw_range, Mapping) or set(raw_range) != {
-            "mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key",
-        }:
+        allowed_range_keys = {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key", "overlap_start_at"}
+        if not isinstance(raw_range, Mapping) or not set(raw_range) <= allowed_range_keys:
             raise ValueError("window task capture_range is invalid")
-        if raw_range.get("mode") != "window" or raw_range.get("timezone") != "Asia/Shanghai":
+        mode = scope["mode"]
+        if raw_range.get("mode") != mode or raw_range.get("timezone") != "Asia/Shanghai":
             raise ValueError("window task capture_range is invalid")
-        if raw_range.get("trigger") not in {"scheduled", "manual", "bootstrap"}:
-            raise ValueError("window task capture_range trigger is invalid")
         scheduled_window_key = raw_range.get("scheduled_window_key")
-        if raw_range.get("trigger") in {"manual", "bootstrap"} and scheduled_window_key is not None:
-            raise ValueError("manual and bootstrap windows cannot carry a scheduled_window_key")
-        if raw_range.get("trigger") == "scheduled" and (not isinstance(scheduled_window_key, str) or not scheduled_window_key):
-            raise ValueError("scheduled window task requires a scheduled_window_key")
-        if scheduled_window_key is not None and not isinstance(scheduled_window_key, str):
-            raise ValueError("window task scheduled_window_key is invalid")
+        if mode == "history":
+            if set(raw_range) != {"mode", "trigger", "timezone", "start_at", "end_at"} or raw_range.get("trigger") != "history":
+                raise ValueError("history task capture_range is invalid")
+        else:
+            if not {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"} <= set(raw_range):
+                raise ValueError("window task capture_range is invalid")
+            if raw_range.get("trigger") not in {"scheduled", "manual", "bootstrap"}:
+                raise ValueError("window task capture_range trigger is invalid")
+            if raw_range.get("trigger") in {"manual", "bootstrap"} and scheduled_window_key is not None:
+                raise ValueError("manual and bootstrap windows cannot carry a scheduled_window_key")
+            if raw_range.get("trigger") == "scheduled" and (not isinstance(scheduled_window_key, str) or not scheduled_window_key):
+                raise ValueError("scheduled window task requires a scheduled_window_key")
+            if scheduled_window_key is not None and not isinstance(scheduled_window_key, str):
+                raise ValueError("window task scheduled_window_key is invalid")
         start_at = _required_instant(raw_range.get("start_at"), "window start_at")
         end_at = _required_instant(raw_range.get("end_at"), "window end_at")
         if start_at >= end_at:
             raise ValueError("window task range is empty or inverted")
+        overlap_start_at = None
+        if "overlap_start_at" in raw_range:
+            overlap_start_at = _required_instant(raw_range.get("overlap_start_at"), "window overlap_start_at")
+            if overlap_start_at > start_at:
+                raise ValueError("window overlap cannot be after the continuous start")
         if isinstance(scheduled_window_key, str):
             scheduled_end_at = _required_instant(scheduled_window_key, "scheduled_window_key")
             local_boundary = scheduled_end_at.astimezone(ZoneInfo("Asia/Shanghai"))
-            if not scheduled_window_key.endswith("+08:00") or local_boundary.strftime("%H:%M") not in {"00:00", "08:00", "16:00", "20:50"}:
+            if not scheduled_window_key.endswith("+08:00") or local_boundary.strftime("%H:%M") not in {"00:00", "08:00", "12:00", "16:00", "20:00", "20:50"}:
                 raise ValueError("scheduled_window_key is not a Shanghai schedule boundary")
             if scheduled_end_at != end_at:
                 raise ValueError("scheduled_window_key does not equal window end_at")
@@ -101,7 +116,7 @@ class WindowedCaptureRange:
             raise ValueError("window task page_count is invalid")
         if progress.get("range_complete") is not False:
             raise ValueError("window task is already complete")
-        return cls(capture_range=dict(raw_range), start_at=start_at, end_at=end_at, resume_cursor=resume_cursor)
+        return cls(capture_range=dict(raw_range), start_at=start_at, end_at=end_at, resume_cursor=resume_cursor, overlap_start_at=overlap_start_at)
 
 
 class BrowserBridgeRuntimeInvoker:
@@ -848,10 +863,291 @@ class AuthorizedDiscordRuntime:
         }
 
 
+class XWindowedRuntime:
+    """Execute one X window with page-level durability and immutable analysis.
+
+    The adapter supplies only a bounded, logged-in OpenCLI read.  This runtime
+    owns the range boundary, overlap, local evidence, per-post model calls and
+    the exact payload that the control plane may atomically complete.
+    """
+
+    def __init__(
+        self,
+        *,
+        config: LocalWorkerConfig,
+        connector: Any,
+        evidence: LocalEvidenceStore,
+        canonicalizer: Canonicalizer,
+        provider: Provider,
+        prompt_template: str,
+        retry_policy: RetryPolicy | None = None,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        if config.source_type != "x":
+            raise ValueError("X runtime requires an X source config")
+        if not prompt_template.strip():
+            raise ValueError("prompt_template must be non-empty")
+        self.config = config
+        self.connector = connector
+        self.evidence = evidence
+        self.canonicalizer = canonicalizer
+        self.provider = provider
+        self.prompt_template = prompt_template
+        self.chunk_template = _read_public_prompt("v2_x_chunk.md")
+        self.window_template = _read_public_prompt("v2_x_window.md")
+        self.retry_policy = retry_policy or RetryPolicy(max_attempts=3, timeout_seconds=240)
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
+
+    def execute(self, claim: dict[str, Any]) -> dict[str, Any]:
+        scope = claim.get("collection_scope")
+        if not isinstance(scope, Mapping) or scope.get("mode") != "window":
+            raise RuntimeExecutionError("preflight", "X only supports a bounded window task")
+        return self.execute_windowed(claim)
+
+    def execute_windowed(
+        self,
+        claim: dict[str, Any],
+        *,
+        on_capture_page: Callable[[dict[str, Any]], None] | None = None,
+        load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
+        resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        del load_daily_fact_context, resolve_author_profiles
+        capture_range, source_snapshot = self._validate_claim(claim)
+        cursor = capture_range.resume_cursor
+        candidate_by_id: dict[str, CanonicalMessage] = {}
+        capture_segments: list[dict[str, Any]] = []
+        duplicate_count = 0
+        boundary: dict[str, str] | None = None
+        overlap_start = capture_range.overlap_start_at or capture_range.start_at
+
+        try:
+            while boundary is None:
+                page = self.connector.fetch_page(self.config, cursor, end_at=capture_range.end_at)
+                self._validate_page(page, cursor)
+                mapped = self.canonicalizer.map(page)
+                page_times = [_required_instant(message.occurred_at, "X post occurred_at") for message in mapped]
+                if any(occurred_at > capture_range.end_at for occurred_at in page_times):
+                    raise RuntimeExecutionError("opencli_contract", "X page contains a post after its fixed end_at")
+                if any(message.author_id != source_snapshot["account_id"] for message in mapped):
+                    raise RuntimeExecutionError("opencli_contract", "X page author does not match the task source snapshot")
+                self.evidence.persist_raw(page)
+                local_counts = self.evidence.persist_canonical(mapped)
+                duplicate_count += int(local_counts.get("duplicate_count", 0))
+
+                page_execution = self._page_execution(claim, page, mapped, page_times, cursor)
+                if on_capture_page is None:
+                    capture_segments.append(page_execution["capture_segment"])
+                else:
+                    on_capture_page(page_execution)
+
+                for message, occurred_at in zip(mapped, page_times, strict=True):
+                    if not (capture_range.start_at < occurred_at <= capture_range.end_at):
+                        continue
+                    if message.external_message_id in candidate_by_id:
+                        duplicate_count += 1
+                        continue
+                    candidate_by_id[message.external_message_id] = message
+
+                if not mapped:
+                    boundary = {"kind": "history_exhausted", "observed_at": _instant_text(self.clock())}
+                elif min(page_times) <= overlap_start:
+                    boundary = {"kind": "oldest_at_or_before_start", "observed_at": _instant_text(min(page_times))}
+                elif page.cursor_after is None:
+                    if page.telemetry.get("history_exhausted") is not True:
+                        raise RuntimeExecutionError("opencli_contract", "X collection cannot prove its lower boundary")
+                    boundary = {"kind": "history_exhausted", "observed_at": _instant_text(min(page_times))}
+                else:
+                    cursor = page.cursor_after
+        except ConnectorError as exc:
+            raise RuntimeExecutionError(str(exc.code), "X collection failed") from exc
+        except RuntimeExecutionError:
+            raise
+        except (ValueError, SchemaError) as exc:
+            raise RuntimeExecutionError("schema_error", "X page or model output is invalid") from exc
+        except Exception as exc:
+            raise RuntimeExecutionError("persistence_failure", "X local evidence persistence failed") from exc
+
+        messages = sorted(candidate_by_id.values(), key=lambda item: (_required_instant(item.occurred_at, "X post occurred_at"), item.external_message_id))
+        analyses, retries, elapsed_ms = self._post_analyses(claim, messages)
+        segment, window_retries, window_elapsed = self._window_segment(claim, capture_range, messages, analyses)
+        completion = {
+            "contract_version": "v0",
+            "task_id": str(claim["task_id"]),
+            "attempt": int(claim["attempt"]),
+            "range_complete": True,
+            "capture_range": capture_range.capture_range,
+            "boundary": boundary,
+            "summary_batch_ids": [],
+            "daily_summary_ids": [],
+            "x_post_analyses": analyses,
+            "x_daily_segments": [] if segment is None else [segment],
+            "no_new_data": not messages,
+        }
+        return {
+            "persistence": {
+                "contract_version": "v0", "task_id": str(claim["task_id"]), "attempt": int(claim["attempt"]),
+                "source_id": self.config.source_id, "raw_messages": [], "canonical_messages": [], "structured_runs": [],
+            },
+            "capture_segments": capture_segments,
+            "range_completion": completion,
+            "telemetry": {"elapsed_ms": elapsed_ms + window_elapsed, "retry_count": retries + window_retries, "duplicate_count": duplicate_count},
+        }
+
+    def _validate_claim(self, claim: Mapping[str, Any]) -> tuple[WindowedCaptureRange, dict[str, str]]:
+        if claim.get("task_type") != "x_sync" or claim.get("source_id") != self.config.source_id:
+            raise RuntimeExecutionError("unauthorized", "task does not name this local X source")
+        if claim.get("parameter_version") != self.config.parameter_version:
+            raise RuntimeExecutionError("preflight", "task parameter version does not match local X config")
+        try:
+            capture_range = WindowedCaptureRange.from_claim(claim)
+            if capture_range.capture_range.get("mode") == "window" and capture_range.overlap_start_at is None:
+                raise ValueError("X window requires overlap_start_at")
+            if capture_range.capture_range.get("trigger") == "scheduled":
+                local_time = capture_range.end_at.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%H:%M")
+                if local_time not in {"00:00", "08:00", "12:00", "16:00", "20:00"}:
+                    raise ValueError("X scheduled window is not an approved cutoff")
+            snapshot = claim.get("source_snapshot")
+            if not isinstance(snapshot, Mapping) or set(snapshot) != {"source_type", "account_id", "display_name", "parameter_version"}:
+                raise ValueError("X source snapshot is invalid")
+            normalized = {key: str(snapshot[key]) for key in snapshot}
+            if normalized["source_type"] != "x" or any(not value.strip() for value in normalized.values()):
+                raise ValueError("X source snapshot is invalid")
+            if normalized["parameter_version"] != self.config.parameter_version:
+                raise ValueError("X source snapshot parameter version is stale")
+        except ValueError as exc:
+            raise RuntimeExecutionError("preflight", str(exc)) from exc
+        return capture_range, normalized
+
+    def _validate_page(self, page: object, requested_cursor: str | None) -> None:
+        if not isinstance(page, RawPage) or page.source_type != "x" or page.source_id != self.config.source_id:
+            raise RuntimeExecutionError("opencli_contract", "X collection returned an invalid page")
+        if page.cursor_before != requested_cursor or (page.cursor_after is not None and page.cursor_after == requested_cursor):
+            raise RuntimeExecutionError("opencli_contract", "X page cursor does not advance")
+        if page.telemetry.get("match_state") != "matched_new":
+            raise RuntimeExecutionError("opencli_stale", "X page is not a fresh validated response")
+
+    def _page_execution(
+        self, claim: Mapping[str, Any], page: RawPage, mapped: tuple[CanonicalMessage, ...], page_times: list[datetime], cursor: str | None,
+    ) -> dict[str, Any]:
+        segment = AuthorizedDiscordRuntime._capture_segment(page, cursor, page_times)
+        return {
+            "persistence": {
+                "contract_version": "v0", "task_id": str(claim["task_id"]), "attempt": int(claim["attempt"]),
+                "source_id": self.config.source_id,
+                "raw_messages": [self._raw_message(page, message) for message in mapped],
+                "canonical_messages": [self._canonical_message(message) for message in mapped],
+                "structured_runs": [], "capture_segment": segment,
+                "x_post_contexts": [self._context(message) for message in mapped],
+            },
+            "capture_segment": {"contract_version": "v0", "task_id": str(claim["task_id"]), "attempt": int(claim["attempt"]), "capture_segment": segment},
+        }
+
+    def _post_analyses(self, claim: Mapping[str, Any], messages: list[CanonicalMessage]) -> tuple[list[dict[str, Any]], int, int]:
+        analyses: list[dict[str, Any]] = []
+        retries = elapsed_ms = 0
+        for message in messages:
+            context = self._context_for_prompt(message)
+            provider_context = ProviderContext(
+                chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-post-{message.external_message_id}", prompt_version=self.config.parameter_version,
+                prompt_text=self._chunk_prompt(message, context), input_message_ids=frozenset({message.external_message_id}),
+                operation="v2_x_chunk", visible_context_post_ids=frozenset({context["id"]}) if context is not None else frozenset(),
+            )
+            response = self.retry_policy.execute(self.provider, (message,), provider_context)
+            retries += max(0, response.attempt - 1)
+            elapsed_ms += response.elapsed_ms
+            if response.status != "success" or response.parsed_output is None:
+                raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X post analysis")
+            try:
+                output = parse_v2_x_chunk_output(json.dumps(response.parsed_output, ensure_ascii=False), {message.external_message_id}, set(provider_context.visible_context_post_ids))
+            except SchemaError as exc:
+                raise RuntimeExecutionError("schema_error", "X post analysis failed evidence validation") from exc
+            analysis = output["analyses"][0]
+            analyses.append({
+                "post_id": message.external_message_id, "analysis_version": 1,
+                "blogger_viewpoint": analysis["blogger_viewpoint"], "arguments": analysis["arguments"],
+                "quoted_post_viewpoint": analysis["quoted_post_viewpoint"], "uncertainties": analysis["uncertainties"],
+                "evidence_post_ids": analysis["evidence_post_ids"], "post_link": analysis["post_link"],
+                "analysis_id": f"{message.external_message_id}@1",
+            })
+        return analyses, retries, elapsed_ms
+
+    def _window_segment(
+        self, claim: Mapping[str, Any], capture_range: WindowedCaptureRange, messages: list[CanonicalMessage], analyses: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any] | None, int, int]:
+        if not analyses:
+            return None, 0, 0
+        natural_date = _shanghai_natural_date(messages[0].occurred_at)
+        if any(_shanghai_natural_date(message.occurred_at) != natural_date for message in messages):
+            raise RuntimeExecutionError("schema_error", "X window may not cross a Shanghai date")
+        analysis_ids = {str(analysis["analysis_id"]) for analysis in analyses}
+        visible_evidence = {message.external_message_id for message in messages}
+        for message in messages:
+            context = self._context_for_prompt(message)
+            if context is not None:
+                visible_evidence.add(context["id"])
+        provider_context = ProviderContext(
+            chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-window", prompt_version=self.config.parameter_version,
+            prompt_text=self._window_prompt(claim, capture_range, analyses), input_message_ids=frozenset(analysis_ids), operation="v2_x_window",
+        )
+        response = self.retry_policy.execute(self.provider, tuple(analyses), provider_context)
+        if response.status != "success" or response.parsed_output is None:
+            raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X window viewpoint")
+        try:
+            output = parse_v2_x_window_output(json.dumps(response.parsed_output, ensure_ascii=False), analysis_ids)
+        except SchemaError as exc:
+            raise RuntimeExecutionError("schema_error", "X window viewpoint failed analysis validation") from exc
+        if output["range_task_id"] != str(claim["task_id"]) or output["natural_date"] != natural_date or not set(output["evidence_post_ids"]) <= visible_evidence:
+            raise RuntimeExecutionError("schema_error", "X window viewpoint does not match its immutable evidence")
+        return {
+            "natural_date": natural_date, "occurred_from_at": _instant_text(min(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
+            "occurred_through_at": _instant_text(max(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
+            "window_viewpoints": output["window_viewpoints"], "analysis_ids": output["analysis_ids"],
+            "evidence_post_ids": output["evidence_post_ids"], "uncertainties": output["uncertainties"],
+        }, max(0, response.attempt - 1), response.elapsed_ms
+
+    def _chunk_prompt(self, message: CanonicalMessage, context: dict[str, str] | None) -> str:
+        payload = {"post": self._prompt_post(message), "context_post": context, "context_status": message.metadata["x"]["context_status"]}
+        return f"{self.chunk_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n输入帖子包（仅本地 Codex CLI 可见）：\n{json.dumps(payload, ensure_ascii=False)}"
+
+    def _window_prompt(self, claim: Mapping[str, Any], capture_range: WindowedCaptureRange, analyses: list[dict[str, Any]]) -> str:
+        payload = {"range_task_id": str(claim["task_id"]), "natural_date": _shanghai_natural_date(_instant_text(capture_range.end_at)), "occurred_from_at": _instant_text(capture_range.start_at), "occurred_through_at": _instant_text(capture_range.end_at), "post_analyses": analyses}
+        return f"{self.window_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n已验证且待持久化的逐帖分析（仅本地 Codex CLI 可见）：\n{json.dumps(payload, ensure_ascii=False)}"
+
+    @staticmethod
+    def _prompt_post(message: CanonicalMessage) -> dict[str, Any]:
+        return {"id": message.external_message_id, "author_id": message.author_id, "author_name": message.author_name, "occurred_at": message.occurred_at, "text": message.content, "post_type": message.metadata["x"]["post_type"], "url": message.metadata["x"]["post_url"], "attachments_present": bool(message.attachments)}
+
+    @staticmethod
+    def _context_for_prompt(message: CanonicalMessage) -> dict[str, str] | None:
+        value = message.metadata.get("x", {}).get("context_post")
+        if not isinstance(value, Mapping):
+            return None
+        required = ("id", "text", "url")
+        if not all(isinstance(value.get(key), str) and value[key] for key in required):
+            return None
+        return {"id": str(value["id"]), "text": str(value["text"]), "url": str(value["url"]), "author_id": str(value.get("author_id") or ""), "author_name": str(value.get("author_name") or "")}
+
+    @staticmethod
+    def _context(message: CanonicalMessage) -> dict[str, Any]:
+        x = message.metadata["x"]
+        return {"external_message_id": message.external_message_id, "post_type": x["post_type"], "post_url": x["post_url"], "quoted_post_id": x["quoted_post_id"], "reply_to_post_id": x["reply_to_post_id"], "reposted_post_id": x["reposted_post_id"], "context_status": x["context_status"], "attachments": x["attachments"]}
+
+    def _raw_message(self, page: RawPage, message: CanonicalMessage) -> dict[str, Any]:
+        item = next((value for value in page.messages if str(value.get("id")) == message.external_message_id), {})
+        occurred_at = _required_instant(message.occurred_at, "X post occurred_at")
+        payload = json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return {"external_message_id": message.external_message_id, "occurred_at": _instant_text(occurred_at), "local_raw_ref": page.raw_payload_ref, "payload_hash": hashlib.sha256(payload).hexdigest(), "retention_expires_at": _instant_text(_one_year_later(occurred_at))}
+
+    @staticmethod
+    def _canonical_message(message: CanonicalMessage) -> dict[str, Any]:
+        return {"external_message_id": message.external_message_id, "occurred_at": _valid_datetime(message.occurred_at), "author_display": message.author_name or None, "content": message.content, "has_unparsed_media": bool(message.attachments), "metadata": {"author_id": message.author_id, "post_url": message.metadata["x"]["post_url"], "post_type": message.metadata["x"]["post_type"], "unresolved": message.metadata["x"]["context_status"] != "complete"}}
+
+
 class AuthorizedDiscordRuntimeSet:
     """Route each claim to exactly one owner-configured local source."""
 
-    def __init__(self, runtimes: Mapping[str, AuthorizedDiscordRuntime]) -> None:
+    def __init__(self, runtimes: Mapping[str, Any]) -> None:
         self._runtimes = dict(runtimes)
 
     def execute(self, claim: dict[str, Any]) -> dict[str, Any]:
@@ -920,6 +1216,53 @@ def build_authorized_discord_runtime_set(
     return AuthorizedDiscordRuntimeSet(runtimes)
 
 
+def build_authorized_x_runtime(
+    *,
+    config: LocalWorkerConfig,
+    evidence_dir: Path,
+    prompt_path: Path,
+    opencli_executable: str | None = None,
+) -> XWindowedRuntime:
+    if config.source_type != "x":
+        raise ValueError("X runtime builder requires an X config")
+    return XWindowedRuntime(
+        config=config,
+        connector=XActiveAdapter(OpenCLITweetsInvoker(opencli_executable or "opencli")),
+        evidence=LocalEvidenceStore(Path(evidence_dir)),
+        canonicalizer=Canonicalizer(),
+        provider=_codex_provider(evidence_dir),
+        prompt_template=Path(prompt_path).read_text(encoding="utf-8"),
+    )
+
+
+def build_authorized_runtime_set(
+    *,
+    config: LocalWorkerConfigSet,
+    evidence_dir: Path,
+    prompt_path: Path,
+    opencli_contract_path: Path,
+    opencli_executable: str | None = None,
+) -> AuthorizedDiscordRuntimeSet:
+    """Build source-specific runtimes without ever sending an X claim to Discord."""
+
+    runtimes: dict[str, Any] = {}
+    for source in config.sources:
+        target_evidence_dir = Path(evidence_dir) / source.source_id
+        if source.source_type == "discord":
+            runtimes[source.source_id] = build_authorized_discord_runtime(
+                config=source, evidence_dir=target_evidence_dir, prompt_path=prompt_path,
+                opencli_contract_path=opencli_contract_path, opencli_executable=opencli_executable,
+            )
+        elif source.source_type == "x":
+            runtimes[source.source_id] = build_authorized_x_runtime(
+                config=source, evidence_dir=target_evidence_dir, prompt_path=prompt_path,
+                opencli_executable=opencli_executable,
+            )
+        else:  # LocalWorkerConfig validates this, kept as a defensive fence.
+            raise RuntimeExecutionError("preflight", "unsupported configured source type")
+    return AuthorizedDiscordRuntimeSet(runtimes)
+
+
 def _codex_provider(evidence_dir: Path) -> Provider:
     from .providers.codex_cli import CodexCLIProvider
 
@@ -951,6 +1294,15 @@ def _required_instant(value: object, field_name: str) -> datetime:
 
 def _instant_text(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _one_year_later(value: datetime) -> datetime:
+    """Match PostgreSQL's ``+ interval '1 year'`` retention semantics."""
+
+    try:
+        return value.replace(year=value.year + 1)
+    except ValueError:  # Feb 29 becomes Feb 28 in a non-leap following year.
+        return value.replace(year=value.year + 1, month=2, day=28)
 
 
 def _shanghai_natural_date(value: str) -> str:

@@ -103,6 +103,30 @@
         "response_matched": { "const": true },
         "response_fresh": { "const": true }
       }
+    },
+    "x_post_contexts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["external_message_id", "post_type", "post_url", "quoted_post_id", "reply_to_post_id", "reposted_post_id", "context_status", "attachments"],
+        "properties": {
+          "external_message_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "post_type": { "enum": ["original", "quote", "reply", "repost"] },
+          "post_url": { "type": "string", "pattern": "^https://(www\\.)?(x\\.com|twitter\\.com)/.+/status/[0-9]+/?([?#].*)?$", "maxLength": 2048 },
+          "quoted_post_id": { "type": ["string", "null"], "maxLength": 256 },
+          "reply_to_post_id": { "type": ["string", "null"], "maxLength": 256 },
+          "reposted_post_id": { "type": ["string", "null"], "maxLength": 256 },
+          "context_status": { "enum": ["complete", "unavailable", "deleted", "unresolved"] },
+          "attachments": { "type": "array" }
+        },
+        "allOf": [
+          { "if": { "properties": { "post_type": { "const": "original" } }, "required": ["post_type"] }, "then": { "properties": { "quoted_post_id": { "type": "null" }, "reply_to_post_id": { "type": "null" }, "reposted_post_id": { "type": "null" } } } },
+          { "if": { "properties": { "post_type": { "const": "quote" } }, "required": ["post_type"] }, "then": { "properties": { "quoted_post_id": { "type": "string", "minLength": 1 }, "reply_to_post_id": { "type": "null" }, "reposted_post_id": { "type": "null" } } } },
+          { "if": { "properties": { "post_type": { "const": "reply" } }, "required": ["post_type"] }, "then": { "properties": { "quoted_post_id": { "type": "null" }, "reply_to_post_id": { "type": "string", "minLength": 1 }, "reposted_post_id": { "type": "null" } } } },
+          { "if": { "properties": { "post_type": { "const": "repost" } }, "required": ["post_type"] }, "then": { "properties": { "quoted_post_id": { "type": "null" }, "reply_to_post_id": { "type": "null" }, "reposted_post_id": { "type": "string", "minLength": 1 } } } }
+        ]
+      }
     }
   }
 }

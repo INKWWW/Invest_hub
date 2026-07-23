@@ -81,6 +81,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .reader-page-header > p:last-child { max-width: 680px; margin: 1rem 0 0; color: #50636a; line-height: 1.65; }
 
+.reader-source-navigation { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem; }
+.reader-source-navigation a { border: 1px solid #b7ceca; border-radius: 999px; color: #315860; font-size: 0.84rem; font-weight: 800; padding: 0.42rem 0.7rem; text-decoration: none; }
+.reader-source-navigation a:hover, .reader-source-navigation a[aria-current="page"] { background: #e5efed; color: #173d46; }
+
 .session-controls { display: flex; align-items: center; justify-content: flex-end; gap: 0.65rem; margin-left: auto; }
 
 .session-identity { display: grid; grid-template-columns: auto auto; gap: 0.05rem 0.45rem; margin: 0; color: #4a6268; font-size: 0.75rem; line-height: 1.25; text-align: right; }
@@ -173,6 +177,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .topic-card { border-left: 3px solid #2d6872; padding: 0.35rem 0 0.35rem 1rem; }
 
 .topic-card + .topic-card { border-top: 1px solid #dce4e0; padding-top: 1.15rem; }
+
+.x-viewpoints { display: grid; gap: 0.55rem; margin: 0; padding-left: 1.2rem; line-height: 1.6; }
+.x-evidence { background: #f8faf6; border: 1px solid #dce4e0; padding: 0.85rem 1rem; }
+.x-analysis { border-top: 1px solid #dce4e0; margin-top: 0.8rem; padding-top: 0.8rem; }
+.x-analysis h4, .x-analysis p { margin: 0; }
+.x-analysis p + p { margin-top: 0.45rem; }
 
 .topic-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
 

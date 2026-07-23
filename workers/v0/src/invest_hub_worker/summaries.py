@@ -196,3 +196,19 @@ def _string_list(value: object) -> bool:
 
 def _string_array(value: object) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+
+
+def build_v2_x_daily_viewpoint_timeline(
+    prior_segments: list[dict[str, object]], new_segment: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    """Return a deterministic reader projection without mutating older prose."""
+
+    segments = [dict(segment) for segment in prior_segments]
+    if new_segment is not None:
+        segment_id = new_segment.get("id")
+        if not isinstance(segment_id, str) or not segment_id or any(segment.get("id") == segment_id for segment in segments):
+            raise SummaryError("X viewpoint segment identity is invalid or duplicated")
+        segments.append(dict(new_segment))
+    if any(not isinstance(segment.get("id"), str) or not isinstance(segment.get("occurred_from_at"), str) for segment in segments):
+        raise SummaryError("X viewpoint segment is missing its immutable identity or time")
+    return sorted(segments, key=lambda segment: (str(segment["occurred_from_at"]), str(segment["id"])))

@@ -176,6 +176,23 @@ class Worker:
         if not isinstance(completion, Mapping) or not isinstance(persistence, Mapping) or not isinstance(segments, list):
             raise RuntimeError("invalid windowed execution bundle")
 
+        # X analyzes only after every page has acknowledged its durable raw and
+        # canonical evidence.  Its completion RPC atomically writes immutable
+        # analyses/segment and advances the range; sending an empty legacy
+        # summary receipt first would incorrectly couple it to Discord's daily
+        # summary protocol.
+        if "x_post_analyses" in completion or "x_daily_segments" in completion:
+            if completion.get("summary_batch_ids") != [] or completion.get("daily_summary_ids") != []:
+                raise RuntimeError("X window completion cannot carry Discord summary receipts")
+            for segment in segments:
+                if not isinstance(segment, Mapping):
+                    raise RuntimeError("invalid window capture segment")
+                self.protocol.record_capture_segment(dict(segment))
+            final_acknowledgement = self.protocol.complete_capture_range(dict(completion))
+            if final_acknowledgement.get("status") != "succeeded":
+                raise LeaseUncertain("control plane did not acknowledge X window completion")
+            return final_acknowledgement
+
         acknowledgement = self.protocol.persist(dict(persistence))
         if acknowledgement.get("persisted") is not True:
             raise LeaseUncertain("control plane did not acknowledge window persistence")
