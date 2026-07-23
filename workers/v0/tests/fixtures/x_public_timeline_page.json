@@ -1,0 +1,18 @@
+{
+  "page_id": "fixture-page-1",
+  "expected_request_key": "x-timeline-request-1",
+  "expected_request_url": "https://x.com/i/api/graphql/UserTweets?cursor=fixture-cursor",
+  "cursor_after": "fixture-cursor-next",
+  "network": [
+    {
+      "request_key": "x-timeline-request-1",
+      "request_url": "https://x.com/i/api/graphql/UserTweets?cursor=fixture-cursor",
+      "posts": [
+        {"id": "x-original-1", "author": {"id": "author-1", "name": "Fixture Author"}, "text": "artificial original", "created_at": "2026-07-23T00:01:00Z", "url": "https://x.com/fixture/status/1", "post_type": "original", "attachments": []},
+        {"id": "x-quote-1", "author": {"id": "author-1", "name": "Fixture Author"}, "text": "artificial quote comment", "created_at": "2026-07-23T00:02:00Z", "url": "https://x.com/fixture/status/2", "post_type": "quote", "quoted_post_id": "quoted-1", "context_status": "complete", "attachments": []},
+        {"id": "x-reply-1", "author": {"id": "author-1", "name": "Fixture Author"}, "text": "artificial reply", "created_at": "2026-07-23T00:03:00Z", "url": "https://x.com/fixture/status/3", "post_type": "reply", "reply_to_post_id": "parent-1", "context_status": "unavailable", "attachments": []},
+        {"id": "x-repost-1", "author": {"id": "author-1", "name": "Fixture Author"}, "text": "", "created_at": "2026-07-23T00:04:00Z", "url": "https://x.com/fixture/status/4", "post_type": "repost", "reposted_post_id": "reposted-1", "context_status": "complete", "attachments": [{"type": "link", "url": "https://example.invalid/article"}]}
+      ]
+    }
+  ]
+}
