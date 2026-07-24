@@ -1,4 +1,4 @@
-import { listSources } from "../../../lib/db/repositories/sources";
+import { listAdminSources } from "../../../lib/db/repositories/sources";
 import { AdminShell } from "../../../components/admin/AdminShell";
 import { SourceCreateForm } from "../../../components/admin/SourceCreateForm";
 import { SourceRuleForm } from "../../../components/admin/SourceRuleForm";
@@ -10,36 +10,42 @@ import { XHistoryBackfillForm } from "../../../components/admin/XHistoryBackfill
 import { XManualRefreshForm } from "../../../components/admin/XManualRefreshForm";
 import { XSourceForm } from "../../../components/admin/XSourceForm";
 import { getCurrentUser } from "../../../lib/auth/current-user";
-import { listWorkers } from "../../../lib/db/repositories/workers";
+import { SourceConfigurationWorkspace } from "../../../components/admin/SourceConfigurationWorkspace";
 
-export default async function AdminSourcesPage() {
-  const [sources, workers, viewer] = await Promise.all([listSources(), listWorkers(), getCurrentUser()]);
+export default async function AdminSourcesPage({ searchParams }: { searchParams?: Promise<{ type?: string }> }) {
+  const [{ type }, discordSources, xSources, viewer] = await Promise.all([
+    searchParams ?? Promise.resolve<{ type?: string }>({}),
+    listAdminSources({ sourceType: "discord", includeArchived: true }),
+    listAdminSources({ sourceType: "x", includeArchived: true }),
+    getCurrentUser(),
+  ]);
   if (!viewer) return null;
+  const initialSourceType = type === "x" ? "x" : "discord";
+  const discordDetails = Object.fromEntries(discordSources.map((source) => [source.id, <div className="source-detail-grid" key={source.id}>
+    <SourceAdministrationForm sourceId={source.id} />
+    <SourceCoverageForm sourceId={source.id} />
+    <SourceRuleForm sourceId={source.id} />
+    <SourceAuthorProfilesForm sourceId={source.id} />
+  </div>]));
+  const xDetails = Object.fromEntries(xSources.map((source) => [source.id, <div className="source-detail-grid" key={source.id}>
+    <SourceAdministrationForm sourceId={source.id} />
+    <XCoverageForm sourceId={source.id} />
+    <XManualRefreshForm sourceId={source.id} />
+    <XHistoryBackfillForm sourceId={source.id} />
+  </div>]));
   return <AdminShell active="sources" viewer={viewer}>
-    <section>
+    <section className="source-page">
       <h1>信息来源</h1>
-      <p>Discord 与 X 采用独立配置和采集边界。内部来源标识、URL 和本地 Profile 引用不会在普通阅读页面展示。</p>
-      <SourceCreateForm />
-      <XSourceForm />
-      {sources.length > 0 ? (
-        <table>
-          <thead><tr><th>来源</th><th>类型</th><th>参数版本</th><th>状态与名称</th><th>采集范围</th><th>授权 Worker</th><th>规则</th><th>作者配置</th></tr></thead>
-          <tbody>
-            {sources.map((source) => (
-              <tr key={source.id}>
-                <td>{source.display_name}</td>
-                <td>{source.source_type}</td>
-                <td>{source.parameter_version}</td>
-                <td><SourceAdministrationForm sourceId={source.id} displayName={source.display_name} enabled={source.enabled} authorizedWorkerId={source.authorized_worker_id} workers={workers} /></td>
-                <td>{source.source_type === "x" ? <><XCoverageForm sourceId={source.id} /><XManualRefreshForm sourceId={source.id} /><XHistoryBackfillForm sourceId={source.id} /></> : <SourceCoverageForm sourceId={source.id} />}</td>
-                <td>{source.authorized_worker_id ?? "any enrolled Worker"}</td>
-                <td>{source.source_type === "discord" ? <>v{source.author_rules_version}<SourceRuleForm sourceId={source.id} /></> : "X 博主身份独立解析"}</td>
-                <td>{source.source_type === "discord" ? <SourceAuthorProfilesForm sourceId={source.id} /> : "待 X 身份验证"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : <p>No sources configured.</p>}
+      <p>按来源类型管理配置、采集边界与运行操作。页面只展示决定下一步的安全状态，不显示 URL、浏览器 Profile 或原始内容。</p>
+      <SourceConfigurationWorkspace
+        discordSources={discordSources}
+        xSources={xSources}
+        initialSourceType={initialSourceType}
+        discordCreateForm={<SourceCreateForm />}
+        xCreateForm={<XSourceForm />}
+        discordDetails={discordDetails}
+        xDetails={xDetails}
+      />
     </section>
   </AdminShell>;
 }
