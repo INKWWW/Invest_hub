@@ -302,6 +302,93 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .admin-content li + li { margin-top: 0.45rem; }
 
+.source-page > p { max-width: 72ch; }
+
+.source-workspace { display: grid; gap: 1.25rem; margin-top: 1.8rem; }
+
+.source-workspace-tabs { display: flex; gap: 0.35rem; border-bottom: 1px solid #cbd8d5; padding-bottom: 0.65rem; }
+
+.source-workspace-tabs button { min-height: 2.75rem; border: 1px solid transparent; border-radius: 999px; background: transparent; color: #50666b; font-weight: 800; padding: 0.55rem 0.9rem; }
+
+.source-workspace-tabs button:hover, .source-workspace-tabs button[aria-selected="true"] { border-color: #a8c4c1; background: #e7f0ee; color: #173d46; }
+
+.source-workspace-panel { display: grid; gap: 1.25rem; }
+
+.source-workspace-panel-header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
+
+.source-workspace-panel-header h2 { margin: 0; }
+
+.source-card-type { margin: 0 0 0.28rem; color: #46676f; font-size: 0.76rem; font-weight: 850; letter-spacing: 0.09em; text-transform: uppercase; }
+
+.source-archived-toggle { display: flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+
+.source-archived-toggle input { min-height: auto; width: auto; }
+
+.source-create-zone > form { margin: 0; border-top: 4px solid #235a66; }
+
+.source-card-list { display: grid; gap: 0.85rem; }
+
+.source-empty { border: 1px dashed #b9cbca; margin: 0; padding: 1.2rem; color: #596e73; }
+
+.source-configuration-card { display: grid; grid-template-areas: "header header" "facts lifecycle" "detail detail"; grid-template-columns: minmax(17rem, 0.95fr) minmax(18rem, 1.25fr); gap: 1rem 1.5rem; border: 1px solid #ccd9d6; border-left: 4px solid #2b6b76; background: #fffefa; padding: clamp(1rem, 2.5vw, 1.5rem); }
+
+.source-configuration-card[data-lifecycle="active_task"] { border-left-color: #b46c22; }
+.source-configuration-card[data-lifecycle="archived"] { border-left-color: #7b898a; background: #f5f7f4; }
+
+.source-card-header { grid-area: header; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+
+.source-card-header h2 { margin: 0; font-size: clamp(1.25rem, 2vw, 1.7rem); }
+
+.source-card-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 0.55rem; }
+
+.source-card-actions button { min-height: 2.75rem; }
+
+.source-state { border: 1px solid #9abdb8; border-radius: 999px; color: #245661; font-size: 0.78rem; font-weight: 800; padding: 0.35rem 0.6rem; white-space: nowrap; }
+
+.source-state[data-enabled="false"] { border-color: #cdb17f; color: #77511c; }
+
+.source-card-facts { grid-area: facts; display: grid; gap: 0.7rem; margin: 0; }
+
+.source-card-facts div { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: 0.7rem; }
+
+.source-card-facts dt { color: #607278; font-size: 0.78rem; font-weight: 800; }
+.source-card-facts dd { margin: 0; color: #223940; font-size: 0.9rem; overflow-wrap: anywhere; }
+
+.source-lifecycle { grid-area: lifecycle; display: grid; grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr)); gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+
+.source-lifecycle li { position: relative; border-top: 2px solid #cbd8d5; padding: 0.65rem 0.2rem 0; color: #63757a; font-size: 0.78rem; font-weight: 750; line-height: 1.35; }
+
+.source-lifecycle li::before { content: ""; position: absolute; top: -0.38rem; left: 0; width: 0.58rem; height: 0.58rem; border: 2px solid #cbd8d5; border-radius: 50%; background: #fffefa; }
+
+.source-lifecycle li[data-state="complete"] { border-color: #2b6b76; color: #245661; }
+.source-lifecycle li[data-state="complete"]::before { border-color: #2b6b76; background: #2b6b76; }
+.source-lifecycle li[data-state="current"] { border-color: #b46c22; color: #724b1d; }
+.source-lifecycle li[data-state="current"]::before { border-color: #b46c22; background: #fff0d8; }
+.source-lifecycle li[data-state="blocked"] { border-color: #899595; color: #59686a; }
+
+.source-detail { grid-area: detail; border-top: 1px solid #d8e2df; margin-top: 0.3rem; padding-top: 1rem; }
+
+.source-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
+
+.source-detail-grid > form, .source-detail-grid > section { min-width: 0; margin: 0; }
+
+.source-detail-grid > section.source-administration-form { border: 1px solid #d2dcda; background: #fffefa; padding: 1rem; }
+
+.source-detail-grid > form h3, .source-detail-grid > section h3 { margin: 0; }
+
+.source-detail-grid input, .source-detail-grid select, .source-detail-grid textarea, .source-detail-grid button, .source-danger-zone button { min-height: 2.75rem; }
+
+.source-danger-zone { border: 1px solid #e0bbb3; border-left: 4px solid #a4473c; background: #fff8f6; display: grid; gap: 0.7rem; }
+
+.source-danger-zone p { margin: 0; color: #6b403b; line-height: 1.55; }
+
+.source-danger-action { justify-self: start; background: #8c3b33; }
+.source-danger-action:hover { background: #722f29; }
+
+@media (prefers-reduced-motion: reduce) {
+  .source-workspace *, .source-workspace *::before { scroll-behavior: auto; transition: none !important; }
+}
+
 .auth-page { display: grid; min-height: 100vh; place-items: center; padding: 1.5rem; }
 
 .auth-card { width: min(100%, 460px); border-top: 4px solid #235a66; background: #fffefa; box-shadow: 0 12px 35px rgba(23, 37, 45, 0.1); padding: clamp(1.5rem, 5vw, 2.5rem); }
@@ -342,7 +429,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .source-coverage-form { min-width: 14rem; }
   .admin-shell-header { align-items: flex-start; flex-direction: column; padding: 1rem; }
   .admin-header-navigation { align-items: flex-start; flex-direction: column; gap: 0.8rem; }
-  .admin-content { padding: 2rem 1rem 3rem; overflow-x: auto; }
+  .admin-content { padding: 2rem 1rem 3rem; overflow-x: clip; }
+  .source-workspace-tabs { overflow-x: auto; padding-bottom: 0.75rem; }
+  .source-workspace-tabs button { flex: 0 0 auto; }
+  .source-workspace-panel-header, .source-card-header { align-items: flex-start; flex-direction: column; }
+  .source-card-actions { justify-content: flex-start; }
+  .source-configuration-card { grid-template-areas: "header" "facts" "lifecycle" "detail"; grid-template-columns: 1fr; }
+  .source-detail-grid { grid-template-columns: 1fr; }
   .forbidden-page { padding: 1rem 1rem 3rem; }
 }
 
