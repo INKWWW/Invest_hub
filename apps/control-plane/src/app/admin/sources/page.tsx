@@ -9,6 +9,7 @@ import { XCoverageForm } from "../../../components/admin/XCoverageForm";
 import { XHistoryBackfillForm } from "../../../components/admin/XHistoryBackfillForm";
 import { XManualRefreshForm } from "../../../components/admin/XManualRefreshForm";
 import { XSourceForm } from "../../../components/admin/XSourceForm";
+import { XSourceRemovalControl } from "../../../components/admin/XSourceRemovalControl";
 import { getCurrentUser } from "../../../lib/auth/current-user";
 import { SourceConfigurationWorkspace } from "../../../components/admin/SourceConfigurationWorkspace";
 
@@ -32,6 +33,7 @@ export default async function AdminSourcesPage({ searchParams }: { searchParams?
     <XCoverageForm sourceId={source.id} />
     <XManualRefreshForm sourceId={source.id} />
     <XHistoryBackfillForm sourceId={source.id} />
+    {!source.archivedAt ? <XSourceRemovalControl sourceId={source.id} displayName={source.displayName} canRemove={source.lifecycle !== "active_task"} /> : null}
   </div>]));
   return <AdminShell active="sources" viewer={viewer}>
     <section className="source-page">
