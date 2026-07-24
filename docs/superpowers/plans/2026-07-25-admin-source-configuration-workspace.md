@@ -49,7 +49,7 @@
 - sources gains archived_at, archived_by (referencing public.profiles(id) on delete set null) and archive_reason.
 - The function reads sources, x_source_profiles, sync_tasks, source_collection_coverage, raw_messages, canonical_messages and x_daily_viewpoint_segments.
 
-- [ ] **Step 1: Add failing pgTAP lifecycle cases.**
+- [x] **Step 1: Add failing pgTAP lifecycle cases.**
 
     select plan(12);
     select throws_ok(
@@ -77,13 +77,13 @@
       'active task blocks removal'
     );
 
-- [ ] **Step 2: Run the focused database failure.**
+- [x] **Step 2: Run the focused database failure.**
 
 Run: supabase test db supabase/tests/020_admin_x_source_lifecycle.sql
 
 Expected: FAIL because archive fields and remove_x_source do not yet exist.
 
-- [ ] **Step 3: Implement the atomic RPC.**
+- [x] **Step 3: Implement the atomic RPC.**
 
     alter table public.sources
       add column archived_at timestamptz,
@@ -127,7 +127,7 @@ Expected: FAIL because archive fields and remove_x_source do not yet exist.
 
 Grant only the current authenticated administrator RPC path; do not add a general table-delete policy. Include a migration comment that archived facts remain under existing retention.
 
-- [ ] **Step 4: Verify and commit the database contract.**
+- [x] **Step 4: Verify and commit the database contract.**
 
 Run: supabase test db
 
@@ -158,7 +158,7 @@ Expected: PASS, including the existing Discord/X migration tests.
     export function listAdminSources(input: { sourceType: 'discord' | 'x'; includeArchived: boolean }): Promise<AdminSourceCard[]>;
     export function removeXSource(input: { sourceId: string; actorId: string; confirmationName: string }): Promise<{ action: 'deleted' | 'archived'; sourceId: string; displayName: string }>;
 
-- [ ] **Step 1: Write failing repository and route tests.**
+- [x] **Step 1: Write failing repository and route tests.**
 
     it('fails closed for an unknown removal result', async () => {
       databaseMocks.rpc.mockResolvedValue({ data: { action: 'purged' }, error: null });
@@ -172,13 +172,13 @@ Expected: PASS, including the existing Discord/X migration tests.
       await expect(response.json()).resolves.toEqual({ error: 'confirmation_mismatch' });
     });
 
-- [ ] **Step 2: Run the focused failure.**
+- [x] **Step 2: Run the focused failure.**
 
 Run: cd apps/control-plane && npm test -- --run src/lib/db/repositories/sources.test.ts src/lib/db/repositories/x-sources.test.ts src/app/api/api.integration.test.ts
 
 Expected: FAIL because the DTO, RPC wrapper and DELETE route do not exist.
 
-- [ ] **Step 3: Implement safe mapping and API error handling.**
+- [x] **Step 3: Implement safe mapping and API error handling.**
 
     export async function removeXSource(input: { sourceId: string; actorId: string; confirmationName: string }) {
       const { data, error } = await createSupabaseAdminClient().rpc('remove_x_source', {
@@ -194,7 +194,7 @@ Expected: FAIL because the DTO, RPC wrapper and DELETE route do not exist.
 
 The DELETE route accepts exactly confirmation_name, requires the admin role, returns 422 for malformed input, 409 for confirmation_mismatch/source_has_active_task and 503 for unexpected failures. listAdminSources projects only AdminSourceCard fields; raw content, local references, Worker IDs and provider data never enter client payloads.
 
-- [ ] **Step 4: Verify and commit.**
+- [x] **Step 4: Verify and commit.**
 
 Run: cd apps/control-plane && npm test -- --run src/lib/db/repositories/sources.test.ts src/lib/db/repositories/x-sources.test.ts src/app/api/api.integration.test.ts
 
@@ -223,7 +223,7 @@ Expected: PASS. Add assertions that API JSON excludes raw text, protected URL, l
 
 The workspace owns active source type, archived visibility and selected source ID. Cards display safe source facts and lifecycle only. Existing Discord forms are passed only to Discord detail; existing X coverage/manual-refresh/history forms are passed only to X detail.
 
-- [ ] **Step 1: Write failing workspace and page tests.**
+- [x] **Step 1: Write failing workspace and page tests.**
 
     it('separates Discord and X controls', () => {
       render(<SourceConfigurationWorkspace discordSources={[discord]} xSources={[x]} workers={[]} initialSourceType='discord' />);
@@ -240,13 +240,13 @@ The workspace owns active source type, archived visibility and selected source I
       expect(screen.queryByText(/%/)).not.toBeInTheDocument();
     });
 
-- [ ] **Step 2: Run the focused failure.**
+- [x] **Step 2: Run the focused failure.**
 
 Run: cd apps/control-plane && npm test -- --run src/components/admin/source-configuration-workspace.test.tsx src/app/admin/sources/page.test.tsx
 
 Expected: FAIL because grouped workspaces and cards do not exist.
 
-- [ ] **Step 3: Implement accessible tabs, cards and isolated details.**
+- [x] **Step 3: Implement accessible tabs, cards and isolated details.**
 
     <div className='source-workspace' data-source-type={activeSourceType}>
       <div role='tablist' aria-label='来源配置类型' className='source-workspace-tabs'>
@@ -263,7 +263,7 @@ Expected: FAIL because grouped workspaces and cards do not exist.
 
 Render SourceCreateForm only in Discord and XSourceForm only in X. The server reads ?type=discord|x for initial selection; on tab selection replace only the type query parameter with window.history.replaceState so refresh and sharing preserve the selection; invalid values fall back to discord. Replace the eight-column table entirely and do not serialize non-selected source details to the initial client payload.
 
-- [ ] **Step 4: Verify and commit.**
+- [x] **Step 4: Verify and commit.**
 
 Run: cd apps/control-plane && npm test -- --run src/components/admin/source-configuration-workspace.test.tsx src/app/admin/sources/page.test.tsx src/app/admin/layout.test.tsx
 
@@ -291,7 +291,7 @@ Expected: PASS. Verify tab keyboard navigation, exactly one selected tab, URL se
 
 The control sends only confirmation_name after exact typed confirmation. Success text is 已删除空 X 来源。 or 已停止并归档 X 来源；历史事实仍按保留策略保存。 Active tasks show 存在进行中或待恢复任务，暂不能移除。 and render no confirmation button.
 
-- [ ] **Step 1: Write failing confirmation tests.**
+- [x] **Step 1: Write failing confirmation tests.**
 
     it('requires exact typed confirmation', () => {
       render(<XSourceRemovalControl sourceId='source-x' displayName='AllInvestHK' canRemove />);
@@ -306,13 +306,13 @@ The control sends only confirmation_name after exact typed confirmation. Success
       expect(screen.queryByRole('button', { name: '确认移除博主' })).not.toBeInTheDocument();
     });
 
-- [ ] **Step 2: Run the focused failure.**
+- [x] **Step 2: Run the focused failure.**
 
 Run: cd apps/control-plane && npm test -- --run src/components/admin/x-source-removal-control.test.tsx src/components/admin/source-author-profiles-form.test.tsx src/components/admin/source-coverage-form.test.tsx src/components/admin/source-rule-form.test.tsx
 
 Expected: FAIL because confirmation and detail-slot layout do not exist.
 
-- [ ] **Step 3: Implement the detail zone and responsive styles.**
+- [x] **Step 3: Implement the detail zone and responsive styles.**
 
     <section className='source-danger-zone' aria-labelledby='remove-x-source-heading'>
       <h3 id='remove-x-source-heading'>危险操作</h3>
@@ -327,7 +327,7 @@ Expected: FAIL because confirmation and detail-slot layout do not exist.
 
 Add only source-workspace, source-card, source-detail and source-danger selectors. Desktop cards use named grid areas rather than a table. At max-width 767px use one column, make the tab strip itself scrollable if needed, keep controls at least 44px tall and remove document horizontal overflow. Preserve visible focus and disable decorative transitions under prefers-reduced-motion: reduce.
 
-- [ ] **Step 4: Verify and commit.**
+- [x] **Step 4: Verify and commit.**
 
 Run: cd apps/control-plane && npm test -- --run src/components/admin/x-source-removal-control.test.tsx src/components/admin/source-configuration-workspace.test.tsx src/components/admin/source-author-profiles-form.test.tsx src/components/admin/source-coverage-form.test.tsx src/components/admin/source-rule-form.test.tsx && npm run lint && npm run build
 
@@ -347,7 +347,7 @@ Expected: PASS. Inspect 1280px and 375px renders: no form appears in a table cel
 - The only new external mutation is administrator-only DELETE /api/admin/x/sources/:sourceId with exact confirmation and safe result JSON.
 - Existing Discord/X collection and Reader interfaces remain unchanged.
 
-- [ ] **Step 1: Add final integration failures.**
+- [x] **Step 1: Add final integration failures.**
 
     it('does not expose X removal to an ordinary user', async () => {
       authMocks.requireRole.mockResolvedValue({ status: 403 });
@@ -361,7 +361,7 @@ Expected: PASS. Inspect 1280px and 375px renders: no form appears in a table cel
       expect(sources).toEqual([expect.objectContaining({ sourceType: 'discord' })]);
     });
 
-- [ ] **Step 2: Run the complete deterministic stack.**
+- [x] **Step 2: Run the complete deterministic stack.**
 
 Run:
 
@@ -371,7 +371,7 @@ Run:
 
 Expected: all tests pass; no credential, source URL, private profile, raw content or prompt appears in fixtures, snapshots or logs.
 
-- [ ] **Step 3: Record only observed evidence and commit.**
+- [x] **Step 3: Record only observed evidence and commit.**
 
 Write commands, test counts, responsive review result and limitations in the journal. Update project status only if the prior command actually passes. Do not claim remote migration, deployment or real source removal unless separately authorized and performed.
 
