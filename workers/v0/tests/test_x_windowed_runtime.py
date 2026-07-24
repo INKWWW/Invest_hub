@@ -42,12 +42,26 @@ def claim() -> dict[str, object]:
     }
 
 
-def receipt_telemetry(stop_reason: str, oldest_seen_at: str | None) -> dict[str, object]:
+def history_claim() -> dict[str, object]:
+    value = claim()
+    value["collection_scope"] = {"mode": "history"}
+    value["capture_range"] = {
+        "mode": "history", "trigger": "history", "timezone": "Asia/Shanghai",
+        "start_at": "2026-07-23T00:00:00Z", "end_at": "2026-07-23T08:00:00Z",
+    }
+    return value
+
+
+def receipt_telemetry(
+    stop_reason: str,
+    oldest_seen_at: str | None,
+    requested_until: str = "2026-07-22T23:30:00Z",
+) -> dict[str, object]:
     return {
         "match_state": "collection_receipt_verified",
         "collection_receipt_verified": True,
         "collection_stop_reason": stop_reason,
-        "collection_requested_until": "2026-07-22T23:30:00Z",
+        "collection_requested_until": requested_until,
         "collection_oldest_seen_at": oldest_seen_at,
         "collection_pages_fetched": 2,
         "history_exhausted": stop_reason == "cursor_exhausted",
@@ -108,6 +122,24 @@ class XWindowedRuntimeTests(unittest.TestCase):
             completion = self.runtime(Connector(), directory).execute_windowed(claim())["range_completion"]
         self.assertEqual(completion["boundary"]["kind"], "oldest_at_or_before_start")
         self.assertEqual(completion["boundary"]["observed_at"], "2026-07-22T23:29:00Z")
+        self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
+
+    def test_history_task_uses_the_same_bounded_execution_path(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                if cursor is not None or lower_bound_at != datetime(2026, 7, 23, 0, tzinfo=timezone.utc) or end_at != END_AT:
+                    raise AssertionError("history task did not preserve its immutable bounds")
+                return RawPage(
+                    page_id="x-history-1", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/x-history-1", telemetry=receipt_telemetry(
+                        "time_boundary_reached", "2026-07-22T23:59:00Z", "2026-07-23T00:00:00Z",
+                    ),
+                    messages=(quote_post(),),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            completion = self.runtime(Connector(), directory).execute(history_claim())["range_completion"]
+        self.assertEqual(completion["capture_range"]["mode"], "history")
         self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
 
     def test_cursor_exhausted_empty_page_is_a_valid_no_new_data_completion(self) -> None:

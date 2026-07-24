@@ -900,8 +900,8 @@ class XWindowedRuntime:
 
     def execute(self, claim: dict[str, Any]) -> dict[str, Any]:
         scope = claim.get("collection_scope")
-        if not isinstance(scope, Mapping) or scope.get("mode") != "window":
-            raise RuntimeExecutionError("preflight", "X only supports a bounded window task")
+        if not isinstance(scope, Mapping) or scope.get("mode") not in {"window", "history"}:
+            raise RuntimeExecutionError("preflight", "X only supports a bounded range task")
         return self.execute_windowed(claim)
 
     def execute_windowed(
