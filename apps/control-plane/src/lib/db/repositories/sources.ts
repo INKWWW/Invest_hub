@@ -3,7 +3,68 @@ import type { Database } from "../types";
 
 type SourceInsert = Database["public"]["Tables"]["sources"]["Insert"];
 
-const sourceFields = "id,source_key,source_type,display_name,parameter_version,enabled,authorized_worker_id,author_rules_version,created_by,created_at,updated_at";
+const sourceFields = "id,source_key,source_type,display_name,parameter_version,enabled,authorized_worker_id,author_rules_version,created_by,archived_at,archived_by,archive_reason,created_at,updated_at";
+const adminSourceCardFields = "id,source_type,display_name,enabled,archived_at,workers(name),x_source_profiles(resolution_status),source_collection_coverage(source_id),sync_tasks(status,updated_at)";
+
+export type AdminSourceCard = {
+  id: string;
+  sourceType: "discord" | "x";
+  displayName: string;
+  enabled: boolean;
+  archivedAt: string | null;
+  lifecycle: "ready" | "identity_pending" | "coverage_uninitialized" | "active_task" | "archived";
+  workerName: string | null;
+  latestCompletedAt: string | null;
+};
+
+type AdminSourceQuery = {
+  id: string;
+  source_type: "discord" | "x";
+  display_name: string;
+  enabled: boolean;
+  archived_at: string | null;
+  workers: { name: string } | null;
+  x_source_profiles: Array<{ resolution_status: "pending" | "resolved" | "ambiguous" }>;
+  source_collection_coverage: Array<{ source_id: string }>;
+  sync_tasks: Array<{ status: string; updated_at: string }>;
+};
+
+function sourceLifecycle(source: AdminSourceQuery): AdminSourceCard["lifecycle"] {
+  if (source.archived_at) return "archived";
+  if (source.sync_tasks.some((task) => ["queued", "leased", "running", "retryable_failed"].includes(task.status))) return "active_task";
+  if (source.source_type === "x" && source.x_source_profiles[0]?.resolution_status !== "resolved") return "identity_pending";
+  if (source.source_collection_coverage.length === 0) return "coverage_uninitialized";
+  return "ready";
+}
+
+function latestCompletedAt(tasks: AdminSourceQuery["sync_tasks"]): string | null {
+  const completed = tasks
+    .filter((task) => task.status === "succeeded")
+    .map((task) => task.updated_at)
+    .sort((left, right) => right.localeCompare(left));
+  return completed[0] ?? null;
+}
+
+export async function listAdminSources(input: { sourceType: "discord" | "x"; includeArchived: boolean }): Promise<AdminSourceCard[]> {
+  let query = createSupabaseAdminClient()
+    .from("sources")
+    .select(adminSourceCardFields)
+    .eq("source_type", input.sourceType);
+  if (!input.includeArchived) query = query.is("archived_at", null);
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as AdminSourceQuery[]).map((source) => ({
+    id: source.id,
+    sourceType: source.source_type,
+    displayName: source.display_name,
+    enabled: source.enabled,
+    archivedAt: source.archived_at,
+    lifecycle: sourceLifecycle(source),
+    workerName: source.workers?.name ?? null,
+    latestCompletedAt: latestCompletedAt(source.sync_tasks),
+  }));
+}
 
 export class SourceAdministrationError extends Error {}
 

@@ -4,6 +4,10 @@ const databaseMocks = vi.hoisted(() => ({
   workerMaybeSingle: vi.fn(),
   sourceMaybeSingle: vi.fn(),
   sourceUpdate: vi.fn(),
+  sourceListEq: vi.fn(),
+  sourceListIs: vi.fn(),
+  sourceListOrder: vi.fn(),
+  sourceSelect: vi.fn(),
 }));
 
 vi.mock("../supabase-server", () => ({
@@ -16,12 +20,15 @@ vi.mock("../supabase-server", () => ({
           }),
         };
       }
-      return { update: databaseMocks.sourceUpdate };
+      return {
+        select: databaseMocks.sourceSelect,
+        update: databaseMocks.sourceUpdate,
+      };
     },
   }),
 }));
 
-import { SourceAdministrationError, updateSourceAdministration } from "./sources";
+import { listAdminSources, SourceAdministrationError, updateSourceAdministration } from "./sources";
 
 describe("source administration", () => {
   beforeEach(() => {
@@ -31,6 +38,12 @@ describe("source administration", () => {
         select: () => ({ maybeSingle: databaseMocks.sourceMaybeSingle }),
       }),
     });
+    databaseMocks.sourceSelect.mockReturnValue({ eq: databaseMocks.sourceListEq });
+    databaseMocks.sourceListEq.mockReturnValue({
+      is: databaseMocks.sourceListIs,
+      order: databaseMocks.sourceListOrder,
+    });
+    databaseMocks.sourceListIs.mockReturnValue({ order: databaseMocks.sourceListOrder });
   });
 
   it("rejects binding a source to a revoked Worker", async () => {
@@ -65,5 +78,37 @@ describe("source administration", () => {
       enabled: true,
       authorized_worker_id: "worker-1",
     });
+  });
+
+  it("projects an X source as a safe lifecycle card", async () => {
+    databaseMocks.sourceListOrder.mockResolvedValue({
+      data: [{
+        id: "source-x",
+        source_type: "x",
+        display_name: "AllInvestHK",
+        enabled: true,
+        archived_at: null,
+        workers: { name: "local X worker" },
+        x_source_profiles: [{ resolution_status: "pending" }],
+        source_collection_coverage: [],
+        sync_tasks: [{ status: "succeeded", updated_at: "2026-07-25T01:00:00Z" }],
+        local_raw_ref: "must-not-reach-the-card",
+      }],
+      error: null,
+    });
+
+    await expect(listAdminSources({ sourceType: "x", includeArchived: false })).resolves.toEqual([{
+      id: "source-x",
+      sourceType: "x",
+      displayName: "AllInvestHK",
+      enabled: true,
+      archivedAt: null,
+      lifecycle: "identity_pending",
+      workerName: "local X worker",
+      latestCompletedAt: "2026-07-25T01:00:00Z",
+    }]);
+    expect(databaseMocks.sourceSelect).toHaveBeenCalledWith(expect.stringContaining("workers(name)"));
+    expect(databaseMocks.sourceSelect.mock.calls[0]?.[0]).not.toContain("local_raw_ref");
+    expect(databaseMocks.sourceListIs).toHaveBeenCalledWith("archived_at", null);
   });
 });

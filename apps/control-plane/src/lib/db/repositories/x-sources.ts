@@ -31,7 +31,7 @@ function mapCoverage(value: unknown) {
 
 function rethrow(error: unknown): never {
   const message = error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "";
-  if (["invalid_x_source", "invalid_coverage_boundary", "coverage_already_initialized", "coverage_not_initialized", "source_not_found", "source_disabled", "x_source_unresolved", "source_parameter_version_mismatch", "actor_not_authorized", "invalid_capture_range", "active_x_range_overlap"].includes(message)) throw new XSourceError(message);
+  if (["invalid_x_source", "invalid_coverage_boundary", "coverage_already_initialized", "coverage_not_initialized", "source_not_found", "source_not_x", "source_disabled", "x_source_unresolved", "source_parameter_version_mismatch", "actor_not_authorized", "invalid_capture_range", "active_x_range_overlap", "confirmation_mismatch", "source_has_active_task"].includes(message)) throw new XSourceError(message);
   throw error;
 }
 
@@ -50,6 +50,26 @@ export async function initializeXCoverage(input: { sourceId: string; actorId: st
   });
   if (error) rethrow(error);
   return mapCoverage(data);
+}
+
+export async function removeXSource(input: { sourceId: string; actorId: string; confirmationName: string }) {
+  const { data, error } = await createSupabaseAdminClient().rpc("remove_x_source", {
+    p_source_id: input.sourceId,
+    p_actor_id: input.actorId,
+    p_confirmation_name: input.confirmationName,
+  });
+  if (error) rethrow(error);
+  const row = record(data, "invalid_x_source_removal");
+  if ((row.action !== "deleted" && row.action !== "archived")
+    || typeof row.source_id !== "string" || !row.source_id
+    || typeof row.display_name !== "string" || !row.display_name) {
+    throw new XSourceError("invalid_x_source_removal");
+  }
+  return {
+    action: row.action,
+    sourceId: row.source_id,
+    displayName: row.display_name,
+  };
 }
 
 export async function createManualXRefresh(input: { sourceId: string; actorId: string; now?: Date }) {

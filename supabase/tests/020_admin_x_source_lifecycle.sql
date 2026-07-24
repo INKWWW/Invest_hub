@@ -35,8 +35,8 @@ values (
 );
 
 select throws_ok(
-  $$select public.remove_x_source('00000000-0000-0000-0000-000000020911', '00000000-0000-0000-0000-000000020901', 'Wrong')$$,
-  'confirmation_mismatch', 'mismatched confirmation is rejected'
+  $$select public.remove_x_source('00000000-0000-0000-0000-000000020911', '00000000-0000-0000-0000-000000020901', ' Empty X ')$$,
+  'confirmation_mismatch', 'confirmation must exactly match the displayed name'
 );
 select is(
   public.remove_x_source('00000000-0000-0000-0000-000000020911', '00000000-0000-0000-0000-000000020901', 'Empty X')->>'action',
