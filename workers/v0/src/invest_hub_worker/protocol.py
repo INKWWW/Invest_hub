@@ -129,6 +129,29 @@ class WorkerProtocol:
             raise ProtocolError("invalid author profile resolution response")
         return response
 
+    def resolve_x_source_identity(self, source_id: str, parameter_version: str, account_id: str) -> dict[str, object]:
+        self._require_credential()
+        if not all(isinstance(value, str) and value for value in (source_id, parameter_version, account_id)):
+            raise ProtocolError("invalid x identity resolution request")
+        _, value = self._request(
+            "POST",
+            f"api/worker/x-sources/{source_id}/resolve-identity",
+            {"parameter_version": parameter_version, "account_id": account_id},
+        )
+        response = self._object(value, "invalid x identity resolution response")
+        if set(response) != {"identity"} or not isinstance(response.get("identity"), dict):
+            raise ProtocolError("invalid x identity resolution response")
+        identity = response["identity"]
+        if set(identity) != {"resolution_status", "parameter_version", "idempotent"}:
+            raise ProtocolError("invalid x identity resolution response")
+        if identity.get("resolution_status") != "resolved" or identity.get("parameter_version") != parameter_version or not isinstance(identity.get("idempotent"), bool):
+            raise ProtocolError("invalid x identity resolution response")
+        return {
+            "resolution_status": "resolved",
+            "parameter_version": parameter_version,
+            "idempotent": identity["idempotent"],
+        }
+
     def renew(self, task_id: str, attempt: int) -> dict[str, Any]:
         self._require_credential()
         _, value = self._request("POST", f"api/worker/tasks/{task_id}/lease", {"contract_version": "v0", "attempt": attempt})
