@@ -167,6 +167,20 @@ class XWindowedRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeExecutionError, "receipt"):
                 self.runtime(Connector(), directory).execute_windowed(claim())
 
+    def test_invalid_page_mapping_reports_a_safe_stage_without_post_details(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                malformed = {**quote_post(), "author": {}}
+                return RawPage(
+                    page_id="malformed", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/malformed", telemetry=receipt_telemetry("time_boundary_reached", "2026-07-22T23:29:00Z"),
+                    messages=(malformed,),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeExecutionError, "page mapping failed"):
+                self.runtime(Connector(), directory).execute_windowed(claim())
+
     def test_post_after_fixed_end_is_rejected_without_advancing_the_range(self) -> None:
         class Connector:
             def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:

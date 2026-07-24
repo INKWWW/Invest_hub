@@ -201,6 +201,27 @@ describe("v0 contracts", () => {
     expect(claim.capture_range).toMatchObject({ mode: "history", trigger: "history" });
   });
 
+  it("accepts a bounded X history range completion", () => {
+    const completion = parseContract<{ capture_range: { mode: string; trigger: string } }>("window-range-completion", {
+      contract_version: "v0",
+      task_id: "x-history-001",
+      attempt: 1,
+      range_complete: true,
+      capture_range: {
+        mode: "history", trigger: "history", timezone: "Asia/Shanghai",
+        start_at: "2026-07-24T00:00:00Z", end_at: "2026-07-24T08:00:00Z",
+      },
+      boundary: { kind: "history_exhausted", observed_at: "2026-07-24T00:00:00Z" },
+      summary_batch_ids: [],
+      daily_summary_ids: [],
+      x_post_analyses: [],
+      x_daily_segments: [],
+      no_new_data: true,
+    });
+
+    expect(completion.capture_range).toMatchObject({ mode: "history", trigger: "history" });
+  });
+
   it("accepts typed X post context while rejecting a mismatched relation", () => {
     const base = {
       contract_version: "v0",

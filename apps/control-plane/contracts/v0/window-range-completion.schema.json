@@ -10,18 +10,34 @@
     "attempt": { "type": "integer", "minimum": 1 },
     "range_complete": { "const": true },
     "capture_range": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"],
-      "properties": {
-        "mode": { "const": "window" },
-        "trigger": { "enum": ["scheduled", "manual", "bootstrap"] },
-        "timezone": { "const": "Asia/Shanghai" },
-        "start_at": { "type": "string", "format": "date-time" },
-        "end_at": { "type": "string", "format": "date-time" },
-        "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|12:00|16:00|20:00|20:50)[+]08:00$" },
-        "overlap_start_at": { "type": "string", "format": "date-time" }
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"],
+          "properties": {
+            "mode": { "const": "window" },
+            "trigger": { "enum": ["scheduled", "manual", "bootstrap"] },
+            "timezone": { "const": "Asia/Shanghai" },
+            "start_at": { "type": "string", "format": "date-time" },
+            "end_at": { "type": "string", "format": "date-time" },
+            "scheduled_window_key": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T(00:00|08:00|12:00|16:00|20:00|20:50)[+]08:00$" },
+            "overlap_start_at": { "type": "string", "format": "date-time" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "trigger", "timezone", "start_at", "end_at"],
+          "properties": {
+            "mode": { "const": "history" },
+            "trigger": { "const": "history" },
+            "timezone": { "const": "Asia/Shanghai" },
+            "start_at": { "type": "string", "format": "date-time" },
+            "end_at": { "type": "string", "format": "date-time" }
+          }
+        }
+      ]
     },
     "boundary": {
       "type": "object",
