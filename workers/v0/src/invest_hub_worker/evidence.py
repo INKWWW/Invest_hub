@@ -4,6 +4,7 @@ import fcntl
 import json
 import os
 import stat
+import tempfile
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -36,19 +37,17 @@ class LocalEvidenceStore:
                 self._restrict_file(lock_path)
                 fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
                 try:
+                    existing_lines = self._existing_lines(target)
                     existing = self._existing_ids(target)
-                    with target.open("a", encoding="utf-8") as stream:
-                        self._restrict_file(target)
-                        for message in messages:
-                            key = f"{message.source_id}:{message.external_message_id}"
-                            if key in existing:
-                                duplicate_count += 1
-                                continue
-                            stream.write(json.dumps(asdict(message), ensure_ascii=False, sort_keys=True) + "\n")
-                            existing.add(key)
-                            canonical_count += 1
-                        stream.flush()
-                        os.fsync(stream.fileno())
+                    for message in messages:
+                        key = f"{message.source_id}:{message.external_message_id}"
+                        if key in existing:
+                            duplicate_count += 1
+                            continue
+                        existing_lines.append(json.dumps(asdict(message), ensure_ascii=False, sort_keys=True))
+                        existing.add(key)
+                        canonical_count += 1
+                    self._replace_jsonl(target, existing_lines)
                 finally:
                     fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
         except OSError as exc:
@@ -99,6 +98,41 @@ class LocalEvidenceStore:
                 raise OSError("evidence file permissions are too broad")
         except OSError as exc:
             raise EvidenceError("evidence file must be owner-only") from exc
+
+    @staticmethod
+    def _replace_jsonl(target: Path, lines: list[str]) -> None:
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=target.parent,
+                prefix=f".{target.name}.",
+                delete=False,
+            ) as stream:
+                temporary_path = Path(stream.name)
+                LocalEvidenceStore._restrict_file(temporary_path)
+                for line in lines:
+                    stream.write(line + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_path, target)
+            LocalEvidenceStore._restrict_file(target)
+        except OSError:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+            raise
+
+    @staticmethod
+    def _existing_lines(target: Path) -> list[str]:
+        if not target.exists():
+            return []
+        lines: list[str] = []
+        for line in target.read_text(encoding="utf-8").splitlines():
+            if line:
+                json.loads(line)
+                lines.append(line)
+        return lines
 
     @staticmethod
     def _existing_ids(target: Path) -> set[str]:
