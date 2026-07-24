@@ -54,6 +54,10 @@ const sourceMocks = vi.hoisted(() => ({
 const xIdentityMocks = vi.hoisted(() => ({
   resolveXSourceIdentity: vi.fn(),
 }));
+const xSourceMocks = vi.hoisted(() => ({
+  removeXSource: vi.fn(),
+  XSourceError: class XSourceError extends Error {},
+}));
 const ruleMocks = vi.hoisted(() => ({
   replaceSourceRules: vi.fn(),
 }));
@@ -78,6 +82,7 @@ vi.mock("../../lib/db/repositories/windowed-sync", () => windowedSyncMocks);
 vi.mock("../../lib/db/repositories/author-profiles", () => authorProfileMocks);
 vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
 vi.mock("../../lib/db/repositories/x-identities", () => xIdentityMocks);
+vi.mock("../../lib/db/repositories/x-sources", () => xSourceMocks);
 vi.mock("../../lib/db/repositories/rules", () => ruleMocks);
 vi.mock("../../lib/db/repositories/reader", () => readerMocks);
 
@@ -106,10 +111,11 @@ import { POST as postScheduleTick } from "./worker/schedule/tick/route";
 import { GET as getDailyFactContext } from "./worker/tasks/[taskId]/daily-fact-context/route";
 import { POST as postResolveAuthorProfiles } from "./worker/tasks/[taskId]/resolve-author-profiles/route";
 import { POST as postResolveXIdentity } from "./worker/x-sources/[sourceId]/resolve-identity/route";
+import { DELETE as deleteXSource } from "./admin/x/sources/[sourceId]/route";
 
-function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
+function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}, method = "POST") {
   return new Request(`http://localhost${path}`, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
@@ -406,6 +412,16 @@ describe("v0 control-plane API authorization", () => {
     expect(authorProfileMocks.listObservedAuthors).not.toHaveBeenCalled();
   });
 
+  it("blocks ordinary users from removing an X source", async () => {
+    const response = await deleteXSource(
+      jsonRequest("/api/admin/x/sources/source-x", { confirmation_name: "AllInvestHK" }, {}, "DELETE"),
+      { params: Promise.resolve({ sourceId: "source-x" }) },
+    );
+
+    expect(response.status).toBe(403);
+    expect(xSourceMocks.removeXSource).not.toHaveBeenCalled();
+  });
+
   it("requires an explicit legacy scope instead of silently creating a five-page task", async () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
     taskMocks.createDiscordSyncTask.mockResolvedValue({ id: "task-1", collection_scope: { mode: "history", max_pages: 9 } });
@@ -610,6 +626,44 @@ describe("v0 control-plane API authorization", () => {
       enabled: true,
       authorizedWorkerId: "worker-1",
     });
+  });
+
+  it("requires exact confirmation and returns no internal source fields when removing X", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    xSourceMocks.removeXSource.mockRejectedValueOnce(new xSourceMocks.XSourceError("confirmation_mismatch"));
+
+    const mismatch = await deleteXSource(
+      jsonRequest("/api/admin/x/sources/source-x", { confirmation_name: "Wrong" }, {}, "DELETE"),
+      { params: Promise.resolve({ sourceId: "source-x" }) },
+    );
+    expect(mismatch.status).toBe(409);
+    await expect(mismatch.json()).resolves.toEqual({ error: "confirmation_mismatch" });
+
+    xSourceMocks.removeXSource.mockResolvedValueOnce({ action: "archived", sourceId: "source-x", displayName: "AllInvestHK" });
+    const removed = await deleteXSource(
+      jsonRequest("/api/admin/x/sources/source-x", { confirmation_name: "AllInvestHK" }, {}, "DELETE"),
+      { params: Promise.resolve({ sourceId: "source-x" }) },
+    );
+    const body = await removed.json();
+    expect(removed.status).toBe(200);
+    expect(body).toEqual({ removal: { action: "archived", display_name: "AllInvestHK" } });
+    expect(JSON.stringify(body)).not.toContain("source-x");
+    expect(xSourceMocks.removeXSource).toHaveBeenLastCalledWith({
+      sourceId: "source-x", actorId: "admin-1", confirmationName: "AllInvestHK",
+    });
+  });
+
+  it("rejects malformed X removal input without calling the lifecycle repository", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+
+    const response = await deleteXSource(
+      jsonRequest("/api/admin/x/sources/source-x", { confirmation_name: "AllInvestHK", force: true }, {}, "DELETE"),
+      { params: Promise.resolve({ sourceId: "source-x" }) },
+    );
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({ error: "invalid_x_source_removal" });
+    expect(xSourceMocks.removeXSource).not.toHaveBeenCalled();
   });
 
   it("returns a one-time invite code only to an admin", async () => {

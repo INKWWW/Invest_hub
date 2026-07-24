@@ -46,7 +46,7 @@ begin
   if v_source.source_type <> 'x' then
     raise exception 'source_not_x' using errcode = '22023';
   end if;
-  if btrim(coalesce(p_confirmation_name, '')) <> v_source.display_name then
+  if coalesce(p_confirmation_name, '') <> v_source.display_name then
     raise exception 'confirmation_mismatch' using errcode = '22023';
   end if;
   if exists (

@@ -107,6 +107,9 @@ export interface Database {
           authorized_worker_id: string | null;
           author_rules_version: number;
           created_by: string | null;
+          archived_at: string | null;
+          archived_by: string | null;
+          archive_reason: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -120,6 +123,9 @@ export interface Database {
           authorized_worker_id?: string | null;
           author_rules_version?: number;
           created_by?: string | null;
+          archived_at?: string | null;
+          archived_by?: string | null;
+          archive_reason?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -739,6 +745,10 @@ export interface Database {
       };
       initialize_x_collection_coverage: {
         Args: { p_source_id: string; p_actor_id: string; p_boundary: string };
+        Returns: Json;
+      };
+      remove_x_source: {
+        Args: { p_source_id: string; p_actor_id: string; p_confirmation_name: string };
         Returns: Json;
       };
       record_windowed_capture_segment: {
