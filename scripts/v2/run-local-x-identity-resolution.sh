@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+repo_root="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 opencli_executable=""
 source_config=""
 credential=""
@@ -78,7 +78,9 @@ expected_opencli="$repo_root/.runtime/v2/opencli-collection/current/bin/opencli-
 if [[ "$opencli_executable" != "$expected_opencli" ]]; then
   fail "identity_resolution_controlled_opencli_required: dedicated local Collection executable"
 fi
-bash "$repo_root/scripts/v2/verify-local-opencli-collection.sh"
+if [[ -L "$opencli_executable" ]]; then
+  fail "identity_resolution_controlled_opencli_required: dedicated local Collection executable"
+fi
 
 mode_for() {
   stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null
@@ -88,22 +90,41 @@ owner_for() {
   stat -f '%u' "$1" 2>/dev/null || stat -c '%u' "$1" 2>/dev/null
 }
 
+require_secure_path_component() {
+  local component="$1"
+  local leaf="$2"
+  [[ -L "$component" ]] && fail "identity_resolution_owner_only_path_required"
+  [[ -e "$component" ]] || fail "identity_resolution_private_path_required"
+  [[ "$(owner_for "$component")" == "$(id -u)" ]] || fail "identity_resolution_owner_only_path_required"
+  local mode
+  mode="$(mode_for "$component")"
+  if [[ "$leaf" == true ]]; then
+    (( (8#$mode & 8#077) == 0 )) || fail "identity_resolution_owner_only_path_required"
+  else
+    (( (8#$mode & 8#022) == 0 )) || fail "identity_resolution_owner_only_path_required"
+  fi
+}
+
 require_private_ignored_path() {
   local value="$1"
   local kind="$2"
-  local absolute
   [[ "$value" == /* ]] || fail "identity_resolution_private_path_required"
-  [[ ! -L "$value" ]] || fail "identity_resolution_owner_only_path_required"
-  absolute="$(cd -- "$(dirname -- "$value")" && pwd)/$(basename -- "$value")"
-  case "$absolute" in
+  case "$value" in
     "$repo_root"/*) ;;
     *) fail "identity_resolution_private_path_required" ;;
   esac
+  local component="$value"
+  local leaf=true
+  while true; do
+    require_secure_path_component "$component" "$leaf"
+    [[ "$component" == "$repo_root" ]] && break
+    component="$(dirname -- "$component")"
+    leaf=false
+  done
+  local absolute
+  absolute="$(cd -P -- "$(dirname -- "$value")" && pwd -P)/$(basename -- "$value")"
+  [[ "$absolute" == "$value" ]] || fail "identity_resolution_private_path_required"
   git -C "$repo_root" check-ignore -q -- "$absolute" || fail "identity_resolution_private_path_not_ignored"
-  [[ "$(owner_for "$absolute")" == "$(id -u)" ]] || fail "identity_resolution_owner_only_path_required"
-  local mode
-  mode="$(mode_for "$absolute")"
-  (( (8#$mode & 8#077) == 0 )) || fail "identity_resolution_owner_only_path_required"
   if [[ "$kind" == "file" ]]; then
     [[ -f "$absolute" ]] || fail "identity_resolution_private_file_required"
   else
@@ -114,6 +135,8 @@ require_private_ignored_path() {
 require_private_ignored_path "$source_config" file
 require_private_ignored_path "$credential" file
 require_private_ignored_path "$evidence_dir" directory
+
+bash "$repo_root/scripts/v2/verify-local-opencli-collection.sh"
 
 V2_REAL_X_ACK=authorized PYTHONPATH="$repo_root/workers/v0/src" "$V2_PYTHON_BIN" \
   -m invest_hub_worker.cli resolve-x-identity \
