@@ -28,4 +28,12 @@ describe("DiscordPage", () => {
     expect(html).toContain("管理员");
     expect(html).toContain("退出 / 切换账号");
   });
+
+  it("places the source switcher between account information and the page title", async () => {
+    const page = await DiscordPage();
+    const html = renderToStaticMarkup(page);
+
+    expect(html.indexOf("信息来源")).toBeLessThan(html.indexOf("Discord 日度研判"));
+    expect(html).not.toContain("按频道和日期阅读已生成的观点与话题。");
+  });
 });

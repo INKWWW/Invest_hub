@@ -34,10 +34,9 @@ export function XReader({ days }: { days: XReaderDay[] }) {
       </label>
     </aside>
     <article className="reader-content">
-      <header><p className="reader-eyebrow">{selected.source.displayName} · {selected.naturalDate}</p><h2>每日综合观点</h2></header>
-      <ReaderStatus status={selected.status} />
-      {selected.segments.map((segment, index) => <section className="reader-section" key={segment.id}>
-        <h3>第 {index + 1} 次增量</h3>
+      <header><p className="x-reader-context"><strong>{selected.source.displayName}</strong><span> · {selected.naturalDate}</span></p><h2 className="x-reader-heading">每日综合观点</h2></header>
+      <ReaderStatus status={selected.status} asOf={selected.segments.at(-1)?.occurredThroughAt} />
+      {selected.segments.map((segment) => <section className="reader-section" key={segment.id}>
         {segment.viewpoints.length ? <ul className="x-viewpoints">{segment.viewpoints.map((viewpoint, viewpointIndex) => <li key={viewpointIndex}>{viewpoint}</li>)}</ul> : <p className="summary-empty">本窗口没有形成新的综合观点。</p>}
         {segment.uncertainties.length ? <p className="topic-uncertainty">不确定性：{segment.uncertainties.join("；")}</p> : null}
         <details className="x-evidence" open={false}>

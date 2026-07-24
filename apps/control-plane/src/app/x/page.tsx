@@ -13,9 +13,8 @@ export default async function XPage() {
   return <main className="reader-page">
     <header className="reader-page-header">
       <div className="reader-header-top"><a className="product-mark" href="/">Invest Hub</a><SessionControls viewer={user} /></div>
-      <h1>X 信息采集</h1>
-      <p>按博主和日期阅读每日综合观点；展开证据明细可查看逐帖理解与原始 X 链接。</p>
       <ReaderSourceNavigation active="x" />
+      <h1>X 信息采集</h1>
     </header>
     <XReader days={days} />
   </main>;
