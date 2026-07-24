@@ -55,6 +55,7 @@ const xIdentityMocks = vi.hoisted(() => ({
   resolveXSourceIdentity: vi.fn(),
 }));
 const xSourceMocks = vi.hoisted(() => ({
+  createXSource: vi.fn(),
   removeXSource: vi.fn(),
   XSourceError: class XSourceError extends Error {},
 }));
@@ -96,7 +97,7 @@ import { POST as postResult } from "./worker/tasks/[taskId]/result/route";
 import { POST as postCaptureSegment } from "./worker/tasks/[taskId]/capture-segments/route";
 import { POST as postRangeComplete } from "./worker/tasks/[taskId]/range-complete/route";
 import { GET as getAdminTaskDetail } from "./admin/tasks/[taskId]/route";
-import { PATCH as patchAdminSource } from "./admin/sources/route";
+import { PATCH as patchAdminSource, POST as postAdminSource } from "./admin/sources/route";
 import { POST as postAdminRule } from "./admin/rules/route";
 import { POST as postAdminTask } from "./admin/tasks/route";
 import { GET as getCoverage, POST as postCoverageInitialization } from "./admin/sources/[sourceId]/coverage/route";
@@ -112,6 +113,7 @@ import { GET as getDailyFactContext } from "./worker/tasks/[taskId]/daily-fact-c
 import { POST as postResolveAuthorProfiles } from "./worker/tasks/[taskId]/resolve-author-profiles/route";
 import { POST as postResolveXIdentity } from "./worker/x-sources/[sourceId]/resolve-identity/route";
 import { DELETE as deleteXSource } from "./admin/x/sources/[sourceId]/route";
+import { POST as postAdminXSource } from "./admin/x/sources/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}, method = "POST") {
   return new Request(`http://localhost${path}`, {
@@ -342,6 +344,16 @@ describe("v0 control-plane API authorization", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden" });
     expect(taskMocks.getTaskDetail).not.toHaveBeenCalled();
+  });
+
+  it("blocks ordinary users from creating Discord or X sources", async () => {
+    const discord = await postAdminSource(jsonRequest("/api/admin/sources", { display_name: "Research · #daily" }));
+    const x = await postAdminXSource(jsonRequest("/api/admin/x/sources", { display_name: "Researcher", requested_handle: "researcher" }));
+
+    expect(discord.status).toBe(403);
+    expect(x.status).toBe(403);
+    expect(sourceMocks.upsertDiscordSource).not.toHaveBeenCalled();
+    expect(xSourceMocks.createXSource).not.toHaveBeenCalled();
   });
 
   it("allows an authenticated ordinary user to read only the safe Discord reader DTO", async () => {
@@ -626,6 +638,46 @@ describe("v0 control-plane API authorization", () => {
       enabled: true,
       authorizedWorkerId: "worker-1",
     });
+  });
+
+  it("creates sources with server-owned metadata and returns only safe creation receipts", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    sourceMocks.upsertDiscordSource.mockResolvedValue({
+      id: "source-private", source_key: "discord:private", source_type: "discord", display_name: "Research · #daily", parameter_version: "discord-standard-v1",
+    });
+    xSourceMocks.createXSource.mockResolvedValue({
+      id: "source-private", sourceKey: "x:private", sourceType: "x", displayName: "Researcher", parameterVersion: "x-standard-v2", resolutionStatus: "pending",
+    });
+
+    const discord = await postAdminSource(jsonRequest("/api/admin/sources", { display_name: "Research · #daily" }));
+    const x = await postAdminXSource(jsonRequest("/api/admin/x/sources", { display_name: "Researcher", requested_handle: "@researcher" }));
+
+    expect(discord.status).toBe(201);
+    expect(await discord.json()).toEqual({ source: { source_type: "discord", display_name: "Research · #daily" } });
+    expect(x.status).toBe(201);
+    expect(await x.json()).toEqual({ source: { source_type: "x", display_name: "Researcher", resolution_status: "pending" } });
+    expect(sourceMocks.upsertDiscordSource).toHaveBeenCalledWith(expect.objectContaining({
+      sourceKey: expect.stringMatching(/^discord:[0-9a-f-]{36}$/), parameterVersion: "discord-standard-v1", createdBy: "admin-1", enabled: true,
+    }));
+    expect(xSourceMocks.createXSource).toHaveBeenCalledWith(expect.objectContaining({
+      sourceKey: expect.stringMatching(/^x:[0-9a-f-]{36}$/), parameterVersion: "x-standard-v2", requestedHandle: "researcher", actorId: "admin-1",
+    }));
+  });
+
+  it("rejects client-supplied creation metadata", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+
+    const discord = await postAdminSource(jsonRequest("/api/admin/sources", {
+      display_name: "Research · #daily", source_key: "forged", parameter_version: "forged",
+    }));
+    const x = await postAdminXSource(jsonRequest("/api/admin/x/sources", {
+      display_name: "Researcher", requested_handle: "researcher", source_key: "forged", parameter_version: "forged",
+    }));
+
+    expect(discord.status).toBe(422);
+    expect(x.status).toBe(422);
+    expect(sourceMocks.upsertDiscordSource).not.toHaveBeenCalled();
+    expect(xSourceMocks.createXSource).not.toHaveBeenCalled();
   });
 
   it("requires exact confirmation and returns no internal source fields when removing X", async () => {
