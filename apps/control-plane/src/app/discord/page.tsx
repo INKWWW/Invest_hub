@@ -20,9 +20,8 @@ export default async function DiscordPage() {
         <a className="product-mark" href="/">Invest Hub</a>
         <SessionControls viewer={user} />
       </div>
-      <h1>Discord 日度研判</h1>
-      <p>按频道和日期阅读已生成的观点与话题。</p>
       <ReaderSourceNavigation active="discord" />
+      <h1>Discord 日度研判</h1>
     </header>
     <DiscordReader days={days} manualRefreshSources={manualRefreshSources} />
   </main>;

@@ -9,10 +9,25 @@ const labels: Record<Status, string> = {
   succeeded: "已更新：这是当前可用的日度摘要。",
 };
 
-export function readerStatusLabel(status: Status): string {
+function formatShanghaiTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date).replace(/\//g, "-");
+}
+
+export function readerStatusLabel(status: Status, asOf?: string): string {
+  if (status === "succeeded" && asOf) return `截止 ${formatShanghaiTime(asOf)}，已更新。`;
   return labels[status];
 }
 
-export function ReaderStatus({ status }: { status: Status }) {
-  return <div className="reader-status" data-status={status}><p role="status">{readerStatusLabel(status)}</p></div>;
+export function ReaderStatus({ status, asOf }: { status: Status; asOf?: string }) {
+  return <div className="reader-status" data-status={status}><p role="status">{readerStatusLabel(status, asOf)}</p></div>;
 }
