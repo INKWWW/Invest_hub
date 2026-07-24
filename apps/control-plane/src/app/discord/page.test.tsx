@@ -27,6 +27,8 @@ describe("DiscordPage", () => {
     expect(html).toContain("admin@example.invalid");
     expect(html).toContain("管理员");
     expect(html).toContain("退出 / 切换账号");
+    expect(html).toContain('aria-label="账户会话"');
+    expect(html).not.toContain(">当前账号<");
   });
 
   it("places the source switcher between account information and the page title", async () => {

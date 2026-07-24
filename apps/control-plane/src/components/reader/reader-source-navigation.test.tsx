@@ -11,7 +11,7 @@ describe("ReaderSourceNavigation", () => {
     expect(discord).toContain('href="/x"');
     expect(discord).toContain('href="/discord" aria-current="page"');
     expect(x).toContain('href="/x" aria-current="page"');
-    expect(discord).toContain("信息来源");
+    expect(discord).not.toContain('<p class="reader-source-label">');
     expect(discord).not.toContain("admin");
     expect(x).not.toContain("sourceKey");
   });

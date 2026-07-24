@@ -37,7 +37,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .product-mark {
   color: var(--ink);
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.05rem;
+  font-size: clamp(2rem, 5.2vw, 2.5rem);
   font-weight: 700;
   letter-spacing: -0.025em;
   text-decoration: none;
@@ -73,14 +73,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   max-width: 760px;
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.8rem, 3.5vw, 2.75rem);
+  font-size: clamp(1.5625rem, 3vw, 2.25rem);
   font-weight: 600;
   letter-spacing: -0.045em;
   line-height: 1.05;
 }
 
 .reader-source-navigation { display: grid; gap: 0.45rem; margin: 0 0 1.5rem; padding: 0.8rem 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.reader-source-label { margin: 0; color: #547077; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
 .reader-source-links { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .reader-source-navigation a { border: 1px solid #b7ceca; border-radius: 999px; color: #315860; font-size: 0.84rem; font-weight: 800; padding: 0.42rem 0.7rem; text-decoration: none; }
 .reader-source-navigation a:hover, .reader-source-navigation a[aria-current="page"] { background: #e5efed; color: #173d46; }
@@ -89,13 +88,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .session-identity { display: grid; grid-template-columns: auto auto; gap: 0.05rem 0.45rem; margin: 0; color: #4a6268; font-size: 0.75rem; line-height: 1.25; text-align: right; }
 
-.session-identity > span { grid-column: 1 / -1; color: #687a7d; font-size: 0.67rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
-
 .session-identity strong { color: var(--ink); font-size: 0.8rem; overflow-wrap: anywhere; }
 
 .session-identity em { align-self: center; border: 1px solid #b7ceca; border-radius: 999px; color: #285461; font-size: 0.68rem; font-style: normal; font-weight: 800; padding: 0.1rem 0.38rem; white-space: nowrap; }
 
-.session-controls button { background: transparent; color: #1f5663; padding: 0.45rem 0.6rem; white-space: nowrap; }
+.session-controls button { background: transparent; color: #1f5663; font-size: 0.625rem; padding: 0.45rem 0.6rem; white-space: nowrap; }
 
 .session-controls button:hover { background: #e5efed; }
 
