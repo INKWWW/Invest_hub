@@ -920,6 +920,7 @@ class XWindowedRuntime:
         capture_segments: list[dict[str, Any]] = []
         duplicate_count = 0
         overlap_start = capture_range.overlap_start_at or capture_range.start_at
+        failure_stage = "page validation"
 
         try:
             page = self.connector.fetch_page(
@@ -929,16 +930,20 @@ class XWindowedRuntime:
                 end_at=capture_range.end_at,
             )
             receipt = self._validate_page(page, overlap_start)
+            failure_stage = "page mapping"
             mapped = self.canonicalizer.map(page)
+            failure_stage = "page boundary validation"
             page_times = [_required_instant(message.occurred_at, "X post occurred_at") for message in mapped]
             if any(occurred_at > capture_range.end_at for occurred_at in page_times):
                 raise RuntimeExecutionError("opencli_contract", "X page contains a post after its fixed end_at")
             if any(message.author_id != source_snapshot["account_id"] for message in mapped):
                 raise RuntimeExecutionError("opencli_contract", "X page author does not match the task source snapshot")
+            failure_stage = "local evidence persistence"
             self.evidence.persist_raw(page)
             local_counts = self.evidence.persist_canonical(mapped)
             duplicate_count += int(local_counts.get("duplicate_count", 0))
 
+            failure_stage = "page persistence acknowledgement"
             page_execution = self._page_execution(claim, page, mapped, page_times, None)
             if on_capture_page is None:
                 capture_segments.append(page_execution["capture_segment"])
@@ -958,7 +963,7 @@ class XWindowedRuntime:
         except RuntimeExecutionError:
             raise
         except (ValueError, SchemaError) as exc:
-            raise RuntimeExecutionError("schema_error", "X page or model output is invalid") from exc
+            raise RuntimeExecutionError("schema_error", f"X {failure_stage} failed schema validation") from exc
         except Exception as exc:
             raise RuntimeExecutionError("persistence_failure", "X local evidence persistence failed") from exc
 
