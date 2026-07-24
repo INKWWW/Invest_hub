@@ -198,7 +198,7 @@ cd ../.. && bash scripts/v0/redact-check.sh && git diff --check
 
 Expected: all tests, lint, production build, redaction check and whitespace validation pass.
 
-- [ ] **Step 3: Commit documentation.**
+- [x] **Step 3: Commit documentation.**
 
 ```bash
 git add docs/engineering-journal/2026-07-25-admin-source-creation-simplification.md docs/project-status.md docs/superpowers/specs/2026-07-25-admin-source-creation-simplification-design.md docs/superpowers/plans/2026-07-25-admin-source-creation-simplification.md
@@ -209,7 +209,7 @@ git commit -m "docs: record source creation simplification"
 
 **Files:** no source-file changes.
 
-- [ ] **Step 1: Merge the isolated branch into local `main` and rerun the front-end suite.**
+- [x] **Step 1: Merge the isolated branch into local `main` and rerun the front-end suite.**
 
 Run:
 
@@ -222,7 +222,7 @@ cd apps/control-plane && npm test
 
 Expected: merged `main` passes all front-end tests.
 
-- [ ] **Step 2: Deploy the existing linked Vercel control-plane project and verify the protected route.**
+- [x] **Step 2: Deploy the existing linked Vercel control-plane project and verify the protected route.**
 
 Run:
 

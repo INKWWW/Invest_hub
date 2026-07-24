@@ -24,6 +24,9 @@
 | 静态质量 | `cd apps/control-plane && npm run lint && npm run build` | lint 与 production build 通过 |
 | 发布前安全检查 | `bash scripts/v0/redact-check.sh && git diff --check` | `redaction_check: pass`；diff 检查通过 |
 
-## 待执行的外部动作
+## 合并与部署
 
-合并后的 Vercel 部署与真实管理员页面体验验证按本次 Plan 的 Task 4 执行；不需要 Supabase migration。
+- `codex/source-create-simplification` 已 fast-forward 合并至本地 `main`，并在合并结果上再次通过 30 个前端测试文件、131 项测试。
+- 已部署至既有 Vercel production 项目，部署 `dpl_Bjez5Hn1gtJWWWV4cadUabQ7mH9Y` 状态为 `Ready`；稳定别名为 `https://invest-hub-v0-control-plane.vercel.app`。
+- 匿名连通性检查访问 `/admin/sources` 后到达 `200 https://invest-hub-v0-control-plane.vercel.app/login?next=%2Fadmin`，确认路由可达且仍受登录保护。管理员登录后可直接体验新建来源表单。
+- 本次不需要、也没有执行 Supabase migration。
