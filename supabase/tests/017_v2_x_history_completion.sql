@@ -1,6 +1,6 @@
 begin;
 
-select plan(5);
+select plan(6);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000017001', 'authenticated', 'authenticated', 'v2-x-history-complete-admin@example.invalid', 'not-a-secret', now());
@@ -26,6 +26,18 @@ select public.create_bounded_x_history_task(
 create temporary table x_history_completion_claim as
 select public.claim_next_task('00000000-0000-0000-0000-000000017101', '2026-07-23T00:01:00Z') as payload;
 select ok((select payload ? 'capture_range' from x_history_completion_claim), 'history claim returns an immutable capture range');
+
+create temporary table x_history_page_receipt as
+select public.record_windowed_capture_segment(
+  (select (payload->>'task_id')::uuid from x_history_completion_claim), 1,
+  '00000000-0000-0000-0000-000000017101',
+  jsonb_build_object(
+    'idempotency_key', 'history-page-001', 'request_cursor', null, 'next_cursor', null,
+    'oldest_occurred_at', '2026-07-19T16:00:00Z', 'newest_occurred_at', '2026-07-19T16:10:00Z',
+    'response_matched', true, 'response_fresh', true
+  )
+) as payload;
+select is((select payload->>'resume_cursor' from x_history_page_receipt), null, 'history page receives a durable null-cursor receipt');
 
 insert into public.canonical_messages (id, source_id, external_message_id, occurred_at, author_display, content)
 values ('00000000-0000-0000-0000-000000017201', '00000000-0000-0000-0000-000000017011', 'post-history-completion', '2026-07-19T16:10:00Z', 'X History Completion Source', 'fixture');
