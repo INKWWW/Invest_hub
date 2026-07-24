@@ -24,6 +24,8 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 **V2 本地 Collection 受控采用（2026-07-24）：** 已在隔离 feature branch 锁定 PR #2173 的两个提交，构建 Git 忽略、非全局的专用 OpenCLI runtime，并将 V2 X Adapter/Worker 改为只接受 `twitter collection` 的 `posts + receipt`。完成回执必须精确对应窗口 `overlap_start_at`，且只允许 `time_boundary_reached` 或 `cursor_exhausted`；任何命令、回执、时间、关系或 cursor 异常都会失败且不前移水位，不会静默回退到 `tweets`。本次确定性验证通过：本地 runtime contract、100 个 Worker 测试、3 个 V2 fixture E2E、5 个 V1.1 fixture 回归、11 个窗口/调度回归、51 个控制面聚焦测试、额外 40 个 API/contract 测试，以及 17 个 pgTAP 文件/240 项；脱敏检查通过。真实持久化 E2E runner 已实现但未运行，仍需管理员之后单独明确授权。专用 runtime 构建时上游依赖审计报告 1 个 low、2 个 moderate、3 个 high 风险；未执行会改变依赖锁的自动修复，须在后续本地依赖维护中人工处理。
 
+**V2 X 来源身份解析本地门禁（2026-07-24）：** 已完成待验证来源到 `resolved` 的原子数据库契约、仅限已绑定 Worker 的控制面端点、本机 `twitter profile` 身份核验 CLI，以及一次性本地 runner。runner 必须使用专用本地 OpenCLI、Git 忽略且 owner-only 的配置/设备凭据/evidence、`V2_REAL_X_ACK=authorized` 和独立显式批准；静态拒绝门禁确认其不会领取任务、运行采集、调用 Codex CLI 或安装调度。当前本地回归为 18 个 pgTAP 文件/259 项、116 个 Worker 测试、103 个控制面测试及 lint/production build 通过。**尚未**执行远程 migration、部署、真实 profile 身份解析、coverage 初始化、任务创建或真实持久化 E2E。
+
 **Discord 交接更正（2026-07-22）：** 下文 V1.1 的历史时间窗与 Browser Bridge 说明仅保留为已完成探索记录；当前不得据此继续个人账号采集、安装任务或推进 Discord coverage。下一步是管理员授权的 Bot 路线，其余范围不变。
 
 ## Approval status

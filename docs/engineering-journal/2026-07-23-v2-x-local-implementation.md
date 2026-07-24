@@ -58,3 +58,11 @@
 - 受控 runtime 的 `npm ci` 审计输出为 1 个 low、2 个 moderate、3 个 high 风险。未执行 `npm audit fix` 或任何自动依赖升级，以免越过 lock 和人工维护边界。
 
 仍待单独授权的真实持久化 E2E 必须先确认已配置 X 身份与 source snapshot 的稳定 author identity 能与 Collection 输出一致，并在运行前明确列出将处理的既有任务和写入范围。官方版本出现时只提示管理员；人工复核、隔离构建、同等回归、再次明确授权和最小真实验证均完成后，才可切换，失败则保留本地 runtime 与最后安全水位。
+
+## 2026-07-24 X 来源身份解析本地门禁
+
+- 为此前保持 `pending` 的管理员 X 来源补齐了受限激活链路：数据库只接受已显式绑定 Worker 的原子确认；控制面只传递规范化身份；本机 CLI 只读取 `twitter profile` 的 `screen_name` 并要求与请求账号精确一致。
+- 新增一次性本地 runner。它要求专用 Collection executable、Git 忽略且 owner-only 的配置/设备凭据/evidence、`V2_REAL_X_ACK=authorized`、可执行的 `V2_PYTHON_BIN` 与单独的 `--approve-identity-resolution`。输入不完整、全局 `opencli`、错误 ACK、非忽略路径或非 owner-only 路径均在 Python 执行前拒绝。
+- runner 的唯一允许命令是 Worker 的 `resolve-x-identity` 子命令；门禁测试静态确认它不领取任务、不执行 X 帖子采集、不调用 Codex CLI、不创建 scheduler、launchd 或 cron。evidence 仅允许追加时间、合同版本和结果枚举。
+- 本地验证通过：身份 runner 拒绝门禁、V2 fixture E2E（3 项）、V1.1 fixture 回归（5 项）、Worker 全量 116 项、控制面全量 103 项与 lint/production build、以及 18 个 pgTAP 文件/259 项。工作树没有私有 runtime 配置或真实 evidence；脱敏检查见本任务收尾。
+- 本节不记录真实身份、profile、帖子、链接、Cookie、浏览器 Profile、Prompt 或模型输出。**未**执行 identity runner 本体、远程 migration、部署、coverage 初始化、任务创建或真实持久化 E2E。
