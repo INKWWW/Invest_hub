@@ -34,9 +34,8 @@ export function SessionControls({ viewer }: { viewer: SessionViewer }) {
     }
   }
 
-  return <aside className="session-controls" data-testid="session-controls" aria-label="当前账号">
+  return <aside className="session-controls" data-testid="session-controls" aria-label="账户会话">
     <p className="session-identity">
-      <span>当前账号</span>
       <strong>{viewer.email ?? "已登录账号"}</strong>
       <em>{roleLabel(viewer.role)}</em>
     </p>
