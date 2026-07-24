@@ -10,6 +10,9 @@ insert into public.source_collection_coverage (source_id, coverage_start_at, cov
 values ('00000000-0000-0000-0000-000000014001', '2026-07-23T00:00:00+08:00', '2026-07-23T00:00:00+08:00');
 insert into public.workers (id, name, device_secret_hash, status)
 values ('00000000-0000-0000-0000-000000014101', 'x-completion-worker', 'x-completion-worker-hash', 'online');
+update public.sources
+set authorized_worker_id = '00000000-0000-0000-0000-000000014101'
+where id = '00000000-0000-0000-0000-000000014001';
 
 create temporary table x_completion_task as
 select public.create_windowed_x_sync_task(

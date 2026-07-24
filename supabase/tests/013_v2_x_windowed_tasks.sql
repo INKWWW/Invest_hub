@@ -40,6 +40,9 @@ select throws_ok(
 
 insert into public.workers (id, name, device_secret_hash, status)
 values ('00000000-0000-0000-0000-000000013101', 'x-window-worker', 'x-window-worker-hash', 'online');
+update public.sources
+set authorized_worker_id = '00000000-0000-0000-0000-000000013101'
+where id = '00000000-0000-0000-0000-000000013001';
 create temporary table x_claim as
 select public.claim_next_task('00000000-0000-0000-0000-000000013101', '2026-07-23T00:01:00Z') as payload;
 select is((select payload->>'task_type' from x_claim), 'x_sync', 'the regular worker claim path returns the X task');
