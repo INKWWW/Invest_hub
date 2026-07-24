@@ -114,6 +114,14 @@ function jsonRequest(path: string, body: unknown, headers: Record<string, string
   });
 }
 
+function rawJsonRequest(path: string, body: string, headers: Record<string, string> = {}) {
+  return new Request(`http://localhost${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body,
+  });
+}
+
 const validTaskResult = {
   contract_version: "v0",
   task_id: "task-1",
@@ -206,6 +214,19 @@ describe("v0 control-plane API authorization", () => {
     expect(xIdentityMocks.resolveXSourceIdentity).not.toHaveBeenCalled();
   });
 
+  it("rejects malformed X identity resolution JSON without invoking the repository", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+
+    const response = await postResolveXIdentity(
+      rawJsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, "{invalid"),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_x_identity_resolution" });
+    expect(xIdentityMocks.resolveXSourceIdentity).not.toHaveBeenCalled();
+  });
+
   it("passes an authenticated Worker identity resolution request to the repository and returns only the identity DTO", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     xIdentityMocks.resolveXSourceIdentity.mockResolvedValue({
@@ -231,10 +252,10 @@ describe("v0 control-plane API authorization", () => {
     expect(body).not.toContain("cookie");
     expect(body).not.toContain("source_key");
     expect(body).not.toContain("account_id");
+    expect(body).not.toContain("fixture_handle");
     expect(await response.json()).toEqual({
       identity: {
         sourceId: xIdentitySourceId,
-        accountId: "fixture_handle",
         resolutionStatus: "resolved",
         parameterVersion: "v2-identity",
         idempotent: false,
@@ -278,6 +299,27 @@ describe("v0 control-plane API authorization", () => {
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: code });
+  });
+
+  it.each([
+    ["source_not_found", 404, "source_not_found"],
+    ["source_parameter_version_mismatch", 422, "invalid_x_identity_resolution"],
+    ["invalid_x_identity", 422, "invalid_x_identity_resolution"],
+    ["unexpected repository error", 503, "x_identity_resolution_rejected"],
+  ])("maps %s to only its fixed error response", async (message, status, error) => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xIdentityMocks.resolveXSourceIdentity.mockRejectedValue({ message });
+
+    const response = await postResolveXIdentity(
+      jsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, {
+        parameter_version: "v2-identity",
+        account_id: "fixture_handle",
+      }),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error });
   });
 
   it("blocks ordinary users from admin invite creation without revealing records", async () => {
