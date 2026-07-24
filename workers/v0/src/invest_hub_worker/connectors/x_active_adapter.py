@@ -15,6 +15,7 @@ from .base import ConnectorError, RawPage
 
 _RECEIPT_KEYS = {"completed", "stop_reason", "requested_until", "pages_fetched", "oldest_seen_at"}
 _STOP_REASONS = {"time_boundary_reached", "cursor_exhausted"}
+_X_LEGACY_TIMESTAMP_FORMAT = "%a %b %d %H:%M:%S %z %Y"
 
 
 class XActiveAdapter:
@@ -167,7 +168,7 @@ class OpenCLICollectionInvoker:
         author_handle = row.get("author")
         if not all(isinstance(value, str) and value for value in (post_id, created_at, url, author_handle)):
             raise ConnectorError("OpenCLI Collection row lacks stable post fields", code="opencli_contract")
-        _post_time({"created_at": created_at})
+        created_at = _instant_text(_post_time({"created_at": created_at}))
         relation = row.get("relationship")
         if not isinstance(relation, Mapping):
             raise ConnectorError("OpenCLI Collection row lacks relationship facts", code="opencli_contract")
@@ -303,4 +304,16 @@ def _instant_text(value: datetime) -> str:
 
 
 def _post_time(post: Mapping[str, object]) -> datetime:
-    return _required_instant(post.get("created_at"), "OpenCLI X post time")
+    value = post.get("created_at")
+    try:
+        return _required_instant(value, "OpenCLI X post time")
+    except ConnectorError as iso_error:
+        if not isinstance(value, str):
+            raise
+        try:
+            return _required_aware_instant(
+                datetime.strptime(value, _X_LEGACY_TIMESTAMP_FORMAT),
+                "OpenCLI X post time",
+            )
+        except ValueError:
+            raise iso_error
