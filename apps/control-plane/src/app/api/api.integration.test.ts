@@ -50,6 +50,9 @@ const sourceMocks = vi.hoisted(() => ({
   updateSourceAdministration: vi.fn(),
   upsertDiscordSource: vi.fn(),
 }));
+const xIdentityMocks = vi.hoisted(() => ({
+  resolveXSourceIdentity: vi.fn(),
+}));
 const ruleMocks = vi.hoisted(() => ({
   replaceSourceRules: vi.fn(),
 }));
@@ -73,6 +76,7 @@ vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
 vi.mock("../../lib/db/repositories/windowed-sync", () => windowedSyncMocks);
 vi.mock("../../lib/db/repositories/author-profiles", () => authorProfileMocks);
 vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
+vi.mock("../../lib/db/repositories/x-identities", () => xIdentityMocks);
 vi.mock("../../lib/db/repositories/rules", () => ruleMocks);
 vi.mock("../../lib/db/repositories/reader", () => readerMocks);
 
@@ -100,12 +104,21 @@ import { GET as getDiscordReader } from "./reader/discord/route";
 import { POST as postScheduleTick } from "./worker/schedule/tick/route";
 import { GET as getDailyFactContext } from "./worker/tasks/[taskId]/daily-fact-context/route";
 import { POST as postResolveAuthorProfiles } from "./worker/tasks/[taskId]/resolve-author-profiles/route";
+import { POST as postResolveXIdentity } from "./worker/x-sources/[sourceId]/resolve-identity/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${path}`, {
     method: "POST",
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
+  });
+}
+
+function rawJsonRequest(path: string, body: string, headers: Record<string, string> = {}) {
+  return new Request(`http://localhost${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body,
   });
 }
 
@@ -123,6 +136,8 @@ const validTaskResult = {
   structured_run_ids: [],
   telemetry: { elapsed_ms: 10, retry_count: 0, failure_class: null },
 };
+
+const xIdentitySourceId = "11111111-1111-4111-8111-111111111111";
 
 const validPersistencePayload = {
   contract_version: "v0",
@@ -165,6 +180,146 @@ describe("v0 control-plane API authorization", () => {
     vi.clearAllMocks();
     authMocks.getCurrentUser.mockResolvedValue({ id: "user-1", role: "user", email: "user@example.invalid" });
     workerMocks.authenticateWorker.mockResolvedValue(null);
+  });
+
+  it("rejects unauthenticated X identity resolution without invoking the repository", async () => {
+    const response = await postResolveXIdentity(
+      jsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, {
+        parameter_version: "v2-identity",
+        account_id: "fixture_handle",
+      }),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "unauthorized" });
+    expect(xIdentityMocks.resolveXSourceIdentity).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { parameter_version: "v2-identity" },
+    { parameter_version: "v2-identity", account_id: "fixture_handle", unexpected: true },
+    { parameter_version: "v2-identity", account_id: "@fixture_handle" },
+    { parameter_version: "v2-identity", account_id: "Fixture_Handle" },
+  ])("rejects an invalid X identity resolution payload", async (body) => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+
+    const response = await postResolveXIdentity(
+      jsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, body),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_x_identity_resolution" });
+    expect(xIdentityMocks.resolveXSourceIdentity).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed X identity resolution JSON without invoking the repository", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+
+    const response = await postResolveXIdentity(
+      rawJsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, "{invalid"),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_x_identity_resolution" });
+    expect(xIdentityMocks.resolveXSourceIdentity).not.toHaveBeenCalled();
+  });
+
+  it("passes an authenticated Worker identity resolution request to the repository and returns only the identity DTO", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xIdentityMocks.resolveXSourceIdentity.mockResolvedValue({
+      sourceId: xIdentitySourceId,
+      accountId: "fixture_handle",
+      resolutionStatus: "resolved",
+      parameterVersion: "v2-identity",
+      idempotent: false,
+    });
+
+    const response = await postResolveXIdentity(
+      jsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, {
+        parameter_version: "v2-identity",
+        account_id: "fixture_handle",
+      }, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.clone().text();
+    expect(body).not.toContain("profile");
+    expect(body).not.toContain("url");
+    expect(body).not.toContain("cookie");
+    expect(body).not.toContain("source_key");
+    expect(body).not.toContain("account_id");
+    expect(body).not.toContain("fixture_handle");
+    expect(await response.json()).toEqual({
+      identity: {
+        sourceId: xIdentitySourceId,
+        resolutionStatus: "resolved",
+        parameterVersion: "v2-identity",
+        idempotent: false,
+      },
+    });
+    expect(xIdentityMocks.resolveXSourceIdentity).toHaveBeenCalledWith({
+      sourceId: xIdentitySourceId,
+      workerId: "worker-1",
+      parameterVersion: "v2-identity",
+      accountId: "fixture_handle",
+    });
+  });
+
+  it("maps an unauthorized Worker identity resolution to a fixed forbidden response", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xIdentityMocks.resolveXSourceIdentity.mockRejectedValue({ message: "worker_not_authorized" });
+
+    const response = await postResolveXIdentity(
+      jsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, {
+        parameter_version: "v2-identity",
+        account_id: "fixture_handle",
+      }),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "worker_not_authorized" });
+  });
+
+  it.each(["x_identity_conflict", "x_identity_activation_blocked"])("maps %s to a fixed conflict response", async (code) => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xIdentityMocks.resolveXSourceIdentity.mockRejectedValue({ message: code });
+
+    const response = await postResolveXIdentity(
+      jsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, {
+        parameter_version: "v2-identity",
+        account_id: "fixture_handle",
+      }),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: code });
+  });
+
+  it.each([
+    ["source_not_found", 404, "source_not_found"],
+    ["source_parameter_version_mismatch", 422, "invalid_x_identity_resolution"],
+    ["invalid_x_identity", 422, "invalid_x_identity_resolution"],
+    ["unexpected repository error", 503, "x_identity_resolution_rejected"],
+  ])("maps %s to only its fixed error response", async (message, status, error) => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xIdentityMocks.resolveXSourceIdentity.mockRejectedValue({ message });
+
+    const response = await postResolveXIdentity(
+      jsonRequest(`/api/worker/x-sources/${xIdentitySourceId}/resolve-identity`, {
+        parameter_version: "v2-identity",
+        account_id: "fixture_handle",
+      }),
+      { params: Promise.resolve({ sourceId: xIdentitySourceId }) },
+    );
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error });
   });
 
   it("blocks ordinary users from admin invite creation without revealing records", async () => {

@@ -729,6 +729,10 @@ export interface Database {
         Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_start_at: string; p_end_at: string };
         Returns: Json;
       };
+      resolve_x_source_identity: {
+        Args: { p_source_id: string; p_worker_id: string; p_parameter_version: string; p_account_id: string };
+        Returns: Json;
+      };
       create_x_source: {
         Args: { p_source_key: string; p_display_name: string; p_requested_handle: string; p_parameter_version: string; p_actor_id: string };
         Returns: Json;

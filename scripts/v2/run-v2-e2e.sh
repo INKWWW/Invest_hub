@@ -3,6 +3,7 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 node scripts/v2/test-local-opencli-collection-contract.mjs --lock tools/opencli-v2-collection.lock.json --fixture-help workers/v0/tests/fixtures/opencli_twitter_collection_help.txt
+node scripts/v2/test-local-x-identity-resolution-gate.mjs
 if [[ "${1:-}" == "--opencli-executable" ]]; then
   [[ $# -eq 2 ]] || { printf 'usage: %s [--opencli-executable <dedicated-local-path>]\n' "$0" >&2; exit 2; }
   executable="$2"
