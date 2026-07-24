@@ -16,6 +16,9 @@ from .worker import Worker
 from .x_identity import IdentityResolutionError, resolve_configured_x_identity
 
 
+_SCHEDULED_FAILURE_BACKOFF_SECONDS = 300
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Invest Hub V0 authorized local Worker")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -292,7 +295,13 @@ def _run_scheduled(worker: Worker, *, once: bool, poll_seconds: int) -> int:
         }, sort_keys=True))
         if once:
             return 0 if outcome.status in {"succeeded", "no_task"} else 1
-        time.sleep(poll_seconds)
+        time.sleep(_scheduled_sleep_seconds(outcome, poll_seconds))
+
+
+def _scheduled_sleep_seconds(outcome: object, poll_seconds: int) -> int:
+    if getattr(outcome, "status", None) == "recovering" and getattr(outcome, "task_id", None):
+        return max(poll_seconds, _SCHEDULED_FAILURE_BACKOFF_SECONDS)
+    return poll_seconds
 
 
 def _read_private_text(path: Path) -> str:

@@ -16,6 +16,7 @@ from invest_hub_worker.cli import (
     _require_controlled_x_opencli_executable,
     _prepare_identity_evidence_dir,
     _run_scheduled,
+    _scheduled_sleep_seconds,
     build_parser,
     main,
 )
@@ -60,6 +61,10 @@ class WorkerCliTests(unittest.TestCase):
 
         self.assertEqual(worker.schedule_calls, 1)
         self.assertEqual(worker.run_calls, 1)
+
+    def test_scheduled_x_failure_uses_a_bounded_backoff_before_the_next_claim(self) -> None:
+        self.assertEqual(_scheduled_sleep_seconds(RunOutcome("recovering", "task-1"), 60), 300)
+        self.assertEqual(_scheduled_sleep_seconds(RunOutcome("no_task"), 60), 60)
 
     def test_resolve_x_identity_parser_requires_only_identity_inputs(self) -> None:
         parser = build_parser()

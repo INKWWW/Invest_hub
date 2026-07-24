@@ -9,6 +9,10 @@ from .errors import LeaseUncertain
 from .lease import LeaseState
 
 
+_MAX_X_RETRYABLE_ATTEMPTS = 3
+_NON_RETRYABLE_X_FAILURES = frozenset({"opencli_contract", "opencli_missing", "preflight", "unauthorized"})
+
+
 class WorkerState(StrEnum):
     IDLE = "idle"
     CLAIMED = "claimed"
@@ -225,6 +229,7 @@ class Worker:
         }
         if failure_class not in allowed:
             failure_class = "unknown"
+        retryable = self._is_retryable_x_failure(claim, failure_class)
         try:
             self.protocol.report_failure(
                 {
@@ -234,13 +239,22 @@ class Worker:
                     "status": "retryable_failed",
                     "failure_class": failure_class,
                     "safe_checkpoint": claim.get("safe_checkpoint"),
-                    "retryable": True,
+                    "retryable": retryable,
                 }
             )
         except Exception:
             # A failed failure report must not be mistaken for a successful
             # task completion; the lease will remain conservative for retry.
             return
+
+    @staticmethod
+    def _is_retryable_x_failure(claim: Mapping[str, Any], failure_class: str) -> bool:
+        if claim.get("task_type") != "x_sync":
+            return True
+        attempt = claim.get("attempt")
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            return False
+        return attempt < _MAX_X_RETRYABLE_ATTEMPTS and failure_class not in _NON_RETRYABLE_X_FAILURES
 
     def _recover(self, task_id: str | None, error: Exception) -> RunOutcome:
         self.state = WorkerState.RECOVERING
