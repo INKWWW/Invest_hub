@@ -62,6 +62,28 @@ class XActiveAdapterTests(unittest.TestCase):
         self.assertEqual(page.telemetry["collection_stop_reason"], "time_boundary_reached")
         self.assertNotIn("fixture", str(page.telemetry))
 
+    def test_collection_command_floors_microsecond_lower_boundary_to_opencli_milliseconds(self) -> None:
+        commands: list[list[str]] = []
+        response = self.fixture("opencli_collection_success.json")
+        response["receipt"]["requested_until"] = "2026-07-22T23:30:00.627Z"
+        response["receipt"]["oldest_seen_at"] = "2026-07-22T23:30:00.627Z"
+
+        class Result:
+            returncode = 0
+            stdout = json.dumps(response)
+
+        def runner(command: list[str], **_kwargs: object) -> Result:
+            commands.append(command)
+            return Result()
+
+        lower_bound = datetime(2026, 7, 22, 23, 30, 0, 627502, tzinfo=timezone.utc)
+        page = XActiveAdapter(OpenCLICollectionInvoker("dedicated-opencli", runner=runner)).fetch_page(
+            source_config(), None, lower_bound_at=lower_bound, end_at=END_AT,
+        )
+
+        self.assertEqual(commands[0][commands[0].index("--until") + 1], "2026-07-22T23:30:00.627Z")
+        self.assertEqual(page.telemetry["collection_requested_until"], "2026-07-22T23:30:00.627Z")
+
     def test_incomplete_or_unknown_receipt_cannot_become_a_page(self) -> None:
         for response in (self.fixture("opencli_collection_incomplete.json"), {"posts": [], "receipt": {}}):
             with self.assertRaises(ConnectorError) as caught:

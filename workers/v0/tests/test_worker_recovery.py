@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from invest_hub_worker.errors import RemoteConflict
+from invest_hub_worker.runtime import RuntimeExecutionError
 from invest_hub_worker.worker import Worker, WorkerState
 
 
@@ -104,6 +105,31 @@ class WorkerRecoveryTests(unittest.TestCase):
         self.assertEqual(outcome.status, "recovering")
         self.assertEqual(protocol.reported_results, [])
         self.assertEqual(protocol.reported_failures[0]["failure_class"], "unknown")
+
+    def test_x_contract_failure_is_terminal_instead_of_reentering_the_claim_loop(self) -> None:
+        protocol = FakeProtocol()
+        protocol.claim_value = {**CLAIM, "task_type": "x_sync", "source_id": "x-source"}
+        worker = Worker(
+            protocol,
+            execute=lambda _claim: (_ for _ in ()).throw(RuntimeExecutionError("opencli_contract", "invalid receipt")),
+        )
+
+        outcome = worker.run_once()
+
+        self.assertEqual(outcome.status, "recovering")
+        self.assertFalse(protocol.reported_failures[0]["retryable"])
+
+    def test_x_transient_failure_stops_retrying_after_the_third_attempt(self) -> None:
+        protocol = FakeProtocol()
+        protocol.claim_value = {**CLAIM, "task_type": "x_sync", "source_id": "x-source", "attempt": 3}
+        worker = Worker(
+            protocol,
+            execute=lambda _claim: (_ for _ in ()).throw(RuntimeExecutionError("timeout", "upstream timeout")),
+        )
+
+        worker.run_once()
+
+        self.assertFalse(protocol.reported_failures[0]["retryable"])
 
     def test_expired_lease_stops_before_execution_or_result_report(self) -> None:
         protocol = FakeProtocol()

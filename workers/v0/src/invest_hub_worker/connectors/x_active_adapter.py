@@ -125,7 +125,7 @@ class OpenCLICollectionInvoker:
         handle = next((part for part in parts.path.split("/") if part), "")
         if not handle:
             raise ConnectorError("X source URL must name an account handle", code="preflight")
-        lower_text = _instant_text(lower_bound_at)
+        lower_text = _collection_boundary_text(lower_bound_at)
         command = [
             self.executable,
             "twitter",
@@ -234,7 +234,7 @@ def _validate_collection_payload(payload: object, lower_bound_at: datetime) -> t
     if receipt.get("completed") is not True or receipt.get("stop_reason") not in _STOP_REASONS:
         raise ConnectorError("OpenCLI X Collection did not prove completion", code="opencli_contract")
     requested_until = _required_instant(receipt.get("requested_until"), "Collection receipt requested_until")
-    if requested_until != _required_aware_instant(lower_bound_at, "Collection lower boundary"):
+    if requested_until != collection_boundary_at(lower_bound_at):
         raise ConnectorError("OpenCLI X Collection receipt lower boundary does not match the request", code="opencli_contract")
     pages_fetched = receipt.get("pages_fetched")
     if isinstance(pages_fetched, bool) or not isinstance(pages_fetched, int) or pages_fetched < 1:
@@ -246,9 +246,9 @@ def _validate_collection_payload(payload: object, lower_bound_at: datetime) -> t
     return list(posts), {
         "completed": True,
         "stop_reason": str(receipt["stop_reason"]),
-        "requested_until": _instant_text(requested_until),
+        "requested_until": _collection_boundary_text(requested_until),
         "pages_fetched": pages_fetched,
-        "oldest_seen_at": _instant_text(oldest_seen_at) if oldest_seen_at is not None else None,
+        "oldest_seen_at": _collection_boundary_text(oldest_seen_at) if oldest_seen_at is not None else None,
     }
 
 
@@ -301,6 +301,27 @@ def _required_instant(value: object, label: str) -> datetime:
 
 def _instant_text(value: datetime) -> str:
     return _required_aware_instant(value, "timestamp").isoformat().replace("+00:00", "Z")
+
+
+def collection_boundary_at(value: datetime) -> datetime:
+    """Floor a collection boundary to OpenCLI's RFC3339 millisecond precision.
+
+    The project can persist microsecond timestamps, whereas the pinned OpenCLI
+    collection command accepts at most three fractional-second digits.  Floor,
+    rather than round up, so the verified read includes a superset of the
+    required overlap; downstream range filtering still uses the exact task
+    boundary.
+    """
+
+    instant = _required_aware_instant(value, "Collection lower boundary")
+    return instant.replace(microsecond=(instant.microsecond // 1_000) * 1_000)
+
+
+def _collection_boundary_text(value: datetime) -> str:
+    instant = collection_boundary_at(value)
+    if instant.microsecond == 0:
+        return _instant_text(instant)
+    return instant.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _post_time(post: Mapping[str, object]) -> datetime:

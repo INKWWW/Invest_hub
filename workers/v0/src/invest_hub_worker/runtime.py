@@ -12,7 +12,7 @@ from .canonical import CanonicalMessage, Canonicalizer
 from .config import LocalWorkerConfig, LocalWorkerConfigSet
 from .connectors.base import ConnectorError, RawPage
 from .connectors.discord_active_adapter import DiscordActiveAdapter, normalize_channel_url
-from .connectors.x_active_adapter import OpenCLICollectionInvoker, XActiveAdapter
+from .connectors.x_active_adapter import OpenCLICollectionInvoker, XActiveAdapter, collection_boundary_at
 from .evidence import LocalEvidenceStore
 from .providers.base import Provider, ProviderContext
 from .retry import RetryPolicy
@@ -1038,7 +1038,7 @@ class XWindowedRuntime:
             requested_at = _required_instant(requested_until, "X Collection receipt requested_until")
             if lower_bound_at.tzinfo is None:
                 raise ValueError("X Collection lower boundary must be timezone-aware")
-            expected_at = lower_bound_at.astimezone(timezone.utc)
+            expected_at = collection_boundary_at(lower_bound_at)
             oldest_at = None if oldest_seen_at is None else _required_instant(oldest_seen_at, "X Collection receipt oldest_seen_at")
         except ValueError as exc:
             raise RuntimeExecutionError("opencli_contract", "X Collection receipt timestamp is invalid") from exc
