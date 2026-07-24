@@ -66,3 +66,13 @@
 - runner 的唯一允许命令是 Worker 的 `resolve-x-identity` 子命令；门禁测试静态确认它不领取任务、不执行 X 帖子采集、不调用 Codex CLI、不创建 scheduler、launchd 或 cron。evidence 仅允许追加时间、合同版本和结果枚举。
 - 本地验证通过：身份 runner 拒绝门禁、V2 fixture E2E（3 项）、V1.1 fixture 回归（5 项）、Worker 全量 116 项、控制面全量 103 项与 lint/production build、以及 18 个 pgTAP 文件/259 项。工作树没有私有 runtime 配置或真实 evidence；脱敏检查见本任务收尾。
 - 本节不记录真实身份、profile、帖子、链接、Cookie、浏览器 Profile、Prompt 或模型输出。**未**执行 identity runner 本体、远程 migration、部署、coverage 初始化、任务创建或真实持久化 E2E。
+
+## 2026-07-24 真实持久化、生产绑定与持续运行收口
+
+在用户逐项授权后，已完成一次真实、受控的持久化 X 范围闭环。任务范围完成，范围内原始、Canonical 与单帖 Codex CLI 分析计数一致（均为 `8`），并持久化 `1` 个不可变的每日观点段。原始帖子、账号、链接、Prompt、完整模型输出、凭据和本地路径没有进入 Git 或本 Journal。
+
+控制面生产部署已核对为 Ready，且环境绑定已修复为与本机 X Worker 使用的同一数据库；Worker 成功领取并完成上述任务，证明控制面与持久化目标未错位。
+
+为避免复用已停止的 Discord 个人账号采集路径，新增 X 专用 `com.investhub.x-worker` launchd 模板及受限安装、卸载、验证脚本。安装器只接受 owner-only 的纯 X 配置、受控本地 Collection executable、owner-only credential/prompt/evidence，并强制 `V2_REAL_X_ACK`；服务已加载且进程处于运行状态。它每分钟安全请求调度，不提交客户端窗口，并只处理控制面为已绑定 X Worker 投递的到期/恢复范围。
+
+本轮回归：X launchd 安装前测试、Worker `124` 项、控制面 `106` 项、lint、production build、`git diff --check` 与脱敏检查均通过。生产 `/x` 在未登录会话中正确跳转登录；当前没有可用的普通用户登录会话，故真实桌面与 `375px` 阅读验收尚未完成，已在 V2 Final Report 标记为 conditional。

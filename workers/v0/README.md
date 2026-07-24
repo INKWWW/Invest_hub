@@ -51,3 +51,15 @@ bash scripts/v1/verify-launchd-worker.sh --check-only
 ```
 
 `install-launchd-worker.sh` 需要显式 `--install`，并要求提供所有绝对路径；它不会默认写入 `~/Library/LaunchAgents`，避免误操作其他 Agent。真实安装前不得把路径、Prompt、凭据或 Profile 信息复制到 Git、聊天记录或日志中。
+
+## V2 X 本地定时 Worker
+
+V2 X 使用独立的 `com.investhub.x-worker` 服务，不能复用或改名 V1.1 的 Discord 服务。该服务每分钟安全请求控制面调度；控制面只在上海时区的 `08:00`、`12:00`、`16:00`、`20:00` 和次日 `00:00` 投递 X 的到期窗口，并负责补采与去重。
+
+安装器只接受纯 X 来源配置、受控的本地 Collection executable，以及 owner-only 的配置、凭据、Prompt 与 evidence 目录；混入 Discord 来源或使用非受控 executable 会直接拒绝。安装前可执行不改动系统的检查：
+
+```bash
+bash scripts/v2/verify-launchd-x-worker.sh --check-only
+```
+
+`scripts/v2/install-launchd-x-worker.sh` 必须显式传入 `--install` 与全部绝对路径；`scripts/v2/uninstall-launchd-x-worker.sh` 仅卸载 X 的 label。不要将任何实际路径、账户信息、Prompt、凭据或采集内容写入 Git、日志或聊天记录。
