@@ -48,7 +48,6 @@ export async function POST(request: Request, context: { params: Promise<{ source
     });
     return NextResponse.json({
       identity: {
-        source_id: identity.sourceId,
         resolution_status: identity.resolutionStatus,
         parameter_version: identity.parameterVersion,
         idempotent: identity.idempotent,

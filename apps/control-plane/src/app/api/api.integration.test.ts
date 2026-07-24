@@ -256,7 +256,6 @@ describe("v0 control-plane API authorization", () => {
     expect(body).not.toContain("fixture_handle");
     expect(await response.json()).toEqual({
       identity: {
-        source_id: xIdentitySourceId,
         resolution_status: "resolved",
         parameter_version: "v2-identity",
         idempotent: false,
