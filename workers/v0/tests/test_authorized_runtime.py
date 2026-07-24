@@ -17,14 +17,14 @@ from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
 from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscordRuntimeSet, RuntimeExecutionError
 
 
-def _canonical_message(*, external_message_id: str = "message-1") -> CanonicalMessage:
+def _canonical_message(*, external_message_id: str = "message-1", content: str = "fixture content") -> CanonicalMessage:
     return CanonicalMessage(
         source_id="source-1",
         external_message_id=external_message_id,
         author_id="author-1",
         author_name="Author",
         occurred_at="2099-01-01T00:00:00Z",
-        content="fixture content",
+        content=content,
         reply_to_message_id=None,
         quote=None,
         attachments=(),
@@ -104,6 +104,31 @@ class FakeProvider:
 
 
 class AuthorizedRuntimeTests(unittest.TestCase):
+    def test_local_evidence_store_reloads_a_record_with_a_unicode_line_separator(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "evidence"
+            evidence = LocalEvidenceStore(root)
+            message = _canonical_message(content="first\u2028second")
+
+            self.assertEqual(evidence.persist_canonical((message,)), {"canonical_count": 1, "duplicate_count": 0})
+            self.assertEqual(evidence.persist_canonical((message,)), {"canonical_count": 0, "duplicate_count": 1})
+
+            payloads = [
+                json.loads(row)
+                for row in (root / "canonical" / "messages.jsonl").read_text(encoding="utf-8").split("\n")
+                if row
+            ]
+            self.assertEqual([payload["content"] for payload in payloads], ["first\u2028second"])
+
+    def test_local_evidence_store_escapes_unicode_line_separators_in_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "evidence"
+            LocalEvidenceStore(root).persist_canonical((_canonical_message(content="first\u2028second"),))
+
+            stored = (root / "canonical" / "messages.jsonl").read_text(encoding="utf-8")
+            self.assertNotIn("\u2028", stored)
+            self.assertIn("\\u2028", stored)
+
     def test_local_evidence_store_replaces_file_before_an_unlocked_stale_writer_completes(self) -> None:
         context = multiprocessing.get_context("fork")
         with tempfile.TemporaryDirectory() as directory:

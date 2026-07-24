@@ -44,7 +44,7 @@ class LocalEvidenceStore:
                         if key in existing:
                             duplicate_count += 1
                             continue
-                        existing_lines.append(json.dumps(asdict(message), ensure_ascii=False, sort_keys=True))
+                        existing_lines.append(self._jsonl_line(asdict(message)))
                         existing.add(key)
                         canonical_count += 1
                     self._replace_jsonl(target, existing_lines)
@@ -128,18 +128,22 @@ class LocalEvidenceStore:
         if not target.exists():
             return []
         lines: list[str] = []
-        for line in target.read_text(encoding="utf-8").splitlines():
+        for line in target.read_text(encoding="utf-8").split("\n"):
             if line:
-                json.loads(line)
-                lines.append(line)
+                lines.append(LocalEvidenceStore._jsonl_line(json.loads(line)))
         return lines
+
+    @staticmethod
+    def _jsonl_line(payload: object) -> str:
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        return encoded.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
     @staticmethod
     def _existing_ids(target: Path) -> set[str]:
         if not target.exists():
             return set()
         ids: set[str] = set()
-        for line in target.read_text(encoding="utf-8").splitlines():
+        for line in target.read_text(encoding="utf-8").split("\n"):
             if line:
                 payload = json.loads(line)
                 ids.add(f"{payload['source_id']}:{payload['external_message_id']}")
