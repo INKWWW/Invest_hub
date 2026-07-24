@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from invest_hub_worker.errors import AlreadyEnrolled, ProtocolError
+from invest_hub_worker.errors import AlreadyEnrolled, ProtocolError, RemoteConflict
 from invest_hub_worker.protocol import WorkerProtocol
 
 
@@ -207,6 +207,54 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(resolved["author_profiles"][0]["author_id"], "stable-author-1")
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-window-1/resolve-author-profiles"))
             self.assertEqual(transport.calls[1]["body"], {"attempt": 2})
+
+    def test_x_identity_resolution_uses_only_the_safe_identity_endpoint_and_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"identity": {
+                    "resolution_status": "resolved",
+                    "parameter_version": "v2-test",
+                    "idempotent": False,
+                }}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            identity = protocol.resolve_x_source_identity("x-source", "v2-test", "fixture_handle")
+
+            self.assertEqual(identity, {
+                "resolution_status": "resolved",
+                "parameter_version": "v2-test",
+                "idempotent": False,
+            })
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/x-sources/x-source/resolve-identity"))
+            self.assertEqual(transport.calls[1]["body"], {"parameter_version": "v2-test", "account_id": "fixture_handle"})
+            self.assertEqual(transport.calls[1]["headers"].get("Authorization"), f"Bearer {enrolment_response()['device_secret']}")
+
+    def test_x_identity_resolution_rejects_extra_response_fields_and_maps_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            credential_path = Path(directory) / "credentials.json"
+            invalid = WorkerProtocol(
+                "https://control.example.invalid", credential_path,
+                transport=FakeTransport(
+                    (201, enrolment_response()),
+                    (200, {"identity": {
+                        "resolution_status": "resolved", "parameter_version": "v2-test", "idempotent": False, "account_id": "fixture_handle",
+                    }}),
+                ),
+            )
+            invalid.enrol("one-time-enrolment-code")
+            with self.assertRaisesRegex(ProtocolError, "invalid x identity resolution response"):
+                invalid.resolve_x_source_identity("x-source", "v2-test", "fixture_handle")
+
+            conflict = WorkerProtocol(
+                "https://control.example.invalid", Path(directory) / "conflict.json",
+                transport=FakeTransport((201, enrolment_response()), (409, {"error": "x_identity_conflict"})),
+            )
+            conflict.enrol("one-time-enrolment-code")
+            with self.assertRaisesRegex(RemoteConflict, "x_identity_conflict"):
+                conflict.resolve_x_source_identity("x-source", "v2-test", "fixture_handle")
 
     def test_window_page_and_range_protocols_use_task_scoped_endpoints(self) -> None:
         segment = {
