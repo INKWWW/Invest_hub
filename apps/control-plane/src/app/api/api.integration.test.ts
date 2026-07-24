@@ -46,6 +46,7 @@ const authorProfileMocks = vi.hoisted(() => ({
   SourceAuthorProfileError: class SourceAuthorProfileError extends Error {},
 }));
 const sourceMocks = vi.hoisted(() => ({
+  getSourceType: vi.fn(),
   listSources: vi.fn(),
   updateSourceAdministration: vi.fn(),
   upsertDiscordSource: vi.fn(),
@@ -582,6 +583,34 @@ describe("v0 control-plane API authorization", () => {
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({ error: "invalid_source_administration" });
     expect(sourceMocks.updateSourceAdministration).not.toHaveBeenCalled();
+  });
+
+  it("permits an X source name when binding its Worker", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    sourceMocks.getSourceType.mockResolvedValue("x");
+    sourceMocks.updateSourceAdministration.mockResolvedValue({
+      id: "x-source-1",
+      source_type: "x",
+      display_name: "Researcher A",
+      enabled: true,
+      authorized_worker_id: "worker-1",
+    });
+
+    const response = await patchAdminSource(jsonRequest("/api/admin/sources", {
+      source_id: "x-source-1",
+      display_name: "Researcher A",
+      enabled: true,
+      authorized_worker_id: "worker-1",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(sourceMocks.getSourceType).toHaveBeenCalledWith("x-source-1");
+    expect(sourceMocks.updateSourceAdministration).toHaveBeenCalledWith({
+      sourceId: "x-source-1",
+      displayName: "Researcher A",
+      enabled: true,
+      authorizedWorkerId: "worker-1",
+    });
   });
 
   it("returns a one-time invite code only to an admin", async () => {

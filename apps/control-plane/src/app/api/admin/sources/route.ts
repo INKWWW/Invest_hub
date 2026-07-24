@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isCurrentUser, requireRole } from "../../../../lib/auth/require-role";
 import {
+  getSourceType,
   listSources,
   SourceAdministrationError,
   updateSourceAdministration,
@@ -17,6 +18,10 @@ function isCommunityChannelName(value: string): boolean {
   return value.trim().length <= 128
     && parts.length === 2
     && !/^discord\s+source\s+\d+$/i.test(value.trim());
+}
+
+function isXDisplayName(value: string): boolean {
+  return value.trim().length > 0 && value.trim().length <= 128;
 }
 
 export async function GET() {
@@ -60,9 +65,14 @@ export async function PATCH(request: Request) {
     if (!hasOnlyKeys(body, ["source_id", "display_name", "enabled", "authorized_worker_id"])
       || typeof body.source_id !== "string"
       || typeof body.display_name !== "string"
-      || !isCommunityChannelName(body.display_name)
       || typeof body.enabled !== "boolean"
       || (typeof body.authorized_worker_id !== "string" && body.authorized_worker_id !== null)) {
+      return NextResponse.json({ error: "invalid_source_administration" }, { status: 422 });
+    }
+    const sourceType = await getSourceType(body.source_id);
+    if (!sourceType
+      || (sourceType === "discord" && !isCommunityChannelName(body.display_name))
+      || (sourceType === "x" && !isXDisplayName(body.display_name))) {
       return NextResponse.json({ error: "invalid_source_administration" }, { status: 422 });
     }
     const source = await updateSourceAdministration({
