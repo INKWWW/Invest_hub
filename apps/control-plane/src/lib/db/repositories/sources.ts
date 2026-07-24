@@ -16,6 +16,16 @@ export async function listSources() {
   return data;
 }
 
+export async function getSourceType(sourceId: string): Promise<"discord" | "x" | null> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("sources")
+    .select("source_type")
+    .eq("id", sourceId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.source_type ?? null;
+}
+
 export async function updateSourceAdministration(input: {
   sourceId: string;
   displayName: string;
