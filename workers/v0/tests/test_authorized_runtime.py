@@ -1,16 +1,37 @@
 from __future__ import annotations
 
+import json
+import multiprocessing
 import stat
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
-from invest_hub_worker.canonical import Canonicalizer
+from invest_hub_worker.canonical import CanonicalMessage, Canonicalizer
 from invest_hub_worker.config import LocalWorkerConfig
 from invest_hub_worker.connectors.base import RawPage
 from invest_hub_worker.evidence import LocalEvidenceStore
 from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
 from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscordRuntimeSet, RuntimeExecutionError
+
+
+def _canonical_message() -> CanonicalMessage:
+    return CanonicalMessage(
+        source_id="source-1",
+        external_message_id="message-1",
+        author_id="author-1",
+        author_name="Author",
+        occurred_at="2099-01-01T00:00:00Z",
+        content="fixture content",
+        reply_to_message_id=None,
+        quote=None,
+        attachments=(),
+    )
+
+
+def _persist_same_canonical(root: str) -> None:
+    LocalEvidenceStore(Path(root)).persist_canonical((_canonical_message(),))
 
 
 class FakeConnector:
@@ -69,6 +90,36 @@ class FakeProvider:
 
 
 class AuthorizedRuntimeTests(unittest.TestCase):
+    def test_local_evidence_store_serializes_concurrent_duplicate_writes(self) -> None:
+        context = multiprocessing.get_context("fork")
+        barrier = context.Barrier(2)
+        original_existing_ids = LocalEvidenceStore._existing_ids
+
+        def synchronized_existing_ids(target: Path) -> set[str]:
+            existing = original_existing_ids(target)
+            try:
+                barrier.wait(timeout=0.5)
+            except threading.BrokenBarrierError:
+                pass
+            return existing
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "evidence"
+            LocalEvidenceStore._existing_ids = staticmethod(synchronized_existing_ids)
+            try:
+                processes = [context.Process(target=_persist_same_canonical, args=(str(root),)) for _ in range(2)]
+                for process in processes:
+                    process.start()
+                for process in processes:
+                    process.join(timeout=5)
+                self.assertEqual([process.exitcode for process in processes], [0, 0])
+            finally:
+                LocalEvidenceStore._existing_ids = staticmethod(original_existing_ids)
+
+            rows = (root / "canonical" / "messages.jsonl").read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(json.loads(rows[0])["external_message_id"], "message-1")
+
     def test_local_evidence_store_restricts_directories_and_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "evidence"
@@ -91,6 +142,7 @@ class AuthorizedRuntimeTests(unittest.TestCase):
             for file_path in (
                 root / "raw" / "page-1.json",
                 root / "canonical" / "messages.jsonl",
+                root / "canonical" / "messages.lock",
                 root / "validation" / "reports.jsonl",
             ):
                 self.assertEqual(stat.S_IMODE(file_path.stat().st_mode), 0o600)
