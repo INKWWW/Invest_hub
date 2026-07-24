@@ -175,6 +175,32 @@ describe("v0 contracts", () => {
     expect(claim).toMatchObject({ task_type: "x_sync", source_snapshot: { source_type: "x", account_id: "account-001" } });
   });
 
+  it("accepts a bounded X history claim with its immutable range", () => {
+    const claim = parseContract<{ collection_scope: { mode: string }; capture_range: { mode: string; trigger: string } }>("task-claim", {
+      contract_version: "v0",
+      task_id: "x-history-001",
+      attempt: 1,
+      task_type: "x_sync",
+      source_id: "x-source-001",
+      parameter_version: "v2-test",
+      lease_expires_at: "2026-07-24T08:10:00Z",
+      safe_checkpoint: null,
+      rule_snapshot: { version: 0, target_author_ids: [] },
+      collection_scope: { mode: "history" },
+      capture_range: {
+        mode: "history", trigger: "history", timezone: "Asia/Shanghai",
+        start_at: "2026-07-24T00:00:00Z", end_at: "2026-07-24T08:00:00Z",
+      },
+      coverage_snapshot: { coverage_start_at: "2026-07-24T00:00:00Z", coverage_through_at: "2026-07-24T08:00:00Z", last_completed_task_id: null },
+      capture_progress: { resume_cursor: null, page_count: 0, range_complete: false },
+      author_profile_snapshot: [],
+      source_snapshot: { source_type: "x", account_id: "account-001", display_name: "X author", parameter_version: "v2-test" },
+    });
+
+    expect(claim.collection_scope).toEqual({ mode: "history" });
+    expect(claim.capture_range).toMatchObject({ mode: "history", trigger: "history" });
+  });
+
   it("accepts typed X post context while rejecting a mismatched relation", () => {
     const base = {
       contract_version: "v0",

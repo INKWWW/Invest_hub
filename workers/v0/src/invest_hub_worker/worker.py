@@ -95,16 +95,16 @@ class Worker:
 
     def _execute_claim(self, claim: dict[str, Any]) -> dict[str, Any]:
         scope = claim.get("collection_scope")
-        if not isinstance(scope, Mapping) or scope.get("mode") != "window":
+        if not isinstance(scope, Mapping) or scope.get("mode") not in {"window", "history"}:
             return self.execute(claim)
         if self.execute_windowed is None:
-            raise RuntimeError("window task requires a streaming executor")
+            raise RuntimeError("bounded range task requires a streaming executor")
         daily_context = getattr(self.protocol, "get_daily_fact_context", None)
         author_resolver = getattr(self.protocol, "resolve_author_profiles", None)
         task_id = claim.get("task_id")
         attempt = claim.get("attempt")
         if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
-            raise RuntimeError("invalid window task identity")
+            raise RuntimeError("invalid bounded range task identity")
         execution_kwargs: dict[str, Any] = {"on_capture_page": self._persist_windowed_capture_page}
         if callable(daily_context):
             execution_kwargs["load_daily_fact_context"] = lambda: daily_context(task_id, attempt)

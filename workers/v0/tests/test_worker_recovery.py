@@ -72,6 +72,9 @@ class FakeProtocol:
         self.capture_segments.append(payload)
         return {"task_id": payload["task_id"], "idempotent": False, "resume_cursor": "cursor-001"}
 
+    def renew(self, _task_id: str, _attempt: int) -> dict[str, object]:
+        return {"lease_expires_at": "2099-01-01T00:20:00Z"}
+
     def complete_capture_range(self, payload: dict[str, object]) -> dict[str, object]:
         self.range_completions.append(payload)
         return {"status": "succeeded", "idempotent": False, "task_id": payload["task_id"], "attempt": payload["attempt"]}
@@ -201,6 +204,67 @@ class WorkerRecoveryTests(unittest.TestCase):
         self.assertEqual(len(protocol.capture_segments), 1)
         self.assertEqual(len(protocol.range_completions), 1)
         self.assertEqual(protocol.reported_results, [])
+
+    def test_x_history_claim_streams_page_persistence_before_range_completion(self) -> None:
+        protocol = FakeProtocol()
+        protocol.claim_value = {
+            **CLAIM,
+            "task_type": "x_sync",
+            "source_id": "x-source",
+            "collection_scope": {"mode": "history"},
+            "capture_range": {
+                "mode": "history", "trigger": "history", "timezone": "Asia/Shanghai",
+                "start_at": "2099-01-01T00:00:00Z", "end_at": "2099-01-01T08:00:00Z",
+            },
+        }
+        streamed: list[bool] = []
+
+        def execute_windowed(claim: dict[str, object], *, on_capture_page: object) -> dict[str, object]:
+            streamed.append(True)
+            on_capture_page({
+                "persistence": {
+                    "contract_version": "v0", "task_id": "task-1", "attempt": 1, "source_id": "x-source",
+                    "raw_messages": [], "canonical_messages": [], "structured_runs": [],
+                    "capture_segment": {
+                        "idempotency_key": "history-page-001", "request_cursor": None, "next_cursor": None,
+                        "oldest_occurred_at": None, "newest_occurred_at": None,
+                        "response_matched": True, "response_fresh": True,
+                    },
+                },
+                "capture_segment": {
+                    "contract_version": "v0", "task_id": "task-1", "attempt": 1,
+                    "capture_segment": {
+                        "idempotency_key": "history-page-001", "request_cursor": None, "next_cursor": None,
+                        "oldest_occurred_at": None, "newest_occurred_at": None,
+                        "response_matched": True, "response_fresh": True,
+                    },
+                },
+            })
+            return {
+                "persistence": {
+                    "contract_version": "v0", "task_id": "task-1", "attempt": 1, "source_id": "x-source",
+                    "raw_messages": [], "canonical_messages": [], "structured_runs": [],
+                },
+                "capture_segments": [],
+                "range_completion": {
+                    "contract_version": "v0", "task_id": "task-1", "attempt": 1, "range_complete": True,
+                    "capture_range": claim["capture_range"],
+                    "boundary": {"kind": "history_exhausted", "observed_at": "2099-01-01T08:00:00Z"},
+                    "summary_batch_ids": [], "daily_summary_ids": [], "x_post_analyses": [], "x_daily_segments": [], "no_new_data": True,
+                },
+            }
+
+        outcome = Worker(
+            protocol,
+            execute=lambda _claim: (_ for _ in ()).throw(AssertionError("history must stream page persistence")),
+            execute_windowed=execute_windowed,
+        ).run_once()
+
+        self.assertEqual(outcome.status, "succeeded")
+        self.assertEqual(streamed, [True])
+        self.assertEqual(len(protocol.persisted_payloads), 1)
+        self.assertEqual(protocol.capture_segments, [])
+        self.assertEqual(len(protocol.range_completions), 1)
 
 
 if __name__ == "__main__":
