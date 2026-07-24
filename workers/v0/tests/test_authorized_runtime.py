@@ -5,6 +5,7 @@ import multiprocessing
 import stat
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -16,10 +17,10 @@ from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
 from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscordRuntimeSet, RuntimeExecutionError
 
 
-def _canonical_message() -> CanonicalMessage:
+def _canonical_message(*, external_message_id: str = "message-1") -> CanonicalMessage:
     return CanonicalMessage(
         source_id="source-1",
-        external_message_id="message-1",
+        external_message_id=external_message_id,
         author_id="author-1",
         author_name="Author",
         occurred_at="2099-01-01T00:00:00Z",
@@ -32,6 +33,19 @@ def _canonical_message() -> CanonicalMessage:
 
 def _persist_same_canonical(root: str) -> None:
     LocalEvidenceStore(Path(root)).persist_canonical((_canonical_message(),))
+
+
+def _write_unlocked_stale_fragment(path: str, opened: object, start: object, partial_written: object) -> None:
+    with Path(path).open("a", encoding="utf-8") as stream:
+        opened.set()
+        if not start.wait(timeout=5):
+            raise RuntimeError("stale writer did not receive start signal")
+        stream.write('{"stale":')
+        stream.flush()
+        partial_written.set()
+        time.sleep(0.5)
+        stream.write('"writer"}\n')
+        stream.flush()
 
 
 class FakeConnector:
@@ -90,6 +104,43 @@ class FakeProvider:
 
 
 class AuthorizedRuntimeTests(unittest.TestCase):
+    def test_local_evidence_store_replaces_file_before_an_unlocked_stale_writer_completes(self) -> None:
+        context = multiprocessing.get_context("fork")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "evidence"
+            evidence = LocalEvidenceStore(root)
+            evidence.persist_canonical((_canonical_message(),))
+            target = root / "canonical" / "messages.jsonl"
+            opened = context.Event()
+            start = context.Event()
+            partial_written = context.Event()
+            stale_writer = context.Process(
+                target=_write_unlocked_stale_fragment,
+                args=(str(target), opened, start, partial_written),
+            )
+            stale_writer.start()
+            self.assertTrue(opened.wait(timeout=5))
+
+            original_existing_ids = LocalEvidenceStore._existing_ids
+
+            def start_stale_writer_after_read(existing_target: Path) -> set[str]:
+                existing = original_existing_ids(existing_target)
+                start.set()
+                self.assertTrue(partial_written.wait(timeout=5))
+                return existing
+
+            LocalEvidenceStore._existing_ids = staticmethod(start_stale_writer_after_read)
+            try:
+                evidence.persist_canonical((_canonical_message(external_message_id="message-2"),))
+            finally:
+                LocalEvidenceStore._existing_ids = staticmethod(original_existing_ids)
+            stale_writer.join(timeout=5)
+            self.assertEqual(stale_writer.exitcode, 0)
+
+            rows = (root / "canonical" / "messages.jsonl").read_text(encoding="utf-8").splitlines()
+            payloads = [json.loads(row) for row in rows]
+            self.assertEqual({payload["external_message_id"] for payload in payloads}, {"message-1", "message-2"})
+
     def test_local_evidence_store_serializes_concurrent_duplicate_writes(self) -> None:
         context = multiprocessing.get_context("fork")
         barrier = context.Barrier(2)
