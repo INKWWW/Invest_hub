@@ -79,6 +79,20 @@ class XActiveAdapterTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.code, "opencli_contract")
 
+    def test_collection_normalizes_x_legacy_timestamps_to_utc_iso(self) -> None:
+        response = self.fixture("opencli_collection_success.json")
+        response["posts"][0]["created_at"] = "Thu Jul 23 00:10:00 +0000 2026"
+
+        class Result:
+            returncode = 0
+            stdout = json.dumps(response)
+
+        page = XActiveAdapter(OpenCLICollectionInvoker("dedicated-opencli", runner=lambda *_args, **_kwargs: Result())).fetch_page(
+            source_config(), None, lower_bound_at=LOWER_BOUND, end_at=END_AT,
+        )
+
+        self.assertEqual(page.messages[0]["created_at"], "2026-07-23T00:10:00Z")
+
     def test_collection_refuses_a_resume_cursor_instead_of_falling_back_to_tweets(self) -> None:
         invoker = OpenCLICollectionInvoker("dedicated-opencli", runner=lambda *_args, **_kwargs: None)
         with self.assertRaises(ConnectorError) as caught:
