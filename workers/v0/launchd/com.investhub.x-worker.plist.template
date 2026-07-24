@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.investhub.x-worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON_BIN__</string>
+    <string>-m</string>
+    <string>invest_hub_worker.cli</string>
+    <string>run-scheduled</string>
+    <string>--config</string>
+    <string>__WORKER_CONFIG__</string>
+    <string>--credential</string>
+    <string>__CREDENTIAL__</string>
+    <string>--opencli-contract</string>
+    <string>__OPENCLI_CONTRACT__</string>
+    <string>--prompt-path</string>
+    <string>__PROMPT_PATH__</string>
+    <string>--evidence-dir</string>
+    <string>__EVIDENCE_DIR__</string>
+    <string>--opencli-executable</string>
+    <string>__OPENCLI_EXECUTABLE__</string>
+    <string>--worker-name</string>
+    <string>v2-x-scheduled-worker</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>__PROJECT_ROOT__/workers/v0/src</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>V2_REAL_X_ACK</key>
+    <string>authorized</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>__PROJECT_ROOT__</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/x-worker.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/x-worker.stderr.log</string>
+</dict>
+</plist>
