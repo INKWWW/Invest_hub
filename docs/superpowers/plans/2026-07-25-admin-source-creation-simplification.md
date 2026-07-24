@@ -234,7 +234,7 @@ curl --noproxy '*' --silent --show-error --max-time 20 --location --output /dev/
 
 Expected: Vercel status is `Ready`; anonymous access redirects to the protected login route, and an authenticated administrator can use the new source-creation flow. No Supabase migration is required because this change uses existing columns and RPCs.
 
-- [ ] **Step 3: Remove the owned worktree and merged feature branch.**
+- [x] **Step 3: Remove the owned worktree and merged feature branch.**
 
 Run:
 
