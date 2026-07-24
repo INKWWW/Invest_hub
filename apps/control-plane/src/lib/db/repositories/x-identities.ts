@@ -20,7 +20,11 @@ export type XSourceIdentity = {
   idempotent: boolean;
 };
 
-function parseIdentity(value: unknown): XSourceIdentity {
+function parseIdentity(value: unknown, input: {
+  sourceId: string;
+  parameterVersion: string;
+  accountId: string;
+}): XSourceIdentity {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new XIdentityResolutionError("invalid_x_identity_resolution");
   const row = value as Record<string, unknown>;
   if (Object.keys(row).sort().join(",") !== expectedKeys.join(",")
@@ -28,7 +32,10 @@ function parseIdentity(value: unknown): XSourceIdentity {
     || typeof row.account_id !== "string" || !row.account_id
     || row.resolution_status !== "resolved"
     || typeof row.parameter_version !== "string" || !row.parameter_version
-    || typeof row.idempotent !== "boolean") {
+    || typeof row.idempotent !== "boolean"
+    || row.source_id !== input.sourceId
+    || row.account_id !== input.accountId
+    || row.parameter_version !== input.parameterVersion) {
     throw new XIdentityResolutionError("invalid_x_identity_resolution");
   }
   return {
@@ -61,5 +68,5 @@ export async function resolveXSourceIdentity(input: {
     p_account_id: input.accountId,
   });
   if (error) rethrowResolutionError(error);
-  return parseIdentity(data);
+  return parseIdentity(data, input);
 }

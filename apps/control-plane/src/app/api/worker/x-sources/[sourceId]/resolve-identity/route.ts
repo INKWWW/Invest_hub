@@ -46,7 +46,8 @@ export async function POST(request: Request, context: { params: Promise<{ source
       parameterVersion: body.parameterVersion,
       accountId: body.accountId,
     });
-    return NextResponse.json({ identity });
+    const { accountId: _accountId, ...safeIdentity } = identity;
+    return NextResponse.json({ identity: safeIdentity });
   } catch (error) {
     const code = errorCode(error);
     if (code === "worker_not_authorized") return NextResponse.json({ error: "worker_not_authorized" }, { status: 403 });
