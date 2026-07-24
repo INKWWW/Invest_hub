@@ -14,6 +14,9 @@ insert into public.source_collection_coverage (source_id, coverage_start_at, cov
 values ('00000000-0000-0000-0000-000000017011', '2026-07-22T00:00:00+08:00', '2026-07-23T00:00:00+08:00');
 insert into public.workers (id, name, device_secret_hash, status)
 values ('00000000-0000-0000-0000-000000017101', 'x-history-completion-worker', 'x-history-completion-worker-hash', 'online');
+update public.sources
+set authorized_worker_id = '00000000-0000-0000-0000-000000017101'
+where id = '00000000-0000-0000-0000-000000017011';
 
 create temporary table x_history_completion_task as
 select public.create_bounded_x_history_task(
