@@ -8,6 +8,7 @@ import {
   updateSourceAdministration,
   upsertDiscordSource,
 } from "../../../../lib/db/repositories/sources";
+import { buildSourceCreation, publicCreatedSource } from "../../../../lib/source-creation";
 
 function hasOnlyKeys(body: Record<string, unknown>, allowed: string[]): boolean {
   return Object.keys(body).every((key) => allowed.includes(key));
@@ -24,6 +25,14 @@ function isXDisplayName(value: string): boolean {
   return value.trim().length > 0 && value.trim().length <= 128;
 }
 
+function validDiscordCreateBody(value: unknown): value is { display_name: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const body = value as Record<string, unknown>;
+  return Object.keys(body).length === 1
+    && typeof body.display_name === "string"
+    && isCommunityChannelName(body.display_name);
+}
+
 export async function GET() {
   const current = await requireRole("admin");
   if (!isCurrentUser(current)) return current;
@@ -38,20 +47,25 @@ export async function POST(request: Request) {
   const current = await requireRole("admin");
   if (!isCurrentUser(current)) return current;
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    if (!hasOnlyKeys(body, ["source_key", "display_name", "parameter_version", "enabled"])
-      || typeof body.source_key !== "string" || typeof body.display_name !== "string" || typeof body.parameter_version !== "string"
-      || !isCommunityChannelName(body.display_name)) {
+    const body = await request.json();
+    if (!validDiscordCreateBody(body)) {
       return NextResponse.json({ error: "invalid_source" }, { status: 422 });
     }
+    const creation = buildSourceCreation("discord");
     const source = await upsertDiscordSource({
-      sourceKey: body.source_key,
-      displayName: body.display_name,
-      parameterVersion: body.parameter_version,
+      sourceKey: creation.sourceKey,
+      displayName: body.display_name.trim(),
+      parameterVersion: creation.parameterVersion,
       createdBy: current.id,
-      enabled: body.enabled !== false,
+      enabled: true,
     });
-    return NextResponse.json({ source }, { status: 201 });
+    return NextResponse.json({ source: publicCreatedSource({
+      sourceType: "discord",
+      displayName: source.display_name,
+      sourceKey: source.source_key,
+      parameterVersion: source.parameter_version,
+      id: source.id,
+    }) }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "source_create_failed" }, { status: 503 });
   }
