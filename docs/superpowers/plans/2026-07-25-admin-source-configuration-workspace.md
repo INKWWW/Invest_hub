@@ -79,7 +79,7 @@
 
 - [ ] **Step 2: Run the focused database failure.**
 
-Run: supabase test db --file supabase/tests/020_admin_x_source_lifecycle.sql
+Run: supabase test db supabase/tests/020_admin_x_source_lifecycle.sql
 
 Expected: FAIL because archive fields and remove_x_source do not yet exist.
 
@@ -98,6 +98,8 @@ Expected: FAIL because archive fields and remove_x_source do not yet exist.
       if not exists (select 1 from public.profiles where id = p_actor_id and role = 'admin') then
         raise exception 'actor_not_authorized' using errcode = '42501';
       end if;
+      -- The source row lock serializes this transition with existing X task
+      -- creators, which lock the same row before checking source.enabled.
       select * into v_source from public.sources where id = p_source_id for update;
       if not found then raise exception 'source_not_found'; end if;
       if v_source.source_type <> 'x' then raise exception 'source_not_x'; end if;
