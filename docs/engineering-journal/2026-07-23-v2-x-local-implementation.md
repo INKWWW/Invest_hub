@@ -75,4 +75,6 @@
 
 为避免复用已停止的 Discord 个人账号采集路径，新增 X 专用 `com.investhub.x-worker` launchd 模板及受限安装、卸载、验证脚本。安装器只接受 owner-only 的纯 X 配置、受控本地 Collection executable、owner-only credential/prompt/evidence，并强制 `V2_REAL_X_ACK`；服务已加载且进程处于运行状态。它每分钟安全请求调度，不提交客户端窗口，并只处理控制面为已绑定 X Worker 投递的到期/恢复范围。
 
-本轮回归：X launchd 安装前测试、Worker `124` 项、控制面 `106` 项、lint、production build、`git diff --check` 与脱敏检查均通过。生产 `/x` 在未登录会话中正确跳转登录；当前没有可用的普通用户登录会话，故真实桌面与 `375px` 阅读验收尚未完成，已在 V2 Final Report 标记为 conditional。
+本轮回归：X launchd 安装前测试、Worker `124` 项、控制面 `106` 项、lint、production build、`git diff --check` 与脱敏检查均通过。生产 `/x` 在未登录会话中正确跳转登录。
+
+同日，真实普通用户会话完成生产 Reader 验收：`/x` 在桌面 `1440px` 和 `375px` 移动视口均可读取，主体和 Discord/X 切换导航均存在，未见登录/无权限提示或横向溢出。该会话访问管理员入口被拒绝，确认阅读与管理隔离。验收未导出或记录博主、帖子、链接、观点正文、Cookie 或会话数据。由常驻服务自动完成的第一个真实窗口和真实关系类别覆盖仍按 V2 Final Report 保持 conditional。

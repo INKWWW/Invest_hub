@@ -4,7 +4,7 @@ Last updated: 2026-07-24
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、一次真实持久化范围闭环和 X 专用本机常驻 Worker 安装。当前结论为“受控生产试运行”：已登录用户可使用 `/x` 阅读已生成的每日观点，但真实普通用户桌面/375px 阅读验收、由常驻服务自动完成的首个窗口，以及真实关系类别覆盖尚待补齐，因此不得标记为“V2 X 正式可用”。**
+**V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、一次真实持久化范围闭环、X 专用本机常驻 Worker 安装，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：由常驻服务自动完成的首个窗口，以及真实关系类别覆盖尚待补齐，因此不得标记为“V2 X 正式可用”。**
 
 **Discord 采集状态（2026-07-22 决定）：** 个人账号的 Page Fetch、页面 UI 自动化、直接接口和导出器路线均不再进入生产；不启用 Discord 定时或手动采集。既有 Reader 与已持久化数据保持可用，但不构成持续采集能力。未来仅在频道管理员明确授权 Bot 后，才以新的独立 Spec/Plan 评估重新启动；详见 [Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)。本段优先于下文历史 Browser Bridge 受限描述。
 
@@ -14,7 +14,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)、[V2 工程记录](engineering-journal/2026-07-23-v2-x-local-implementation.md) 与 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。下一个单一范围是：在真实普通用户登录会话中完成 `/x` 桌面与 `375px` 阅读验收，并观察 X 专用常驻 Worker 的第一个自动完成窗口；真实关系类别未覆盖时保持 conditional。不得重新启动个人 Discord 账号采集。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)、[V2 工程记录](engineering-journal/2026-07-23-v2-x-local-implementation.md) 与 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。下一个单一范围是：观察 X 专用常驻 Worker 的第一个自动完成窗口；真实关系类别未覆盖时保持 conditional。不得重新启动个人 Discord 账号采集。
 
 **V2 状态更正（2026-07-23）：** 上述 V2 “真实 X 待办”仅指完整采集与验收；最小、非持久化的真实 Go/No-Go 已在明确授权后完成，并因 OpenCLI 缺少 reply/repost 关系与范围完成证明而判定 `x_collection_unverified` / `opencli_contract`。未创建云端任务、未调用 Codex CLI、未推进水位、未远程迁移或部署。
 
@@ -26,7 +26,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 **V2 X 来源身份解析本地门禁（2026-07-24）：** 已完成待验证来源到 `resolved` 的原子数据库契约、仅限已绑定 Worker 的控制面端点、本机 `twitter profile` 身份核验 CLI，以及一次性本地 runner。runner 必须使用专用本地 OpenCLI、Git 忽略且 owner-only 的配置/设备凭据/evidence、`V2_REAL_X_ACK=authorized` 和独立显式批准；静态拒绝门禁确认其不会领取任务、运行采集、调用 Codex CLI 或安装调度。当前本地回归为 18 个 pgTAP 文件/259 项、116 个 Worker 测试、103 个控制面测试及 lint/production build 通过。**尚未**执行远程 migration、部署、真实 profile 身份解析、coverage 初始化、任务创建或真实持久化 E2E。
 
-**V2 生产激活与试运行（2026-07-24，后续授权）：** 上述“尚未执行”是当时本地门禁阶段的历史状态。后续已逐项完成远程 migration、生产部署、身份解析、coverage 初始化和一次真实持久化 E2E；最新任务完整成功，原始、Canonical、逐帖分析各为 `8`，并生成 `1` 个每日观点段。生产部署与 Worker 使用的数据库绑定已实测一致。新增 X 专用 `com.investhub.x-worker` 常驻服务已通过 owner-only/受控 OpenCLI 安装前检查并实际加载运行；它只处理 X，到期窗口为 `08:00 / 12:00 / 16:00 / 20:00 / 次日00:00`。真实普通用户桌面/375px 审阅和首个由该服务自动完成的窗口仍为 conditional，完整矩阵见 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。
+**V2 生产激活与试运行（2026-07-24，后续授权）：** 上述“尚未执行”是当时本地门禁阶段的历史状态。后续已逐项完成远程 migration、生产部署、身份解析、coverage 初始化和一次真实持久化 E2E；最新任务完整成功，原始、Canonical、逐帖分析各为 `8`，并生成 `1` 个每日观点段。生产部署与 Worker 使用的数据库绑定已实测一致。新增 X 专用 `com.investhub.x-worker` 常驻服务已通过 owner-only/受控 OpenCLI 安装前检查并实际加载运行；它只处理 X，到期窗口为 `08:00 / 12:00 / 16:00 / 20:00 / 次日00:00`。真实普通用户已完成生产 `/x` 的桌面/375px 阅读和管理员隔离验收；首个由该服务自动完成的窗口仍为 conditional，完整矩阵见 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。
 
 **Discord 交接更正（2026-07-22）：** 下文 V1.1 的历史时间窗与 Browser Bridge 说明仅保留为已完成探索记录；当前不得据此继续个人账号采集、安装任务或推进 Discord coverage。下一步是管理员授权的 Bot 路线，其余范围不变。
 
