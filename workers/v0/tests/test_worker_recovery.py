@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from invest_hub_worker.errors import RemoteConflict
+from invest_hub_worker.errors import ProtocolError, RemoteConflict
 from invest_hub_worker.runtime import RuntimeExecutionError
 from invest_hub_worker.worker import Worker, WorkerState
 
@@ -86,6 +86,15 @@ class FakeProtocol:
 
 
 class WorkerRecoveryTests(unittest.TestCase):
+    def test_recovery_exposes_only_allowlisted_protocol_failure_codes(self) -> None:
+        worker = Worker(FakeProtocol())
+
+        acknowledged_code = worker._recover("task-1", ProtocolError("invalid_range_completion"))
+        unexpected_detail = worker._recover("task-1", ProtocolError("private server detail"))
+
+        self.assertEqual(acknowledged_code.error, "protocol:invalid_range_completion")
+        self.assertEqual(unexpected_detail.error, "ProtocolError")
+
     def test_heartbeat_failure_stays_recovering_and_does_not_claim(self) -> None:
         protocol = FakeProtocol()
         protocol.heartbeat_error = OSError("control plane unavailable")
