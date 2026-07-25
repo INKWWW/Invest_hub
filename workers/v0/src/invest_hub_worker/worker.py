@@ -5,12 +5,18 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Callable, Mapping
 
-from .errors import LeaseUncertain
+from .errors import LeaseUncertain, ProtocolError
 from .lease import LeaseState
 
 
 _MAX_X_RETRYABLE_ATTEMPTS = 3
 _NON_RETRYABLE_X_FAILURES = frozenset({"opencli_contract", "opencli_missing", "preflight", "unauthorized"})
+_SAFE_PROTOCOL_FAILURE_CODES = frozenset({
+    "conflicting_range_completion",
+    "invalid_range_completion",
+    "persistence_not_confirmed",
+    "range_completion_rejected",
+})
 
 
 class WorkerState(StrEnum):
@@ -258,4 +264,12 @@ class Worker:
 
     def _recover(self, task_id: str | None, error: Exception) -> RunOutcome:
         self.state = WorkerState.RECOVERING
-        return RunOutcome("recovering", task_id, error=type(error).__name__)
+        return RunOutcome("recovering", task_id, error=self._safe_error_label(error))
+
+    @staticmethod
+    def _safe_error_label(error: Exception) -> str:
+        """Expose only approved protocol codes, never a raw server response."""
+
+        if isinstance(error, ProtocolError) and str(error) in _SAFE_PROTOCOL_FAILURE_CODES:
+            return f"protocol:{error}"
+        return type(error).__name__
