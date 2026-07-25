@@ -13,8 +13,11 @@ _MAX_X_RETRYABLE_ATTEMPTS = 3
 _NON_RETRYABLE_X_FAILURES = frozenset({"opencli_contract", "opencli_missing", "preflight", "unauthorized"})
 _SAFE_PROTOCOL_FAILURE_CODES = frozenset({
     "conflicting_range_completion",
+    "invalid range completion",
+    "invalid range completion acknowledgement",
     "invalid_range_completion",
     "persistence_not_confirmed",
+    "range completion was not acknowledged",
     "range_completion_rejected",
 })
 

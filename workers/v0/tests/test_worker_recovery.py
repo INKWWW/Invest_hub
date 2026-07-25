@@ -90,9 +90,11 @@ class WorkerRecoveryTests(unittest.TestCase):
         worker = Worker(FakeProtocol())
 
         acknowledged_code = worker._recover("task-1", ProtocolError("invalid_range_completion"))
+        local_completion = worker._recover("task-1", ProtocolError("range completion was not acknowledged"))
         unexpected_detail = worker._recover("task-1", ProtocolError("private server detail"))
 
         self.assertEqual(acknowledged_code.error, "protocol:invalid_range_completion")
+        self.assertEqual(local_completion.error, "protocol:range completion was not acknowledged")
         self.assertEqual(unexpected_detail.error, "ProtocolError")
 
     def test_heartbeat_failure_stays_recovering_and_does_not_claim(self) -> None:
