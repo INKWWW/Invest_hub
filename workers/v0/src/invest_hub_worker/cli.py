@@ -278,7 +278,7 @@ def _run_scheduled(worker: Worker, *, once: bool, poll_seconds: int) -> int:
         try:
             tick = worker.schedule_tick()
         except Exception as exc:
-            print(json.dumps({"status": "schedule_failed", "error": type(exc).__name__}, sort_keys=True))
+            print(json.dumps({"status": "schedule_failed", "error": type(exc).__name__}, sort_keys=True), flush=True)
             return 1
 
         outcome = worker.run_once()
@@ -292,7 +292,7 @@ def _run_scheduled(worker: Worker, *, once: bool, poll_seconds: int) -> int:
             "scheduled_at": scheduled_at,
             "scheduled_task_count": len(tasks) if isinstance(tasks, list) else None,
             "deferred_source_count": len(deferred_sources) if isinstance(deferred_sources, list) else None,
-        }, sort_keys=True))
+        }, sort_keys=True), flush=True)
         if once:
             return 0 if outcome.status in {"succeeded", "no_task"} else 1
         time.sleep(_scheduled_sleep_seconds(outcome, poll_seconds))

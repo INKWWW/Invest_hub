@@ -57,10 +57,12 @@ class WorkerCliTests(unittest.TestCase):
     def test_scheduled_once_asks_control_plane_for_due_ranges_without_a_local_window_key(self) -> None:
         worker = ScheduledWorker()
 
-        self.assertEqual(_run_scheduled(worker, once=True, poll_seconds=60), 0)
+        with patch("builtins.print") as emit:
+            self.assertEqual(_run_scheduled(worker, once=True, poll_seconds=60), 0)
 
         self.assertEqual(worker.schedule_calls, 1)
         self.assertEqual(worker.run_calls, 1)
+        self.assertTrue(emit.call_args.kwargs["flush"])
 
     def test_scheduled_x_failure_uses_a_bounded_backoff_before_the_next_claim(self) -> None:
         self.assertEqual(_scheduled_sleep_seconds(RunOutcome("recovering", "task-1"), 60), 300)
