@@ -87,11 +87,21 @@ export async function scheduleDueXTasks(workerId: string, now = new Date()): Pro
 }
 
 export async function scheduleDueSourceTasks(workerId: string, now = new Date()): Promise<DueScheduledTick> {
-  const [discord, x] = await Promise.all([scheduleDueDiscordTasks(workerId, now), scheduleDueXTasks(workerId, now)]);
+  const [discordResult, xResult] = await Promise.allSettled([
+    scheduleDueDiscordTasks(workerId, now),
+    scheduleDueXTasks(workerId, now),
+  ]);
+  if (discordResult.status === "rejected" && xResult.status === "rejected") {
+    throw xResult.reason;
+  }
+  const discord = discordResult.status === "fulfilled" ? discordResult.value : null;
+  const x = xResult.status === "fulfilled" ? xResult.value : null;
+  const scheduledAt = x?.scheduled_at ?? discord?.scheduled_at;
+  if (!scheduledAt) throw new Error("invalid_scheduled_tick");
   return {
-    scheduled_at: discord.scheduled_at,
-    tasks: [...discord.tasks, ...x.tasks],
-    deferred_source_ids: [...discord.deferred_source_ids, ...x.deferred_source_ids],
+    scheduled_at: scheduledAt,
+    tasks: [...(discord?.tasks ?? []), ...(x?.tasks ?? [])],
+    deferred_source_ids: [...(discord?.deferred_source_ids ?? []), ...(x?.deferred_source_ids ?? [])],
   };
 }
 
