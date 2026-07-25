@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -78,33 +79,55 @@ def quote_post() -> dict[str, object]:
     }
 
 
+def late_day_quote_post() -> dict[str, object]:
+    return {
+        **quote_post(),
+        "id": "post-late-day",
+        "created_at": "2026-07-24T15:30:00Z",
+    }
+
+
+def midnight_cutoff_claim() -> dict[str, object]:
+    value = claim()
+    value["capture_range"] = {
+        "mode": "window", "trigger": "scheduled", "timezone": "Asia/Shanghai",
+        "start_at": "2026-07-24T12:00:00Z", "end_at": "2026-07-24T16:00:00Z",
+        "scheduled_window_key": "2026-07-25T00:00+08:00", "overlap_start_at": "2026-07-24T11:30:00Z",
+    }
+    value["coverage_snapshot"] = {"coverage_start_at": "2026-07-24T12:00:00Z", "coverage_through_at": "2026-07-24T12:00:00Z", "last_completed_task_id": None}
+    return value
+
+
 class Provider:
     def __init__(self) -> None:
         self.operations: list[str] = []
+        self.post_ids: list[str] = []
 
     def complete(self, _chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
         self.operations.append(context.operation)
         if context.operation == "v2_x_chunk":
             post_id = next(iter(context.input_message_ids))
+            self.post_ids.append(post_id)
             output = {"schema_version": "v2-x-chunk", "analyses": [{
                 "post_id": post_id, "blogger_viewpoint": "作者判断", "arguments": ["帖子论据"],
                 "quoted_post_viewpoint": "被引用观点", "uncertainties": [],
                 "evidence_post_ids": [post_id, "context-1"], "post_link": "https://x.com/fixture/status/1",
             }]}
         else:
-            output = {"schema_version": "v2-x-window", "natural_date": "2026-07-23", "range_task_id": "x-window-1",
-                      "occurred_from_at": "2026-07-23T00:10:00Z", "occurred_through_at": "2026-07-23T00:10:00Z",
-                      "window_viewpoints": ["本窗口综合观点"], "analysis_ids": ["post-new@1"],
-                      "evidence_post_ids": ["post-new", "context-1"], "uncertainties": []}
+            prompt_payload = json.loads(context.prompt_text.rsplit("\n", 1)[-1])
+            output = {"schema_version": "v2-x-window", "natural_date": prompt_payload["natural_date"], "range_task_id": "x-window-1",
+                      "occurred_from_at": prompt_payload["occurred_from_at"], "occurred_through_at": prompt_payload["occurred_through_at"],
+                      "window_viewpoints": ["本窗口综合观点"], "analysis_ids": sorted(context.input_message_ids),
+                      "evidence_post_ids": [*self.post_ids, "context-1"], "uncertainties": []}
         return ProviderResponse(status="success", provider="mock", model_reported=None, prompt_version=context.prompt_version,
                                 elapsed_ms=1, attempt=context.attempt, raw_ref=None, parsed_output_ref=None, parsed_output=output)
 
 
 class XWindowedRuntimeTests(unittest.TestCase):
-    def runtime(self, connector: object, directory: str) -> XWindowedRuntime:
+    def runtime(self, connector: object, directory: str, provider: Provider | None = None) -> XWindowedRuntime:
         return XWindowedRuntime(
             config=source_config(), connector=connector, evidence=LocalEvidenceStore(Path(directory) / "evidence"),
-            canonicalizer=Canonicalizer(), provider=Provider(), prompt_template="private",
+            canonicalizer=Canonicalizer(), provider=provider or Provider(), prompt_template="private",
         )
 
     def test_receipt_uses_overlap_start_as_lower_boundary_and_completes_the_window(self) -> None:
@@ -191,6 +214,23 @@ class XWindowedRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(RuntimeExecutionError, "fixed end_at"):
                 self.runtime(Connector(), directory).execute_windowed(claim())
+
+    def test_midnight_cutoff_uses_the_actual_post_day_for_its_daily_segment(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                if cursor is not None or lower_bound_at != datetime(2026, 7, 24, 11, 30, tzinfo=timezone.utc) or end_at != datetime(2026, 7, 24, 16, tzinfo=timezone.utc):
+                    raise AssertionError("midnight cutoff did not preserve its immutable range")
+                return RawPage(
+                    page_id="late-day", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/late-day",
+                    telemetry=receipt_telemetry("time_boundary_reached", "2026-07-24T11:29:00Z", "2026-07-24T11:30:00Z"),
+                    messages=(late_day_quote_post(),),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            completion = self.runtime(Connector(), directory).execute_windowed(midnight_cutoff_claim())["range_completion"]
+
+        self.assertEqual(completion["x_daily_segments"][0]["natural_date"], "2026-07-24")
 
 
 if __name__ == "__main__":

@@ -1121,7 +1121,7 @@ class XWindowedRuntime:
                 visible_evidence.add(context["id"])
         provider_context = ProviderContext(
             chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-window", prompt_version=self.config.parameter_version,
-            prompt_text=self._window_prompt(claim, capture_range, analyses), input_message_ids=frozenset(analysis_ids), operation="v2_x_window",
+            prompt_text=self._window_prompt(claim, capture_range, analyses, natural_date), input_message_ids=frozenset(analysis_ids), operation="v2_x_window",
         )
         response = self.retry_policy.execute(self.provider, tuple(analyses), provider_context)
         if response.status != "success" or response.parsed_output is None:
@@ -1143,8 +1143,14 @@ class XWindowedRuntime:
         payload = {"post": self._prompt_post(message), "context_post": context, "context_status": message.metadata["x"]["context_status"]}
         return f"{self.chunk_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n输入帖子包（仅本地 Codex CLI 可见）：\n{json.dumps(payload, ensure_ascii=False)}"
 
-    def _window_prompt(self, claim: Mapping[str, Any], capture_range: WindowedCaptureRange, analyses: list[dict[str, Any]]) -> str:
-        payload = {"range_task_id": str(claim["task_id"]), "natural_date": _shanghai_natural_date(_instant_text(capture_range.end_at)), "occurred_from_at": _instant_text(capture_range.start_at), "occurred_through_at": _instant_text(capture_range.end_at), "post_analyses": analyses}
+    def _window_prompt(
+        self,
+        claim: Mapping[str, Any],
+        capture_range: WindowedCaptureRange,
+        analyses: list[dict[str, Any]],
+        natural_date: str,
+    ) -> str:
+        payload = {"range_task_id": str(claim["task_id"]), "natural_date": natural_date, "occurred_from_at": _instant_text(capture_range.start_at), "occurred_through_at": _instant_text(capture_range.end_at), "post_analyses": analyses}
         return f"{self.window_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n已验证且待持久化的逐帖分析（仅本地 Codex CLI 可见）：\n{json.dumps(payload, ensure_ascii=False)}"
 
     @staticmethod
