@@ -275,11 +275,11 @@ def _print_identity_result(status: str, resolution_status: str | None, idempoten
 
 def _run_scheduled(worker: Worker, *, once: bool, poll_seconds: int) -> int:
     while True:
+        tick: dict[str, object] = {}
         try:
             tick = worker.schedule_tick()
         except Exception as exc:
             print(json.dumps({"status": "schedule_failed", "error": type(exc).__name__}, sort_keys=True), flush=True)
-            return 1
 
         outcome = worker.run_once()
         scheduled_at = tick.get("scheduled_at") if isinstance(tick.get("scheduled_at"), str) else None

@@ -21,6 +21,7 @@ from invest_hub_worker.cli import (
     main,
 )
 from invest_hub_worker.config import LocalWorkerConfigSet
+from invest_hub_worker.errors import ProtocolError
 from invest_hub_worker.worker import RunOutcome
 
 
@@ -36,6 +37,12 @@ class ScheduledWorker:
     def run_once(self) -> RunOutcome:
         self.run_calls += 1
         return RunOutcome("no_task")
+
+
+class ScheduleFailingWorker(ScheduledWorker):
+    def schedule_tick(self) -> dict[str, object]:
+        self.schedule_calls += 1
+        raise ProtocolError("schedule_tick_failed")
 
 
 class WorkerCliTests(unittest.TestCase):
@@ -67,6 +74,15 @@ class WorkerCliTests(unittest.TestCase):
     def test_scheduled_x_failure_uses_a_bounded_backoff_before_the_next_claim(self) -> None:
         self.assertEqual(_scheduled_sleep_seconds(RunOutcome("recovering", "task-1"), 60), 300)
         self.assertEqual(_scheduled_sleep_seconds(RunOutcome("no_task"), 60), 60)
+
+    def test_schedule_failure_still_attempts_to_recover_an_existing_task(self) -> None:
+        worker = ScheduleFailingWorker()
+
+        with patch("builtins.print"):
+            self.assertEqual(_run_scheduled(worker, once=True, poll_seconds=60), 0)
+
+        self.assertEqual(worker.schedule_calls, 1)
+        self.assertEqual(worker.run_calls, 1)
 
     def test_resolve_x_identity_parser_requires_only_identity_inputs(self) -> None:
         parser = build_parser()
