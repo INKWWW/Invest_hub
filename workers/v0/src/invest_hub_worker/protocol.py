@@ -194,14 +194,14 @@ class WorkerProtocol:
         except ContractError as exc:
             raise ProtocolError("invalid range completion") from exc
         # The capture pages are individually durable before this final atomic
-        # commit.  Its control-plane function has a matching 120s allowance;
-        # a shorter generic client timeout would abandon an in-flight commit
-        # and report a false collection failure.
+        # commit.  Its control-plane function allows 120s, while this client
+        # stops at 110s so Vercel can propagate cancellation to Supabase
+        # instead of leaving an abandoned database transaction behind.
         _, value = self._request(
             "POST",
             f"api/worker/tasks/{payload['task_id']}/range-complete",
             payload,
-            timeout=max(self.timeout, 120.0),
+            timeout=max(self.timeout, 110.0),
         )
         acknowledgement = self._object(value, "invalid range completion acknowledgement")
         if acknowledgement.get("status") != "succeeded":

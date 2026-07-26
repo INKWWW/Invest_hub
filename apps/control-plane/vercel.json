@@ -4,7 +4,8 @@
   "buildCommand": "npm run build",
   "functions": {
     "src/app/api/worker/tasks/*/range-complete/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 120,
+      "supportsCancellation": true
     },
     "src/app/api/**/*.ts": {
       "maxDuration": 60
