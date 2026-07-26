@@ -13,6 +13,10 @@ describe("XReader", () => {
       segments: [{ id: "segment-second", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["第二位博主的观点"], uncertainties: [], analyses: [] }],
     }] as never} />);
     expect(html).toContain('<option value="all" selected="">全部</option>');
+    expect(html.match(/class="reader-source-card"/g) ?? []).toHaveLength(2);
+    expect(html).toContain('<h2 class="x-reader-author">Fixture Author</h2>');
+    expect(html).toContain('<h2 class="x-reader-author">Second Author</h2>');
+    expect(html).toContain('<h3 class="x-reader-date"><span>日期</span>2099-01-01</h3>');
     expect(html).toContain("每日综合观点");
     expect(html).toContain("Fixture Author");
     expect(html).toContain("Second Author");
@@ -41,5 +45,21 @@ describe("XReader", () => {
     expect(html).toContain("第二位博主观点");
     expect(html).not.toContain("<strong>Fixture Author</strong>");
     expect(html).not.toContain("首位博主观点");
+  });
+
+  it("keeps multiple dates inside the same author card", () => {
+    const days = [{
+      source: { sourceKey: "fixture", displayName: "Fixture Author" }, naturalDate: "2099-01-02", status: "succeeded",
+      segments: [{ id: "latest", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新观点"], uncertainties: [], analyses: [] }],
+    }, {
+      source: { sourceKey: "fixture", displayName: "Fixture Author" }, naturalDate: "2099-01-01", status: "succeeded",
+      segments: [{ id: "earlier", occurredThroughAt: "2099-01-01T12:00:00.000Z", viewpoints: ["较早观点"], uncertainties: [], analyses: [] }],
+    }];
+    const html = renderToStaticMarkup(<XReader days={days as never} />);
+
+    expect(html.match(/class="reader-source-card"/g) ?? []).toHaveLength(1);
+    expect(html).toContain('<h2 class="x-reader-author">Fixture Author</h2>');
+    expect(html).toContain('<h3 class="x-reader-date"><span>日期</span>2099-01-02</h3>');
+    expect(html).toContain('<h3 class="x-reader-date"><span>日期</span>2099-01-01</h3>');
   });
 });

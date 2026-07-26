@@ -19,9 +19,18 @@ function validOrAll(value: string | undefined, values: string[]) {
   return value && values.includes(value) ? value : ALL;
 }
 
+function groupedBySource(days: XReaderDay[]) {
+  const groups = new Map<string, { source: XReaderDay["source"]; days: XReaderDay[] }>();
+  for (const day of days) {
+    const group = groups.get(day.source.sourceKey);
+    if (group) group.days.push(day); else groups.set(day.source.sourceKey, { source: day.source, days: [day] });
+  }
+  return [...groups.values()];
+}
+
 function XReaderDayCard({ day }: { day: XReaderDay }) {
-  return <article className="reader-day-card">
-    <header><p className="x-reader-context"><strong>{day.source.displayName}</strong><span> · {day.naturalDate}</span></p><h2 className="x-reader-heading">每日综合观点</h2></header>
+  return <section className="reader-day-card">
+    <header><h3 className="x-reader-date"><span>日期</span>{day.naturalDate}</h3><p className="x-reader-heading">每日综合观点</p></header>
     <ReaderStatus status={day.status} asOf={day.segments.at(-1)?.occurredThroughAt} />
     {day.segments.map((segment) => <section className="reader-section" key={segment.id}>
       {segment.viewpoints.length ? <ul className="x-viewpoints">{segment.viewpoints.map((viewpoint, viewpointIndex) => <li key={viewpointIndex}>{viewpoint}</li>)}</ul> : <p className="summary-empty">本窗口没有形成新的综合观点。</p>}
@@ -37,6 +46,13 @@ function XReaderDayCard({ day }: { day: XReaderDay }) {
         </article>)}
       </details>
     </section>)}
+  </section>;
+}
+
+function XReaderSourceCard({ source, days }: { source: XReaderDay["source"]; days: XReaderDay[] }) {
+  return <article className="reader-source-card">
+    <header><h2 className="x-reader-author">{source.displayName}</h2></header>
+    <div className="reader-day-list">{days.map((day) => <XReaderDayCard key={`${day.source.sourceKey}:${day.naturalDate}`} day={day} />)}</div>
   </article>;
 }
 
@@ -78,7 +94,7 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
       </label>
     </aside>
     <article className="reader-content">
-      {visibleDays.length ? <div className="reader-result-list">{visibleDays.map((day) => <XReaderDayCard key={`${day.source.sourceKey}:${day.naturalDate}`} day={day} />)}</div> : <p className="summary-empty">没有找到符合当前博主和日期筛选的 X 信息。</p>}
+      {visibleDays.length ? <div className="reader-result-list">{groupedBySource(visibleDays).map((group) => <XReaderSourceCard key={group.source.sourceKey} {...group} />)}</div> : <p className="summary-empty">没有找到符合当前博主和日期筛选的 X 信息。</p>}
     </article>
   </section>;
 }
