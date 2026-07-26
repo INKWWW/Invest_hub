@@ -6,9 +6,16 @@ import { XReader } from "../../components/reader/XReader";
 import { getCurrentUser } from "../../lib/auth/current-user";
 import { readXDay } from "../../lib/db/repositories/reader";
 
-export default async function XPage() {
+type XPageSearchParams = { source?: string | string[]; date?: string | string[] };
+
+function singleValue(value: string | string[] | undefined) {
+  return typeof value === "string" ? value : undefined;
+}
+
+export default async function XPage({ searchParams }: { searchParams?: Promise<XPageSearchParams> } = {}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=%2Fx");
+  const filters = await searchParams;
   const days = await readXDay();
   return <main className="reader-page">
     <header className="reader-page-header">
@@ -16,6 +23,6 @@ export default async function XPage() {
       <ReaderSourceNavigation active="x" />
       <h1>X 信息采集</h1>
     </header>
-    <XReader days={days} />
+    <XReader days={days} initialSourceKey={singleValue(filters?.source)} initialNaturalDate={singleValue(filters?.date)} />
   </main>;
 }

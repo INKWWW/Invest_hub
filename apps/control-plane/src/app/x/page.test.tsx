@@ -23,4 +23,16 @@ describe("XPage", () => {
     expect(html.indexOf("信息来源")).toBeLessThan(html.indexOf("X 信息采集"));
     expect(html).not.toContain("按博主和日期阅读每日综合观点");
   });
+
+  it("restores blogger and date selections from the reader URL", async () => {
+    readerMocks.readXDay.mockResolvedValue([{ source: { sourceKey: "first", displayName: "First Author" }, naturalDate: "2099-01-01", status: "succeeded", segments: [] }, {
+      source: { sourceKey: "second", displayName: "Second Author" }, naturalDate: "2099-01-02", status: "succeeded", segments: [],
+    }]);
+
+    const page = await XPage({ searchParams: Promise.resolve({ source: "second", date: "2099-01-02" }) } as never);
+    const html = renderToStaticMarkup(page);
+
+    expect(html).toContain("Second Author");
+    expect(html).not.toContain("<strong>First Author</strong>");
+  });
 });

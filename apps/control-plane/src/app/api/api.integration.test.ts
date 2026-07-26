@@ -70,6 +70,7 @@ const logoutMocks = vi.hoisted(() => ({
 }));
 const readerMocks = vi.hoisted(() => ({
   readDiscordDay: vi.fn(),
+  readXDay: vi.fn(),
 }));
 
 vi.mock("../../lib/auth/current-user", () => authMocks);
@@ -108,6 +109,7 @@ import {
 import { GET as getObservedAuthors } from "./admin/sources/[sourceId]/observed-authors/route";
 import { POST as postManualDiscordRefresh } from "./admin/discord/manual-refresh/route";
 import { GET as getDiscordReader } from "./reader/discord/route";
+import { GET as getXReader } from "./reader/x/route";
 import { POST as postScheduleTick } from "./worker/schedule/tick/route";
 import { GET as getDailyFactContext } from "./worker/tasks/[taskId]/daily-fact-context/route";
 import { POST as postResolveAuthorProfiles } from "./worker/tasks/[taskId]/resolve-author-profiles/route";
@@ -375,6 +377,15 @@ describe("v0 control-plane API authorization", () => {
     expect(JSON.stringify(body)).not.toContain("provider");
     expect(JSON.stringify(body)).not.toContain("cursor");
     expect(JSON.stringify(body)).not.toContain("device_secret_hash");
+  });
+
+  it("treats the X reader all selections as an unfiltered safe reader query", async () => {
+    readerMocks.readXDay.mockResolvedValue([]);
+
+    const response = await getXReader(new Request("http://localhost/api/reader/x?source=all&date=all"));
+
+    expect(response.status).toBe(200);
+    expect(readerMocks.readXDay).toHaveBeenCalledWith({ sourceKey: undefined, date: undefined });
   });
 
   it("blocks ordinary users from changing rules, source bindings, and history scopes", async () => {
