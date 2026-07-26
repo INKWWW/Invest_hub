@@ -20,8 +20,13 @@ type RangeCompletionPayload = {
 };
 
 export async function POST(request: Request, context: { params: Promise<{ taskId: string }> }) {
+  const startedAt = Date.now();
+  const reportStage = (stage: string) => {
+    console.info("range_completion_stage", { stage, elapsed_ms: Math.max(0, Date.now() - startedAt) });
+  };
   const worker = await authenticateWorker(request);
   if (!worker) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  reportStage("authenticated");
   const { taskId } = await context.params;
 
   let payload: RangeCompletionPayload;
@@ -31,10 +36,15 @@ export async function POST(request: Request, context: { params: Promise<{ taskId
     return NextResponse.json({ error: "invalid_range_completion" }, { status: 422 });
   }
   if (payload.task_id !== taskId) return NextResponse.json({ error: "task_mismatch" }, { status: 409 });
+  reportStage("payload_validated");
 
   try {
-    return NextResponse.json(await completeWindowedCaptureRange(taskId, payload.attempt, worker.id, payload as Json, request.signal));
+    reportStage("rpc_started");
+    const completion = await completeWindowedCaptureRange(taskId, payload.attempt, worker.id, payload as Json, request.signal);
+    reportStage("rpc_succeeded");
+    return NextResponse.json(completion);
   } catch (error) {
+    reportStage("rpc_rejected");
     const code = typeof error === "object" && error && "code" in error ? error.code : undefined;
     if (code === "40001") return NextResponse.json({ error: "lease_mismatch" }, { status: 409 });
     if (code === "23505") return NextResponse.json({ error: "conflicting_range_completion" }, { status: 409 });

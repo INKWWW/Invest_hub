@@ -869,6 +869,7 @@ describe("v0 control-plane API authorization", () => {
 
   it("persists verified capture segments and completes window ranges without using a safe checkpoint result", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    const rangeCompletionLog = vi.spyOn(console, "info").mockImplementation(() => undefined);
     taskMocks.recordWindowedCaptureSegment.mockResolvedValue({
       task_id: "task-window-1",
       idempotent: false,
@@ -947,6 +948,11 @@ describe("v0 control-plane API authorization", () => {
       expect.objectContaining({ range_complete: true }),
       expect.any(AbortSignal),
     );
+    expect(rangeCompletionLog).toHaveBeenCalledWith(
+      "range_completion_stage",
+      expect.objectContaining({ stage: "rpc_succeeded" }),
+    );
+    rangeCompletionLog.mockRestore();
   });
 
   it("does not advance a range when its persistence receipt is absent", async () => {
