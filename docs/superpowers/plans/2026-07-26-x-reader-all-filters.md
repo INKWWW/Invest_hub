@@ -153,7 +153,7 @@ cd ../.. && bash scripts/v0/redact-check.sh && git diff --check
 
 Expected: all frontend tests, lint, production build, redaction check and whitespace validation pass.
 
-- [ ] **Step 3: Commit and deploy the verified branch.**
+- [x] **Step 3: Commit and deploy the verified branch.**
 
 Run:
 

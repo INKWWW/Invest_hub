@@ -23,4 +23,4 @@ npm run lint   通过
 npm run build  通过（Next.js production build）
 ```
 
-待合并生产分支后，执行脱敏检查、差异检查、Vercel production 部署与受保护路由连通性确认。
+合并到本地 `main` 后，脱敏检查和 `git diff --check` 均通过。已部署至 Vercel production：`dpl_FB5jLcR7tneBu58PzBEgNywj7jPS` 状态为 `Ready`，生产别名为 `https://invest-hub-v0-control-plane.vercel.app`。匿名请求 `/x` 返回登录页 `200`（最终 URL 为 `/login?next=%2Fx`），确认阅读数据仍受登录保护。
