@@ -1,10 +1,10 @@
 # Project Status
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 ## Current phase
 
-**V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、一次真实持久化范围闭环、X 专用本机常驻 Worker 安装，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：由常驻服务自动完成的首个窗口，以及真实关系类别覆盖尚待补齐，因此不得标记为“V2 X 正式可用”。**
+**V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、真实持久化范围闭环、X 专用本机常驻 Worker 的实际自动窗口完成，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：自动增量链路已验证，但真实关系类别与可恢复失败恢复仍未完整覆盖，因此不得标记为“V2 X 正式可用”或无人值守 SLA。**
 
 **Discord 采集状态（2026-07-22 决定）：** 个人账号的 Page Fetch、页面 UI 自动化、直接接口和导出器路线均不再进入生产；不启用 Discord 定时或手动采集。既有 Reader 与已持久化数据保持可用，但不构成持续采集能力。未来仅在频道管理员明确授权 Bot 后，才以新的独立 Spec/Plan 评估重新启动；详见 [Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)。本段优先于下文历史 Browser Bridge 受限描述。
 
@@ -14,7 +14,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)、[V2 工程记录](engineering-journal/2026-07-23-v2-x-local-implementation.md)、[管理员来源工作台设计](superpowers/specs/2026-07-25-admin-source-configuration-workspace-design.md)、[工作台实施计划](superpowers/plans/2026-07-25-admin-source-configuration-workspace.md)、[来源创建简化设计](superpowers/specs/2026-07-25-admin-source-creation-simplification-design.md)、[来源创建简化计划](superpowers/plans/2026-07-25-admin-source-creation-simplification.md) 与 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。下一个单一范围是：观察 X 专用常驻 Worker 的第一个自动完成窗口；真实关系类别未覆盖时保持 conditional。不得重新启动个人 Discord 账号采集。
+下一次新对话应先阅读 `docs/intake.md`、本文件、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)、[V2 工程记录](engineering-journal/2026-07-23-v2-x-local-implementation.md)、[管理员来源工作台设计](superpowers/specs/2026-07-25-admin-source-configuration-workspace-design.md)、[工作台实施计划](superpowers/plans/2026-07-25-admin-source-configuration-workspace.md)、[来源创建简化设计](superpowers/specs/2026-07-25-admin-source-creation-simplification-design.md)、[来源创建简化计划](superpowers/plans/2026-07-25-admin-source-creation-simplification.md) 与 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。X 专用常驻 Worker 已完成首个自动窗口；后续仅在用户需要正式退出受控试运行时，补充真实可恢复失败恢复与关系类别覆盖。不得重新启动个人 Discord 账号采集。
 
 **V2 状态更正（2026-07-23）：** 上述 V2 “真实 X 待办”仅指完整采集与验收；最小、非持久化的真实 Go/No-Go 已在明确授权后完成，并因 OpenCLI 缺少 reply/repost 关系与范围完成证明而判定 `x_collection_unverified` / `opencli_contract`。未创建云端任务、未调用 Codex CLI、未推进水位、未远程迁移或部署。
 
@@ -59,7 +59,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V1 implementation status：代码、本地确定性验收、专用部署、真实双来源 history/增量/checkpoint、失败隔离/恢复、普通用户阅读与视觉、真实质量抽检和部署日志审阅均已完成；结论为 V1 Discord 正式可用 MVP。
 - V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全作者配置界面、管理员手动更新入口、内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。其后用户批准作者 selector 修订：管理员可直接输入显示名/用户名，已观察作者仅作快捷建议；任务逐页持久化后，受租约保护的服务端解析唯一 stable ID，零候选 pending、多候选 ambiguous，且绝不返回原文。该修订已应用专用 V1 数据库并部署到专用 V1 生产项目（Vercel Ready、正式域名已关联）；本地验证为 11 个 pgTAP 文件/186 项、18 个控制面测试文件/79 项、Worker 82 项以及 lint/production build 全部通过。随后管理员可录入已确认的重点作者，再进行真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。真实内容、来源身份、凭据与私有 Prompt 继续不进入 Git。
-- V2 implementation status：已完成受控本地 Collection runtime、远程 migration、生产控制面部署、来源身份解析、连续覆盖初始化、一次真实持久化范围闭环，以及 `com.investhub.x-worker` 常驻安装。最新真实范围完整成功，原始/Canonical/逐帖分析计数一致并产生每日观点段；X Worker 与生产控制面数据库绑定已实测一致。最新回归为 X launchd 安装前测试、Worker 124 项、控制面 106 项、lint、production build 和脱敏检查通过。V2 当前是受控生产试运行；正式退出门槛及限制见 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。
+- V2 implementation status：已完成受控本地 Collection runtime、远程 migration、生产控制面部署、来源身份解析、连续覆盖初始化、真实持久化范围闭环，以及 `com.investhub.x-worker` 常驻安装与首个自动完成窗口。最近一次受控真实范围持久化了 `2` 条逐帖分析和 `1` 段每日观点；自动轮询随后成功完成一个到期窗口，当前水位无待重试窗口。X Worker 与生产控制面数据库绑定已实测一致，生产 `/x` 路由 HTTP 可达。最新回归为 22 个 pgTAP 文件/291 项、Worker 133 项、控制面 135 项、lint、production build 和脱敏检查通过。V2 当前是受控生产试运行；正式退出门槛及限制见 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。
 - 管理员来源配置工作台 implementation status：Discord/X 独立工作区、来源档案卡、X 来源删除/归档生命周期与管理员 DELETE API 已完成并部署。远程 `20260725090000_admin_x_source_lifecycle.sql` 已应用，未对真实 X 来源执行删除或归档。来源创建简化已合并并部署：管理员不再填写内部来源标识或参数版本；服务端生成新来源的技术身份与默认采集契约。当前本地控制面回归为 30 个测试文件/131 项，lint、production build、脱敏检查与 `git diff --check` 通过；稳定生产入口已验证仍受登录保护。详见 [工作台工程记录](engineering-journal/2026-07-25-admin-source-configuration-workspace.md) 和 [创建简化工程记录](engineering-journal/2026-07-25-admin-source-creation-simplification.md)。
 - V0 validation stack：Next.js + Supabase/RLS、Python 3.11+ Worker、OpenCLI Active Adapter 边界、Mock/Codex CLI Provider；这些是 V0 验证选择，不等于最终生产架构批准。
 
@@ -137,3 +137,5 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 ## Next gate
 
 V1 MVP 退出门槛已通过。V1.1 的 Task 1–7、Task 8 本地确定性验收、远程 migration、控制面部署和双来源初始 coverage 已完成。此时仍不能将 V1.1 标记为“已验收”或“正式可用”：尚缺管理员重点作者选择后的真实 Discord 正常窗口与手动范围验收、作者配置生效、普通用户真实页面审阅和明确 label/config 的 launchd 安装。每项真实或外部状态变更都必须在授权后按 Plan 的顺序执行并记录。V2 X Spec 与 Plan 均已批准；本地实现与公开 fixture 验收已完成，但已授权的最小真实 X Go/No-Go 因 OpenCLI 合同字段不足而为 No-Go，故不得继续真实采集、创建云端任务、推进水位、远程 migration 或部署。媒体/OCR/外部正文解析、独立用户来源、自动 fallback 或其他长期稳定性工作仍须分别完成 Spec/Plan 批准；本次结论不构成生产 SLA。
+
+**V2 当前状态更正（2026-07-26）：** 上述 X Go/No-Go 为早期历史记录。此后已采用受控本地 Collection runtime，完成生产持久化闭环并由 `com.investhub.x-worker` 实际自动完成首个窗口；持续自动增量已启用。真实引用/回复/转发类别与可恢复失败恢复仍未完整覆盖，故 V2 保持受控生产试运行，而非正式 SLA。
