@@ -1,6 +1,16 @@
 begin;
 
-select plan(7);
+select plan(8);
+
+select is(
+  (
+    select coalesce(array_to_string(proconfig, ','), '') like '%lock_timeout=5s%'
+    from pg_proc
+    where oid = 'public.complete_windowed_capture_range(uuid, integer, uuid, jsonb)'::regprocedure
+  ),
+  true,
+  'X range completion bounds lock waits so a stale request cannot hold the Worker past its deadline'
+);
 
 insert into public.sources (id, source_key, source_type, display_name, parameter_version)
 values ('00000000-0000-0000-0000-000000014001', 'x-completion-source', 'x', 'X completion source', 'v2-completion');
