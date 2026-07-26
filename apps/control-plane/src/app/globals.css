@@ -119,18 +119,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .reader-content { display: grid; gap: 1.5rem; padding: clamp(1.25rem, 3vw, 2.25rem); }
 
-.reader-result-list { display: grid; gap: 1.5rem; }
+.reader-result-list { display: grid; gap: 1rem; }
 
-.reader-day-card { display: grid; gap: 1.15rem; border-top: 3px solid #2d6872; padding-top: 1.25rem; }
+.reader-source-card { border: 1px solid #b8ceca; border-left: 4px solid #2d6872; background: #fffefa; box-shadow: 0 1px 0 rgba(23, 37, 45, 0.04); padding: clamp(1.15rem, 2.5vw, 1.6rem); }
+
+.reader-content h2.x-reader-author { margin: 0; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.45rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.035em; }
+
+.reader-day-list { display: grid; gap: 1.25rem; margin-top: 1.15rem; }
+
+.reader-day-card { display: grid; gap: 1.15rem; border-top: 1px solid #d5e0dd; padding-top: 1.25rem; }
 
 .reader-day-card:first-child { border-top: 0; padding-top: 0; }
 
 .reader-eyebrow { margin: 0 0 0.4rem; color: #547077; font-size: 0.86rem; font-weight: 700; }
 
-.x-reader-context { margin: 0; color: #365962; font-size: clamp(1.05rem, 2vw, 1.3rem); line-height: 1.35; }
-.x-reader-context strong { color: var(--ink); font-weight: 850; }
-.x-reader-context span { color: #547077; font-weight: 700; }
-.reader-content h2.x-reader-heading { margin-top: 0.3rem; color: #547077; font-family: inherit; font-size: 0.95rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.reader-content h3.x-reader-date { display: flex; align-items: baseline; gap: 0.55rem; margin: 0; color: #315860; font-family: inherit; font-size: clamp(1rem, 2vw, 1.2rem); font-weight: 850; letter-spacing: -0.01em; }
+.x-reader-date span { color: #6a7d80; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.x-reader-heading { margin: 0.3rem 0 0; color: #547077; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 
 .reader-content h2, .reader-content h3, .reader-content h4, .reader-content h5 { margin: 0; color: #17252d; line-height: 1.25; }
 
