@@ -193,7 +193,16 @@ class WorkerProtocol:
             payload = load_contract("window-range-completion", completion)
         except ContractError as exc:
             raise ProtocolError("invalid range completion") from exc
-        _, value = self._request("POST", f"api/worker/tasks/{payload['task_id']}/range-complete", payload)
+        # The capture pages are individually durable before this final atomic
+        # commit.  Its control-plane function has a matching 120s allowance;
+        # a shorter generic client timeout would abandon an in-flight commit
+        # and report a false collection failure.
+        _, value = self._request(
+            "POST",
+            f"api/worker/tasks/{payload['task_id']}/range-complete",
+            payload,
+            timeout=max(self.timeout, 120.0),
+        )
         acknowledgement = self._object(value, "invalid range completion acknowledgement")
         if acknowledgement.get("status") != "succeeded":
             raise ProtocolError("range completion was not acknowledged")
@@ -223,14 +232,22 @@ class WorkerProtocol:
             raise ProtocolError("worker is not enrolled")
         return credential
 
-    def _request(self, method: str, path: str, body: object | None, *, authenticated: bool = True) -> tuple[int, object | None]:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        body: object | None,
+        *,
+        authenticated: bool = True,
+        timeout: float | None = None,
+    ) -> tuple[int, object | None]:
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         bypass = os.environ.get("V0_VERCEL_PROTECTION_BYPASS", "").strip()
         if bypass:
             headers["x-vercel-protection-bypass"] = bypass
         if authenticated:
             headers["Authorization"] = f"Bearer {self._require_credential().device_secret}"
-        status, value = self.transport(method, urljoin(self.base_url, path), body, headers, self.timeout)
+        status, value = self.transport(method, urljoin(self.base_url, path), body, headers, self.timeout if timeout is None else timeout)
         if status >= 400:
             error = value.get("error") if isinstance(value, dict) else None
             if status == 409:
