@@ -50,7 +50,7 @@ export async function POST(request: Request, context: { params: Promise<{ taskId
   } catch (error) {
     reportStage("rpc_rejected");
     const code = typeof error === "object" && error && "code" in error ? error.code : undefined;
-    if (code === "40001") return NextResponse.json({ error: "lease_mismatch" }, { status: 409 });
+    if (code === "PT409" || code === "40001") return NextResponse.json({ error: "lease_mismatch" }, { status: 409 });
     if (code === "23505") return NextResponse.json({ error: "conflicting_range_completion" }, { status: 409 });
     if (code === "22023") return NextResponse.json({ error: "invalid_range_completion" }, { status: 422 });
     if (code === "55000") return NextResponse.json({ error: "persistence_not_confirmed" }, { status: 422 });

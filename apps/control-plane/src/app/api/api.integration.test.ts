@@ -979,6 +979,30 @@ describe("v0 control-plane API authorization", () => {
     expect(await response.json()).toEqual({ error: "persistence_not_confirmed" });
   });
 
+  it("maps a V2 range business conflict to 409", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    taskMocks.completeWindowedCaptureRange.mockRejectedValue({ code: "PT409", message: "lease_mismatch" });
+
+    const response = await postRangeComplete(
+      jsonRequest("/api/worker/tasks/task-window-1/range-complete", {
+        contract_version: "v0",
+        task_id: "task-window-1",
+        attempt: 1,
+        range_complete: true,
+        capture_range: {
+          mode: "window", trigger: "manual", timezone: "Asia/Shanghai",
+          start_at: "2026-07-22T00:00:00Z", end_at: "2026-07-22T08:00:00Z", scheduled_window_key: null,
+        },
+        boundary: { kind: "oldest_at_or_before_start", observed_at: "2026-07-22T00:00:00Z" },
+        summary_batch_ids: [], daily_summary_ids: [], no_new_data: true,
+      }, { authorization: "Bearer device-secret" }),
+      { params: Promise.resolve({ taskId: "task-window-1" }) },
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "lease_mismatch" });
+  });
+
   it("accepts a valid Worker persistence payload without returning its local reference", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     taskMocks.persistWorkerExecution.mockResolvedValue({

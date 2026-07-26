@@ -1,6 +1,6 @@
 begin;
 
-select plan(8);
+select plan(9);
 
 select is(
   (
@@ -10,6 +10,18 @@ select is(
   ),
   true,
   'X range completion bounds lock waits so a stale request cannot hold the Worker past its deadline'
+);
+
+select throws_ok(
+  $$select public.complete_windowed_capture_range(
+    '00000000-0000-0000-0000-000000014999'::uuid,
+    1,
+    '00000000-0000-0000-0000-000000014998'::uuid,
+    '{}'::jsonb
+  )$$,
+  'PT409',
+  'lease_mismatch',
+  'X range completion reports a business lease conflict without using a serialization failure code'
 );
 
 insert into public.sources (id, source_key, source_type, display_name, parameter_version)
