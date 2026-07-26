@@ -33,7 +33,7 @@ export async function POST(request: Request, context: { params: Promise<{ taskId
   if (payload.task_id !== taskId) return NextResponse.json({ error: "task_mismatch" }, { status: 409 });
 
   try {
-    return NextResponse.json(await completeWindowedCaptureRange(taskId, payload.attempt, worker.id, payload as Json));
+    return NextResponse.json(await completeWindowedCaptureRange(taskId, payload.attempt, worker.id, payload as Json, request.signal));
   } catch (error) {
     const code = typeof error === "object" && error && "code" in error ? error.code : undefined;
     if (code === "40001") return NextResponse.json({ error: "lease_mismatch" }, { status: 409 });

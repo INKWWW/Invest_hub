@@ -940,7 +940,13 @@ describe("v0 control-plane API authorization", () => {
       attempt: 1,
       coverage_through_at: "2026-07-22T08:00:00Z",
     });
-    expect(taskMocks.completeWindowedCaptureRange).toHaveBeenCalledWith("task-window-1", 1, "worker-1", expect.objectContaining({ range_complete: true }));
+    expect(taskMocks.completeWindowedCaptureRange).toHaveBeenCalledWith(
+      "task-window-1",
+      1,
+      "worker-1",
+      expect.objectContaining({ range_complete: true }),
+      expect.any(AbortSignal),
+    );
   });
 
   it("does not advance a range when its persistence receipt is absent", async () => {
