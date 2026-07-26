@@ -3,11 +3,11 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "functions": {
-    "src/app/api/**/*.ts": {
-      "maxDuration": 60
-    },
     "src/app/api/worker/tasks/*/range-complete/route.ts": {
       "maxDuration": 120
+    },
+    "src/app/api/**/*.ts": {
+      "maxDuration": 60
     }
   }
 }
