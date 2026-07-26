@@ -28,10 +28,14 @@ export async function POST(request: Request, context: { params: Promise<{ taskId
   if (!worker) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   reportStage("authenticated");
   const { taskId } = await context.params;
+  reportStage("params_resolved");
 
   let payload: RangeCompletionPayload;
   try {
-    payload = parseContract<RangeCompletionPayload>("window-range-completion", await request.json());
+    const body = await request.json();
+    reportStage("body_parsed");
+    payload = parseContract<RangeCompletionPayload>("window-range-completion", body);
+    reportStage("contract_parsed");
   } catch {
     return NextResponse.json({ error: "invalid_range_completion" }, { status: 422 });
   }
