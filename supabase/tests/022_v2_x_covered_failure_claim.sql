@@ -1,6 +1,6 @@
 begin;
 
-select plan(2);
+select plan(5);
 
 insert into public.workers (id, name, device_secret_hash, status)
 values ('00000000-0000-0000-0000-000000022001', 'covered-failure-worker', 'covered-failure-worker-hash', 'online');
@@ -71,6 +71,79 @@ select is(
   (select payload from uncovered_claim),
   null,
   'a terminal failed X task beyond the coverage waterline still blocks an unproven later range'
+);
+
+insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
+values (
+  '00000000-0000-0000-0000-000000022013',
+  'covered-retryable-source',
+  'x',
+  'Covered retryable source',
+  'v2-covered-failure',
+  '00000000-0000-0000-0000-000000022001'
+);
+
+insert into public.x_source_profiles (source_id, requested_handle, account_id, display_name, resolution_status)
+values (
+  '00000000-0000-0000-0000-000000022013',
+  'covered_retryable',
+  'covered_retryable',
+  'Covered retryable source',
+  'resolved'
+);
+
+insert into public.source_collection_coverage (source_id, coverage_start_at, coverage_through_at)
+values (
+  '00000000-0000-0000-0000-000000022013',
+  '2026-07-24T08:00:00Z',
+  '2026-07-24T08:00:00Z'
+);
+
+create temporary table covered_retryable_task as
+select public.create_windowed_x_sync_task(
+  '00000000-0000-0000-0000-000000022013', 'v2-covered-failure', null, 'scheduled',
+  '2026-07-24T12:00:00Z', '2026-07-24T20:00+08:00'
+) as payload;
+
+update public.sync_tasks
+set status = 'retryable_failed',
+    queued_at = '2026-07-24T12:00:00Z'
+where id = (select (payload->>'id')::uuid from covered_retryable_task);
+
+update public.source_collection_coverage
+set coverage_through_at = '2026-07-24T12:00:00Z'
+where source_id = '00000000-0000-0000-0000-000000022013';
+
+create temporary table current_retryable_successor_task as
+select public.create_windowed_x_sync_task(
+  '00000000-0000-0000-0000-000000022013', 'v2-covered-failure', null, 'scheduled',
+  '2026-07-24T16:00:00Z', '2026-07-25T00:00+08:00'
+) as payload;
+
+select is(
+  (select payload->'capture_range'->>'start_at' from current_retryable_successor_task),
+  '2026-07-24T12:00:00+00:00',
+  'the scheduler creates a fresh X window from the current coverage waterline when an older retryable window is already covered'
+);
+
+select is(
+  (select payload->'capture_range'->>'end_at' from current_retryable_successor_task),
+  '2026-07-24T16:00:00+00:00',
+  'the fresh X window retains the requested fixed end boundary'
+);
+
+create temporary table covered_retryable_claim as
+select public.claim_next_task('00000000-0000-0000-0000-000000022001', '2026-07-24T16:03:00Z') as payload;
+
+select is(
+  (select payload->>'task_id' from covered_retryable_claim),
+  (
+    select id::text
+    from public.sync_tasks
+    where source_id = '00000000-0000-0000-0000-000000022013'
+      and (capture_range->>'start_at')::timestamptz = '2026-07-24T12:00:00Z'::timestamptz
+  ),
+  'a covered retryable X window cannot preempt the window at the current coverage waterline'
 );
 
 select * from finish();
