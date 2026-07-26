@@ -94,7 +94,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .session-controls button { background: transparent; color: #1f5663; font-size: 0.625rem; padding: 0.45rem 0.6rem; white-space: nowrap; }
 
-.session-controls button:hover { background: #e5efed; }
+.session-admin-link { border: 1px solid #1f5663; border-radius: 2px; background: transparent; color: #1f5663; font-size: 0.625rem; font-weight: 800; padding: 0.45rem 0.6rem; text-decoration: none; white-space: nowrap; }
+
+.session-controls button:hover, .session-admin-link:hover { background: #e5efed; }
 
 .session-controls button:disabled { cursor: wait; opacity: 0.7; }
 
@@ -116,6 +118,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .reader-sidebar select { width: 100%; min-height: 2.5rem; padding: 0.45rem 0.55rem; color: #17252d; background: #fffefa; }
 
 .reader-content { display: grid; gap: 1.5rem; padding: clamp(1.25rem, 3vw, 2.25rem); }
+
+.reader-result-list { display: grid; gap: 1.5rem; }
+
+.reader-day-card { display: grid; gap: 1.15rem; border-top: 3px solid #2d6872; padding-top: 1.25rem; }
+
+.reader-day-card:first-child { border-top: 0; padding-top: 0; }
 
 .reader-eyebrow { margin: 0 0 0.4rem; color: #547077; font-size: 0.86rem; font-weight: 700; }
 
