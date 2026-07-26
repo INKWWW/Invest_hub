@@ -5,6 +5,9 @@
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/worker/tasks/[taskId]/range-complete/route.ts": {
+      "maxDuration": 120
     }
   }
 }

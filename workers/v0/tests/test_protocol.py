@@ -302,6 +302,8 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(protocol.complete_capture_range(completion)["status"], "succeeded")
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/tasks/task-window-1/capture-segments"))
             self.assertTrue(str(transport.calls[2]["url"]).endswith("/api/worker/tasks/task-window-1/range-complete"))
+            self.assertEqual(transport.calls[1]["timeout"], 30.0)
+            self.assertEqual(transport.calls[2]["timeout"], 120.0)
 
 
 if __name__ == "__main__":
