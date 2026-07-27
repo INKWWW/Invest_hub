@@ -7,6 +7,7 @@ import type { AdminSourceCard } from "../../lib/db/repositories/sources";
 const lifecycleLabels: Record<AdminSourceCard["lifecycle"], string> = {
   ready: "可更新与回填",
   identity_pending: "身份验证",
+  identity_failed: "身份验证失败（已隔离）",
   coverage_uninitialized: "初始化覆盖",
   active_task: "等待任务收口",
   archived: "已归档",
@@ -23,7 +24,7 @@ function dateLabel(value: string | null): string {
 
 function stageState(lifecycle: AdminSourceCard["lifecycle"], stage: "configuration" | "identity" | "coverage" | "updates") {
   if (lifecycle === "archived") return "blocked";
-  const order = lifecycle === "identity_pending" ? 2
+  const order = lifecycle === "identity_pending" || lifecycle === "identity_failed" ? 2
     : lifecycle === "coverage_uninitialized" ? 3
       : lifecycle === "ready" || lifecycle === "active_task" ? 4 : 1;
   const stageOrder = stage === "configuration" ? 1 : stage === "identity" ? 2 : stage === "coverage" ? 3 : 4;

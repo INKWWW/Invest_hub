@@ -4,7 +4,7 @@ import type { Database } from "../types";
 type SourceInsert = Database["public"]["Tables"]["sources"]["Insert"];
 
 const sourceFields = "id,source_key,source_type,display_name,parameter_version,enabled,authorized_worker_id,author_rules_version,created_by,archived_at,archived_by,archive_reason,created_at,updated_at";
-const adminSourceCardFields = "id,source_type,display_name,enabled,archived_at,workers(name),x_source_profiles(resolution_status),source_collection_coverage(source_id),sync_tasks(status,updated_at)";
+const adminSourceCardFields = "id,source_type,display_name,enabled,archived_at,workers(name),x_source_profiles(resolution_status),x_source_activations(stage),source_collection_coverage(source_id),sync_tasks(status,updated_at)";
 
 export type AdminSourceCard = {
   id: string;
@@ -12,7 +12,7 @@ export type AdminSourceCard = {
   displayName: string;
   enabled: boolean;
   archivedAt: string | null;
-  lifecycle: "ready" | "identity_pending" | "coverage_uninitialized" | "active_task" | "archived";
+  lifecycle: "ready" | "identity_pending" | "identity_failed" | "coverage_uninitialized" | "active_task" | "archived";
   workerName: string | null;
   latestCompletedAt: string | null;
 };
@@ -25,6 +25,7 @@ type AdminSourceQuery = {
   archived_at: string | null;
   workers: { name: string } | null;
   x_source_profiles: Array<{ resolution_status: "pending" | "resolved" | "ambiguous" }>;
+  x_source_activations?: Array<{ stage: string }>;
   source_collection_coverage: Array<{ source_id: string }>;
   sync_tasks: Array<{ status: string; updated_at: string }>;
 };
@@ -32,7 +33,10 @@ type AdminSourceQuery = {
 function sourceLifecycle(source: AdminSourceQuery): AdminSourceCard["lifecycle"] {
   if (source.archived_at) return "archived";
   if (source.sync_tasks.some((task) => ["queued", "leased", "running", "retryable_failed"].includes(task.status))) return "active_task";
-  if (source.source_type === "x" && source.x_source_profiles[0]?.resolution_status !== "resolved") return "identity_pending";
+  if (source.source_type === "x" && source.x_source_profiles[0]?.resolution_status !== "resolved") {
+    if (source.x_source_activations?.some((activation) => activation.stage === "identity_failed")) return "identity_failed";
+    return "identity_pending";
+  }
   if (source.source_collection_coverage.length === 0) return "coverage_uninitialized";
   return "ready";
 }
