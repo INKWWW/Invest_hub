@@ -172,6 +172,24 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/schedule/tick"))
             self.assertEqual(transport.calls[1]["body"], {})
 
+    def test_x_activation_protocols_use_worker_only_endpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"activation": {"source_id": "source-x", "requested_handle": "fixture", "parameter_version": "x-standard-v2", "initial_end_at": "2099-01-01T08:00:00Z", "idempotent": False}}),
+                (200, {"activation": {"task_id": "task-x", "source_id": "source-x", "initial_end_at": "2099-01-01T08:00:00Z", "idempotent": False}}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            activation = protocol.claim_x_activation()
+            initialized = protocol.initialize_x_activation("source-x")
+
+            self.assertEqual(activation["requested_handle"], "fixture")
+            self.assertEqual(initialized["task_id"], "task-x")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/x-activations/claim"))
+            self.assertTrue(str(transport.calls[2]["url"]).endswith("/api/worker/x-activations/source-x/initialize"))
+
     def test_daily_fact_context_is_read_only_and_scoped_to_the_current_task_attempt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport(

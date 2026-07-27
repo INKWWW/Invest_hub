@@ -48,17 +48,19 @@ class Worker:
         execute_windowed: Callable[..., dict[str, Any]] | None = None,
         preflight: Callable[[dict[str, Any]], None] | None = None,
         clock: Callable[[], datetime] | None = None,
+        capabilities: list[str] | None = None,
     ) -> None:
         self.protocol = protocol
         self.execute = execute or self._not_configured
         self.execute_windowed = execute_windowed
         self.preflight = preflight or (lambda _claim: None)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.capabilities = capabilities or ["discord_sync"]
         self.state = WorkerState.IDLE
 
     def run_once(self) -> RunOutcome:
         try:
-            self.protocol.heartbeat("idle", ["discord_sync"], self.clock().isoformat())
+            self.protocol.heartbeat("idle", self.capabilities, self.clock().isoformat())
         except Exception as exc:
             return self._recover(None, exc)
 
