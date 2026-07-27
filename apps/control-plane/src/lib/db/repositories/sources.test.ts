@@ -134,4 +134,27 @@ describe("source administration", () => {
       lifecycle: "identity_failed",
     }]);
   });
+
+  it("handles Supabase one-to-one profile rows after identity resolution", async () => {
+    databaseMocks.sourceListOrder.mockResolvedValue({
+      data: [{
+        id: "source-x",
+        source_type: "x",
+        display_name: "AllInvestHK",
+        enabled: true,
+        archived_at: null,
+        workers: { name: "local X worker" },
+        x_source_profiles: { resolution_status: "resolved" },
+        x_source_activations: { stage: "completed" },
+        source_collection_coverage: [{ source_id: "source-x" }],
+        sync_tasks: [],
+      }],
+      error: null,
+    });
+
+    await expect(listAdminSources({ sourceType: "x", includeArchived: false })).resolves.toMatchObject([{
+      id: "source-x",
+      lifecycle: "ready",
+    }]);
+  });
 });
