@@ -103,6 +103,7 @@ class Provider:
     def __init__(self) -> None:
         self.operations: list[str] = []
         self.post_ids: list[str] = []
+        self.omit_last_window_analysis = False
 
     def complete(self, _chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
         self.operations.append(context.operation)
@@ -116,9 +117,12 @@ class Provider:
             }]}
         else:
             prompt_payload = json.loads(context.prompt_text.rsplit("\n", 1)[-1])
+            analysis_ids = sorted(context.input_message_ids)
+            if self.omit_last_window_analysis:
+                analysis_ids = analysis_ids[:-1]
             output = {"schema_version": "v2-x-window", "natural_date": prompt_payload["natural_date"], "range_task_id": "x-window-1",
                       "occurred_from_at": prompt_payload["occurred_from_at"], "occurred_through_at": prompt_payload["occurred_through_at"],
-                      "window_viewpoints": ["本窗口综合观点"], "analysis_ids": sorted(context.input_message_ids),
+                      "window_viewpoints": ["本窗口综合观点"], "analysis_ids": analysis_ids,
                       "evidence_post_ids": [*self.post_ids, "context-1"], "uncertainties": []}
         return ProviderResponse(status="success", provider="mock", model_reported=None, prompt_version=context.prompt_version,
                                 elapsed_ms=1, attempt=context.attempt, raw_ref=None, parsed_output_ref=None, parsed_output=output)
@@ -235,6 +239,24 @@ class XWindowedRuntimeTests(unittest.TestCase):
             completion = self.runtime(Connector(), directory).execute_windowed(midnight_cutoff_claim())["range_completion"]
 
         self.assertEqual(completion["x_daily_segments"][0]["natural_date"], "2026-07-24")
+
+    def test_daily_segment_references_every_persisted_post_analysis_when_model_omits_a_repost(self) -> None:
+        provider = Provider()
+        provider.omit_last_window_analysis = True
+
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                second = {**quote_post(), "id": "post-second", "created_at": "2026-07-23T00:20:00Z"}
+                return RawPage(
+                    page_id="two-posts", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/two-posts", telemetry=receipt_telemetry("time_boundary_reached", "2026-07-22T23:29:00Z"),
+                    messages=(quote_post(), second),
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            completion = self.runtime(Connector(), directory, provider).execute_windowed(claim())["range_completion"]
+
+        self.assertEqual(completion["x_daily_segments"][0]["analysis_ids"], ["post-new@1", "post-second@1"])
 
 
 if __name__ == "__main__":

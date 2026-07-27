@@ -1136,8 +1136,14 @@ class XWindowedRuntime:
         return {
             "natural_date": natural_date, "occurred_from_at": _instant_text(min(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
             "occurred_through_at": _instant_text(max(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
-            "window_viewpoints": output["window_viewpoints"], "analysis_ids": output["analysis_ids"],
-            "evidence_post_ids": output["evidence_post_ids"], "uncertainties": output["uncertainties"],
+            "window_viewpoints": output["window_viewpoints"],
+            # The model may summarize a repost as having no standalone
+            # viewpoint and omit its analysis id.  The durable range contract
+            # still requires every persisted post analysis to be referenced by
+            # the daily segment, so the Worker owns this completeness step.
+            "analysis_ids": sorted(analysis_ids),
+            "evidence_post_ids": sorted(set(output["evidence_post_ids"]) | {message.external_message_id for message in messages}),
+            "uncertainties": output["uncertainties"],
         }, max(0, response.attempt - 1), response.elapsed_ms
 
     def _chunk_prompt(self, message: CanonicalMessage, context: dict[str, str] | None) -> str:
