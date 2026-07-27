@@ -111,4 +111,27 @@ describe("source administration", () => {
     expect(databaseMocks.sourceSelect.mock.calls[0]?.[0]).not.toContain("local_raw_ref");
     expect(databaseMocks.sourceListIs).toHaveBeenCalledWith("archived_at", null);
   });
+
+  it("handles Supabase one-to-one activation rows when exposing isolated identity failures", async () => {
+    databaseMocks.sourceListOrder.mockResolvedValue({
+      data: [{
+        id: "source-x",
+        source_type: "x",
+        display_name: "AllInvestHK",
+        enabled: true,
+        archived_at: null,
+        workers: { name: "local X worker" },
+        x_source_profiles: [{ resolution_status: "pending" }],
+        x_source_activations: { stage: "identity_failed" },
+        source_collection_coverage: [],
+        sync_tasks: [],
+      }],
+      error: null,
+    });
+
+    await expect(listAdminSources({ sourceType: "x", includeArchived: false })).resolves.toMatchObject([{
+      id: "source-x",
+      lifecycle: "identity_failed",
+    }]);
+  });
 });
