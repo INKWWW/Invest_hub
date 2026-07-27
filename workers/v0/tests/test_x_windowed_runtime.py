@@ -8,6 +8,7 @@ from pathlib import Path
 
 from invest_hub_worker.canonical import Canonicalizer
 from invest_hub_worker.config import LocalWorkerConfig
+from invest_hub_worker.contracts import load_contract
 from invest_hub_worker.connectors.base import RawPage
 from invest_hub_worker.evidence import LocalEvidenceStore
 from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
@@ -143,6 +144,7 @@ class XWindowedRuntimeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             completion = self.runtime(Connector(), directory).execute_windowed(claim())["range_completion"]
+        load_contract("window-range-completion", completion)
         self.assertEqual(completion["boundary"]["kind"], "oldest_at_or_before_start")
         self.assertEqual(completion["boundary"]["observed_at"], "2026-07-22T23:29:00Z")
         self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
@@ -162,6 +164,7 @@ class XWindowedRuntimeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             completion = self.runtime(Connector(), directory).execute(history_claim())["range_completion"]
+        load_contract("window-range-completion", completion)
         self.assertEqual(completion["capture_range"]["mode"], "history")
         self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
 
@@ -175,6 +178,7 @@ class XWindowedRuntimeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             completion = self.runtime(Connector(), directory).execute_windowed(claim())["range_completion"]
+        load_contract("window-range-completion", completion)
         self.assertEqual(completion["boundary"]["kind"], "history_exhausted")
         self.assertTrue(completion["no_new_data"])
 
