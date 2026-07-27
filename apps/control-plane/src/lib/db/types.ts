@@ -749,6 +749,10 @@ export interface Database {
         Args: { p_source_id: string; p_worker_id: string; p_now: string };
         Returns: Json;
       };
+      mark_x_source_activation_identity_failed: {
+        Args: { p_source_id: string; p_worker_id: string; p_error_code: string };
+        Returns: Json;
+      };
       create_x_source: {
         Args: { p_source_key: string; p_display_name: string; p_requested_handle: string; p_parameter_version: string; p_actor_id: string };
         Returns: Json;

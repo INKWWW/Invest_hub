@@ -17,6 +17,8 @@ export type InitializedXActivation = {
   idempotent: boolean;
 };
 
+export type FailedXActivation = { sourceId: string; stage: "identity_failed" };
+
 function row(value: unknown, code: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new XActivationError(code);
   return value as Record<string, unknown>;
@@ -68,4 +70,15 @@ export async function initializeXActivation(input: { sourceId: string; workerId:
   const { data, error } = await createSupabaseAdminClient().rpc("initialize_x_source_activation", { p_source_id: input.sourceId, p_worker_id: input.workerId, p_now: input.now });
   if (error) rethrow(error);
   return initialized(data);
+}
+
+export async function markXActivationIdentityFailed(input: { sourceId: string; workerId: string; errorCode: string }): Promise<FailedXActivation> {
+  const { data, error } = await createSupabaseAdminClient().rpc("mark_x_source_activation_identity_failed", {
+    p_source_id: input.sourceId, p_worker_id: input.workerId, p_error_code: input.errorCode,
+  });
+  if (error) rethrow(error);
+  const value = row(data, "invalid_x_activation_failure");
+  exact(value, "source_id,stage", "invalid_x_activation_failure");
+  if (value.stage !== "identity_failed") throw new XActivationError("invalid_x_activation_failure");
+  return { sourceId: text(value.source_id, "invalid_x_activation_failure"), stage: "identity_failed" };
 }

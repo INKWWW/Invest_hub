@@ -146,6 +146,19 @@ class WorkerProtocol:
             raise ProtocolError("invalid x activation initialization response")
         return dict(activation)
 
+    def mark_x_activation_identity_failed(self, source_id: str, error_code: str) -> dict[str, Any]:
+        self._require_credential()
+        if not isinstance(source_id, str) or not source_id or error_code not in {'identity_mismatch', 'invalid_x_identity', 'profile_timeout', 'profile_invocation_failed', 'activation_protocol_failure', 'identity_resolution_failed'}:
+            raise ProtocolError("invalid x activation failure request")
+        _, value = self._request("POST", f"api/worker/x-activations/{source_id}/identity-failed", {"error_code": error_code})
+        response = self._object(value, "invalid x activation failure response")
+        if set(response) != {"activation"} or not isinstance(response.get("activation"), dict):
+            raise ProtocolError("invalid x activation failure response")
+        activation = response["activation"]
+        if set(activation) != {"source_id", "stage"} or activation.get("source_id") != source_id or activation.get("stage") != "identity_failed":
+            raise ProtocolError("invalid x activation failure response")
+        return dict(activation)
+
     def get_daily_fact_context(self, task_id: str, attempt: int) -> dict[str, Any]:
         self._require_credential()
         if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
