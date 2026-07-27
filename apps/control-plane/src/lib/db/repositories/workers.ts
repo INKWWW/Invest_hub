@@ -43,10 +43,10 @@ export async function findWorkerBySecretHash(deviceSecretHash: string) {
   return data;
 }
 
-export async function updateWorkerHeartbeat(workerId: string, status: WorkerStatus, at: string) {
+export async function updateWorkerHeartbeat(workerId: string, status: WorkerStatus, at: string, capabilities: Array<"discord_sync" | "x_sync"> = []) {
   const { data, error } = await createSupabaseAdminClient()
     .from("workers")
-    .update({ status, last_heartbeat_at: at })
+    .update({ status, last_heartbeat_at: at, capabilities })
     .eq("id", workerId)
     .select()
     .single();

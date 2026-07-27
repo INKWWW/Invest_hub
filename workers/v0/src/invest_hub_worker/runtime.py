@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
@@ -1186,14 +1187,27 @@ class XWindowedRuntime:
 class AuthorizedDiscordRuntimeSet:
     """Route each claim to exactly one owner-configured local source."""
 
-    def __init__(self, runtimes: Mapping[str, Any]) -> None:
+    def __init__(self, runtimes: Mapping[str, Any], *, dynamic_x_factory: Callable[[str, dict[str, Any]], Any] | None = None) -> None:
         self._runtimes = dict(runtimes)
+        self._dynamic_x_factory = dynamic_x_factory
+
+    def _runtime_for(self, claim: dict[str, Any]) -> Any:
+        source_id = claim.get("source_id")
+        if not isinstance(source_id, str):
+            raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
+        runtime = self._runtimes.get(source_id)
+        if runtime is None and self._dynamic_x_factory is not None:
+            snapshot = claim.get("source_snapshot")
+            if not isinstance(snapshot, dict):
+                raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
+            runtime = self._dynamic_x_factory(source_id, snapshot)
+            self._runtimes[source_id] = runtime
+        if runtime is None:
+            raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
+        return runtime
 
     def execute(self, claim: dict[str, Any]) -> dict[str, Any]:
-        source_id = claim.get("source_id")
-        if not isinstance(source_id, str) or source_id not in self._runtimes:
-            raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
-        return self._runtimes[source_id].execute(claim)
+        return self._runtime_for(claim).execute(claim)
 
     def execute_windowed(
         self,
@@ -1203,10 +1217,7 @@ class AuthorizedDiscordRuntimeSet:
         load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
         resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        source_id = claim.get("source_id")
-        if not isinstance(source_id, str) or source_id not in self._runtimes:
-            raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
-        return self._runtimes[source_id].execute_windowed(
+        return self._runtime_for(claim).execute_windowed(
             claim,
             on_capture_page=on_capture_page,
             load_daily_fact_context=load_daily_fact_context,
@@ -1252,7 +1263,17 @@ def build_authorized_discord_runtime_set(
         )
         for source in config.sources
     }
-    return AuthorizedDiscordRuntimeSet(runtimes)
+    x_template = next((source for source in config.sources if source.source_type == "x"), None)
+
+    def dynamic_x_runtime(source_id: str, snapshot: dict[str, Any]) -> XWindowedRuntime:
+        account_id = snapshot.get("account_id")
+        parameter_version = snapshot.get("parameter_version")
+        if not isinstance(account_id, str) or not re.fullmatch(r"[a-z0-9_]{1,15}", account_id) or parameter_version != x_template.parameter_version:
+            raise RuntimeExecutionError("unauthorized", "dynamic X task source is invalid")
+        dynamic_config = replace(x_template, source_id=source_id, source_url=f"https://x.com/{account_id}")
+        return build_authorized_x_runtime(config=dynamic_config, evidence_dir=Path(evidence_dir) / source_id, prompt_path=prompt_path, opencli_executable=opencli_executable)
+
+    return AuthorizedDiscordRuntimeSet(runtimes, dynamic_x_factory=dynamic_x_runtime if x_template is not None else None)
 
 
 def build_authorized_x_runtime(

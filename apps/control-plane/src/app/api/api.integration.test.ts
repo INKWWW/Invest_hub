@@ -675,6 +675,18 @@ describe("v0 control-plane API authorization", () => {
     }));
   });
 
+  it("reports that X creation is temporarily unavailable when no eligible Worker is online", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    xSourceMocks.createXSource.mockRejectedValueOnce(new xSourceMocks.XSourceError("x_worker_unavailable"));
+
+    const response = await postAdminXSource(jsonRequest("/api/admin/x/sources", {
+      display_name: "Researcher", requested_handle: "researcher",
+    }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ error: "x_worker_unavailable" });
+  });
+
   it("rejects client-supplied creation metadata", async () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
 

@@ -34,6 +34,9 @@ export async function POST(request: Request) {
       id: source.id,
     }) }, { status: 201 });
   } catch (error) {
+    if (error instanceof XSourceError && error.message === "x_worker_unavailable") {
+      return NextResponse.json({ error: "x_worker_unavailable" }, { status: 503 });
+    }
     if (error instanceof XSourceError) return NextResponse.json({ error: error.message }, { status: 422 });
     return NextResponse.json({ error: "x_source_create_failed" }, { status: 503 });
   }

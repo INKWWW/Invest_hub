@@ -112,6 +112,40 @@ class WorkerProtocol:
         _, value = self._request("POST", "api/worker/schedule/tick", {})
         return self._object(value, "invalid schedule tick response")
 
+    def claim_x_activation(self) -> dict[str, Any] | None:
+        self._require_credential()
+        status, value = self._request("POST", "api/worker/x-activations/claim", {})
+        if status == 204 or value is None:
+            return None
+        response = self._object(value, "invalid x activation response")
+        activation = response.get("activation")
+        if activation is None:
+            if set(response) != {"activation"}:
+                raise ProtocolError("invalid x activation response")
+            return None
+        if not isinstance(activation, dict) or set(response) != {"activation"}:
+            raise ProtocolError("invalid x activation response")
+        if set(activation) != {"source_id", "requested_handle", "parameter_version", "initial_end_at", "idempotent"}:
+            raise ProtocolError("invalid x activation response")
+        if not all(isinstance(activation.get(key), str) and activation[key] for key in ("source_id", "requested_handle", "parameter_version", "initial_end_at")) or not isinstance(activation.get("idempotent"), bool):
+            raise ProtocolError("invalid x activation response")
+        return dict(activation)
+
+    def initialize_x_activation(self, source_id: str) -> dict[str, Any]:
+        self._require_credential()
+        if not isinstance(source_id, str) or not source_id:
+            raise ProtocolError("invalid x activation initialization request")
+        _, value = self._request("POST", f"api/worker/x-activations/{source_id}/initialize", {})
+        response = self._object(value, "invalid x activation initialization response")
+        activation = response.get("activation")
+        if not isinstance(activation, dict) or set(response) != {"activation"}:
+            raise ProtocolError("invalid x activation initialization response")
+        if set(activation) != {"task_id", "source_id", "initial_end_at", "idempotent"}:
+            raise ProtocolError("invalid x activation initialization response")
+        if activation.get("source_id") != source_id or not isinstance(activation.get("initial_end_at"), str) or not activation["initial_end_at"] or activation.get("task_id") is not None and (not isinstance(activation.get("task_id"), str) or not activation["task_id"]) or not isinstance(activation.get("idempotent"), bool):
+            raise ProtocolError("invalid x activation initialization response")
+        return dict(activation)
+
     def get_daily_fact_context(self, task_id: str, attempt: int) -> dict[str, Any]:
         self._require_credential()
         if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:

@@ -76,6 +76,7 @@ export interface Database {
           name: string;
           device_secret_hash: string;
           status: WorkerStatus;
+          capabilities: Array<"discord_sync" | "x_sync">;
           last_heartbeat_at: string | null;
           enrolled_at: string;
           revoked_at: string | null;
@@ -87,6 +88,7 @@ export interface Database {
           name: string;
           device_secret_hash: string;
           status?: WorkerStatus;
+          capabilities?: Array<"discord_sync" | "x_sync">;
           last_heartbeat_at?: string | null;
           enrolled_at?: string;
           revoked_at?: string | null;
@@ -737,6 +739,14 @@ export interface Database {
       };
       resolve_x_source_identity: {
         Args: { p_source_id: string; p_worker_id: string; p_parameter_version: string; p_account_id: string };
+        Returns: Json;
+      };
+      claim_next_x_activation: {
+        Args: { p_worker_id: string; p_now: string };
+        Returns: Json;
+      };
+      initialize_x_source_activation: {
+        Args: { p_source_id: string; p_worker_id: string; p_now: string };
         Returns: Json;
       };
       create_x_source: {

@@ -8,6 +8,9 @@ values ('00000000-0000-0000-0000-000000015001', 'authenticated', 'authenticated'
 insert into public.profiles (id, role, display_name)
 values ('00000000-0000-0000-0000-000000015001', 'admin', 'X admin');
 
+insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at, capabilities)
+values ('00000000-0000-0000-0000-000000015002', 'X fixture worker', 'x-admin-worker-secret', 'online', now(), array['x_sync']);
+
 create temporary table x_admin_source as
 select public.create_x_source('x-admin-source', 'X Admin Source', 'fixture_handle', 'v2-admin', '00000000-0000-0000-0000-000000015001') as payload;
 select is((select payload->>'source_type' from x_admin_source), 'x', 'admin source creation creates an X source');

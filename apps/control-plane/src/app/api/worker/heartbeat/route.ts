@@ -10,7 +10,7 @@ type Heartbeat = {
   worker_id: string;
   sent_at: string;
   status: "idle" | "claimed" | "executing" | "reporting" | "recovering" | "stopped";
-  capabilities: Array<"discord_sync">;
+  capabilities: Array<"discord_sync" | "x_sync">;
 };
 
 export async function POST(request: Request) {
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   if (body.worker_id !== worker.id) return NextResponse.json({ error: "worker_mismatch" }, { status: 403 });
   try {
     const status = body.status === "stopped" ? "offline" : "online";
-    await updateWorkerHeartbeat(worker.id, status, body.sent_at);
+    await updateWorkerHeartbeat(worker.id, status, body.sent_at, body.capabilities);
     return NextResponse.json({
       worker_id: worker.id,
       status,

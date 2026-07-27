@@ -31,7 +31,7 @@ function mapCoverage(value: unknown) {
 
 function rethrow(error: unknown): never {
   const message = error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "";
-  if (["invalid_x_source", "invalid_coverage_boundary", "coverage_already_initialized", "coverage_not_initialized", "source_not_found", "source_not_x", "source_disabled", "x_source_unresolved", "source_parameter_version_mismatch", "actor_not_authorized", "invalid_capture_range", "active_x_range_overlap", "confirmation_mismatch", "source_has_active_task"].includes(message)) throw new XSourceError(message);
+  if (["invalid_x_source", "invalid_coverage_boundary", "coverage_already_initialized", "coverage_not_initialized", "source_not_found", "source_not_x", "source_disabled", "x_source_unresolved", "source_parameter_version_mismatch", "actor_not_authorized", "invalid_capture_range", "active_x_range_overlap", "confirmation_mismatch", "source_has_active_task", "x_worker_unavailable"].includes(message)) throw new XSourceError(message);
   throw error;
 }
 
