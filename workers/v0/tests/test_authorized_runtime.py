@@ -14,7 +14,7 @@ from invest_hub_worker.config import LocalWorkerConfig
 from invest_hub_worker.connectors.base import RawPage
 from invest_hub_worker.evidence import LocalEvidenceStore
 from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
-from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscordRuntimeSet, RuntimeExecutionError
+from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscordRuntimeSet, RuntimeExecutionError, build_dynamic_x_config
 
 
 def _canonical_message(*, external_message_id: str = "message-1", content: str = "fixture content") -> CanonicalMessage:
@@ -104,6 +104,24 @@ class FakeProvider:
 
 
 class AuthorizedRuntimeTests(unittest.TestCase):
+    def test_dynamic_x_config_accepts_the_server_created_x_parameter_version(self) -> None:
+        template = LocalWorkerConfig.from_mapping({
+            "control_plane_url": "https://control.example.invalid",
+            "source_id": "template-x",
+            "source_type": "x",
+            "source_url": "https://x.com/template",
+            "profile_ref": "/private/profile",
+            "opencli_contract_version": "v2",
+            "parameter_version": "v2-x-collection-v1",
+        })
+
+        dynamic = build_dynamic_x_config(template, "new-source", {
+            "source_type": "x", "account_id": "fixture_account", "display_name": "Fixture", "parameter_version": "x-standard-v2",
+        })
+
+        self.assertEqual(dynamic.source_id, "new-source")
+        self.assertEqual(dynamic.parameter_version, "x-standard-v2")
+        self.assertEqual(dynamic.source_url, "https://x.com/fixture_account")
     def test_local_evidence_store_reloads_a_record_with_a_unicode_line_separator(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "evidence"

@@ -1266,14 +1266,30 @@ def build_authorized_discord_runtime_set(
     x_template = next((source for source in config.sources if source.source_type == "x"), None)
 
     def dynamic_x_runtime(source_id: str, snapshot: dict[str, Any]) -> XWindowedRuntime:
-        account_id = snapshot.get("account_id")
-        parameter_version = snapshot.get("parameter_version")
-        if not isinstance(account_id, str) or not re.fullmatch(r"[a-z0-9_]{1,15}", account_id) or parameter_version != x_template.parameter_version:
-            raise RuntimeExecutionError("unauthorized", "dynamic X task source is invalid")
-        dynamic_config = replace(x_template, source_id=source_id, source_url=f"https://x.com/{account_id}")
+        dynamic_config = build_dynamic_x_config(x_template, source_id, snapshot)
         return build_authorized_x_runtime(config=dynamic_config, evidence_dir=Path(evidence_dir) / source_id, prompt_path=prompt_path, opencli_executable=opencli_executable)
 
     return AuthorizedDiscordRuntimeSet(runtimes, dynamic_x_factory=dynamic_x_runtime if x_template is not None else None)
+
+
+def build_dynamic_x_config(template: LocalWorkerConfig, source_id: str, snapshot: Mapping[str, Any]) -> LocalWorkerConfig:
+    """Build a source-scoped X config from the server-owned task snapshot.
+
+    The control plane owns the parameter version for newly created sources.
+    The local config remains the authenticated runtime template, so its
+    parameter version is not required to equal the server-created version.
+    Only the known X contracts are accepted here.
+    """
+    account_id = snapshot.get("account_id")
+    parameter_version = snapshot.get("parameter_version")
+    if (
+        template.source_type != "x"
+        or not isinstance(account_id, str)
+        or not re.fullmatch(r"[a-z0-9_]{1,15}", account_id)
+        or parameter_version not in {"v2-x-collection-v1", "x-standard-v2"}
+    ):
+        raise RuntimeExecutionError("unauthorized", "dynamic X task source is invalid")
+    return replace(template, source_id=source_id, source_url=f"https://x.com/{account_id}", parameter_version=parameter_version)
 
 
 def build_authorized_x_runtime(
