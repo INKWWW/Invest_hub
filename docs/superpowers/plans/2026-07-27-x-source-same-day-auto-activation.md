@@ -35,7 +35,7 @@
 
 **Interfaces:** `claimXActivation(workerId,now)` 解析并返回 `{sourceId,requestedHandle,parameterVersion,initialEndAt,idempotent}`；`initializeXActivation({sourceId,workerId,now})` 返回 `{taskId,sourceId,initialEndAt,idempotent}`；管理员 lifecycle 新增 `activating|retryable_failed`，但浏览器卡片没有 handle、ID 或诊断。
 
-**Recovery note:** failure isolation keeps a failed identity attempt source-local. The first post-release deployment requeues the pre-release `identity_failed` rows once so existing configured sources receive a fresh verification attempt after the Worker routing fix; any new failure remains isolated and is not retried in a tight loop.
+**Recovery note:** failure isolation keeps a failed identity attempt source-local. The first post-release deployment requeues the pre-release `identity_failed` rows once so existing configured sources receive a fresh verification attempt after the Worker routing fix; migration `20260727160000_x_requeue_unresolved_activations.sql` also repairs legacy activation rows whose profile remained unresolved despite an old completed/collecting state. Any new failure remains isolated and is not retried in a tight loop.
 
 - [ ] **Step 1: 写失败测试。** 覆盖只有已认证 Worker 可 claim、401/403/409 映射、初始化不接收客户端时间、heartbeat 仅接受 `discord_sync|x_sync`、管理员卡片显示“正在验证并准备首次采集”而不包含 handle/ID、普通用户不接触 activation。
 - [ ] **Step 2: 运行聚焦测试。** 运行控制面 API、sources repository 和 workspace component 测试，预期因 repository/routes/lifecycle 缺失失败。
