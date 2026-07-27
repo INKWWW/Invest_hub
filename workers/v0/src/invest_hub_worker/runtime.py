@@ -1322,6 +1322,7 @@ def build_authorized_runtime_set(
     """Build source-specific runtimes without ever sending an X claim to Discord."""
 
     runtimes: dict[str, Any] = {}
+    x_template: LocalWorkerConfig | None = None
     for source in config.sources:
         target_evidence_dir = Path(evidence_dir) / source.source_id
         if source.source_type == "discord":
@@ -1330,13 +1331,26 @@ def build_authorized_runtime_set(
                 opencli_contract_path=opencli_contract_path, opencli_executable=opencli_executable,
             )
         elif source.source_type == "x":
+            x_template = x_template or source
             runtimes[source.source_id] = build_authorized_x_runtime(
                 config=source, evidence_dir=target_evidence_dir, prompt_path=prompt_path,
                 opencli_executable=opencli_executable,
             )
         else:  # LocalWorkerConfig validates this, kept as a defensive fence.
             raise RuntimeExecutionError("preflight", "unsupported configured source type")
-    return AuthorizedDiscordRuntimeSet(runtimes)
+
+    def dynamic_x_runtime(source_id: str, snapshot: dict[str, Any]) -> XWindowedRuntime:
+        if x_template is None:
+            raise RuntimeExecutionError("unauthorized", "task source is not configured for this local Worker")
+        dynamic_config = build_dynamic_x_config(x_template, source_id, snapshot)
+        return build_authorized_x_runtime(
+            config=dynamic_config,
+            evidence_dir=Path(evidence_dir) / source_id,
+            prompt_path=prompt_path,
+            opencli_executable=opencli_executable,
+        )
+
+    return AuthorizedDiscordRuntimeSet(runtimes, dynamic_x_factory=dynamic_x_runtime if x_template is not None else None)
 
 
 def _codex_provider(evidence_dir: Path) -> Provider:

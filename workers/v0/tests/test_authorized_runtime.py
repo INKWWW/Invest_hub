@@ -10,11 +10,11 @@ import unittest
 from pathlib import Path
 
 from invest_hub_worker.canonical import CanonicalMessage, Canonicalizer
-from invest_hub_worker.config import LocalWorkerConfig
+from invest_hub_worker.config import LocalWorkerConfig, LocalWorkerConfigSet
 from invest_hub_worker.connectors.base import RawPage
 from invest_hub_worker.evidence import LocalEvidenceStore
 from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
-from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscordRuntimeSet, RuntimeExecutionError, build_dynamic_x_config
+from invest_hub_worker.runtime import AuthorizedDiscordRuntime, AuthorizedDiscordRuntimeSet, RuntimeExecutionError, build_authorized_runtime_set, build_dynamic_x_config
 
 
 def _canonical_message(*, external_message_id: str = "message-1", content: str = "fixture content") -> CanonicalMessage:
@@ -122,6 +122,32 @@ class AuthorizedRuntimeTests(unittest.TestCase):
         self.assertEqual(dynamic.source_id, "new-source")
         self.assertEqual(dynamic.parameter_version, "x-standard-v2")
         self.assertEqual(dynamic.source_url, "https://x.com/fixture_account")
+
+    def test_production_runtime_builder_routes_an_unconfigured_x_source_to_dynamic_runtime(self) -> None:
+        config = LocalWorkerConfigSet.from_mapping({
+            "control_plane_url": "https://control.example.invalid",
+            "sources": [{
+                "source_id": "template-x", "source_type": "x", "source_url": "https://x.com/template",
+                "profile_ref": "/private/profile", "opencli_contract_version": "v2",
+                "parameter_version": "v2-x-collection-v1",
+            }],
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            prompt = Path(directory) / "prompt.md"
+            prompt.write_text("private", encoding="utf-8")
+            runtimes = build_authorized_runtime_set(
+                config=config, evidence_dir=Path(directory) / "evidence", prompt_path=prompt,
+                opencli_contract_path=Path(directory) / "unused.json", opencli_executable="/bin/echo",
+            )
+            runtime = runtimes._runtime_for({
+                "source_id": "new-source",
+                "source_snapshot": {
+                    "source_type": "x", "account_id": "fixture_account", "display_name": "Fixture",
+                    "parameter_version": "x-standard-v2",
+                },
+            })
+        self.assertEqual(runtime.config.source_id, "new-source")
+        self.assertEqual(runtime.config.parameter_version, "x-standard-v2")
     def test_local_evidence_store_reloads_a_record_with_a_unicode_line_separator(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "evidence"
