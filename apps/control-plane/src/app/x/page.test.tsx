@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const authMocks = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 const readerMocks = vi.hoisted(() => ({ readXDay: vi.fn() }));
@@ -15,6 +15,8 @@ describe("XPage", () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "reader-1", email: "reader@example.invalid", role: "reader" });
     readerMocks.readXDay.mockResolvedValue([]);
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("keeps the source switcher as its own navigation level before the X page title", async () => {
     const page = await XPage();
@@ -34,5 +36,19 @@ describe("XPage", () => {
 
     expect(html).toContain("Second Author");
     expect(html).not.toContain("<strong>First Author</strong>");
+  });
+
+  it("defaults to the current Shanghai date even before that date has content", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-27T16:30:00.000Z"));
+    readerMocks.readXDay.mockResolvedValue([{
+      source: { sourceKey: "first", displayName: "First Author" }, naturalDate: "2026-07-27", status: "succeeded", segments: [],
+    }]);
+
+    const page = await XPage();
+    const html = renderToStaticMarkup(page);
+
+    expect(html).toContain('<option value="2026-07-28" selected="">2026-07-28</option>');
+    expect(html).toContain("没有找到符合当前博主和日期筛选的 X 信息。");
   });
 });
