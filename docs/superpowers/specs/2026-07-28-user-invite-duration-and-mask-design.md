@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：已交付控制面中的小范围管理员体验与安全改进
-- 状态：**设计已获用户批准；等待用户审阅本 Spec 后编写 implementation plan**
+- 状态：**Spec 已获用户批准；implementation plan 已起草，等待用户批准实施**
 - 日期：2026-07-28
 - 关联：[V0 基础设施技术验证设计](2026-07-18-v0-infrastructure-technical-validation-design.md)
 
