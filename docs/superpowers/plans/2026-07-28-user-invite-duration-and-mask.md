@@ -306,4 +306,4 @@ export function inviteDisplayState(invite: UserInviteListItem, now: Date):
 - [x] Task 1: 完成数据库字段、有效期校验、掩码存储和失败尝试限流迁移，并通过 18 项 focused pgTAP 与完整 315 项数据库测试。
 - [x] Task 2: 完成邀请码生成、HMAC 存储/兑换、Worker 长随机码兼容、管理员 API 和部署环境契约。
 - [x] Task 3: 完成管理员表单、掩码列表、有效期倒计时和刷新后重新加载，并通过 165 项控制台测试、lint 和 build。
-- [x] Task 4: 已记录完整验证和本地网页验收；生产环境部署仍待 Vercel 项目访问权限。
+- [x] Task 4: 已记录完整验证、本地网页验收、生产迁移、Vercel 正式部署和生产页面冒烟检查。

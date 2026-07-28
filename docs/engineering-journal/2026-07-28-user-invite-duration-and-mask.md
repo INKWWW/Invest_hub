@@ -29,4 +29,10 @@
 
 本地网页验收已完成：管理员在 `/admin` 每次填写 `2` 小时并创建成功；页面仅在创建成功状态中显示一次完整码，列表显示 `Hh••••wN` 形式掩码、`2 小时` 和实时倒计时；等待约 1 秒后倒计时递减；刷新页面后完整码消失，掩码、时长和倒计时仍从数据库加载。验收使用本地临时管理员账号和本地 Supabase，未写入 Git 或工程记录。
 
-目标 Vercel 项目当前不在本次 CLI 身份的可见项目列表中，且生产 `pull` 会尝试下载敏感环境变量，因此未绕过权限继续操作生产配置。待获得目标 Vercel 项目访问权并配置独立 `INVITE_CODE_PEPPER` 后，才能执行受保护生产页面验收；本次结果不宣称已完成生产部署。
+## 正式生产部署
+
+- 已核对 Vercel 项目 `invest-hub-v1-control-plane` 与 Supabase `invest-hub-v1` 绑定；远程迁移列表确认 `20260728090000_user_invite_duration_and_mask.sql` 已应用。
+- Production 环境已配置 server-only `INVITE_CODE_PEPPER`，未暴露其值；既有 Supabase URL、anon key 和 service-role key 环境变量保持不变。
+- Vercel 部署 `dpl_7xSc4ZYvw7RqTuoZVzMfZfCavXnG` 构建为 Ready，正式别名为 `https://invest-hub-v0-control-plane.vercel.app`。
+- 发布后检查：匿名 `/admin` 返回 `307` 登录跳转，`/login` 返回 `200`，未认证 `/api/admin/invites` 返回 `401`；已有管理员会话打开正式 `/admin`，可见有效时长字段、创建按钮和最近邀请码列表。
+- 本次发布后冒烟未在生产环境额外生成测试邀请码，避免写入无业务用途的生产数据；管理员可在正式页面自行创建并验收。
