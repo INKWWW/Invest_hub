@@ -311,6 +311,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .admin-content th { color: #476168; background: #edf3f0; font-size: 0.76rem; letter-spacing: 0.05em; text-transform: uppercase; }
 
+.user-invite-list { display: grid; gap: 0.75rem; margin-top: 1.25rem; }
+.user-invite-list h3 { margin: 0; color: #315860; font-size: 1rem; }
+.user-invite-list p { margin: 0; color: var(--muted); }
+.user-invite-table-wrap { overflow-x: auto; }
+.user-invite-table { min-width: 38rem; margin-top: 0; }
+.user-invite-table td:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.04em; white-space: nowrap; }
+.user-invite-status { border: 1px solid #9abdb8; border-radius: 999px; color: #245661; display: inline-block; font-size: 0.78rem; font-weight: 800; padding: 0.25rem 0.55rem; white-space: nowrap; }
+.user-invite-status[data-status="已过期"] { border-color: #cdb17f; color: #77511c; }
+.user-invite-status[data-status="已使用"] { border-color: #b5bfc0; color: #59686a; }
+
 .admin-content ul { padding-left: 1.25rem; }
 
 .admin-content li + li { margin-top: 0.45rem; }

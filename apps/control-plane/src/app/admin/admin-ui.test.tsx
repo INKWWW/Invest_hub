@@ -81,10 +81,10 @@ describe("admin debug view models", () => {
   it("accepts only a one-time user invite response", () => {
     expect(parseUserInviteResponse({
       invite_id: "invite-2",
-      code: "one-time-user-code",
+      code: "Ab3xYz91",
       purpose: "user",
       expires_at: "2099-01-01T00:00:00.000Z",
-    })).toEqual({ code: "one-time-user-code", expiresAt: "2099-01-01T00:00:00.000Z" });
+    })).toEqual({ code: "Ab3xYz91", expiresAt: "2099-01-01T00:00:00.000Z" });
     expect(parseUserInviteResponse({ purpose: "worker", code: "worker-code", expires_at: "2099-01-01T00:00:00.000Z" })).toBeNull();
     expect(parseUserInviteResponse({ purpose: "user", device_secret: "must-not-display" })).toBeNull();
   });
