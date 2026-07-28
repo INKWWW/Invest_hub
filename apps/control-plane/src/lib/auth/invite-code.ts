@@ -51,3 +51,7 @@ export function hashUserInviteCode(code: string): string {
 export function hashLegacyInviteCode(code: string): string {
   return createHash("sha256").update(code, "utf8").digest("hex");
 }
+
+export function hashRedemptionSource(source: string): string {
+  return createHmac("sha256", requiredInvitePepper()).update(`invite-redemption:${source}`, "utf8").digest("hex");
+}
