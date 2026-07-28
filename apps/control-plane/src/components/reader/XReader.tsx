@@ -63,7 +63,11 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
 }) {
   if (!days.length) return <p>尚无可阅读的 X 信息。</p>;
   const sourceOptions = useMemo(() => sources(days), [days]);
-  const dateOptions = useMemo(() => dates(days), [days]);
+  const dateOptions = useMemo(() => {
+    const availableDates = dates(days);
+    if (initialNaturalDate && initialNaturalDate !== ALL && !availableDates.includes(initialNaturalDate)) return [initialNaturalDate, ...availableDates];
+    return availableDates;
+  }, [days, initialNaturalDate]);
   const [sourceKey, setSourceKey] = useState(() => validOrAll(initialSourceKey, sourceOptions.map((source) => source.sourceKey)));
   const [naturalDate, setNaturalDate] = useState(() => validOrAll(initialNaturalDate, dateOptions));
   const visibleDays = useMemo(() => days.filter((day) =>
