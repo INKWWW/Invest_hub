@@ -77,10 +77,10 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     if (sourceKey === ALL) searchParams.delete("source"); else searchParams.set("source", sourceKey);
-    if (naturalDate === ALL) searchParams.delete("date"); else searchParams.set("date", naturalDate);
+    searchParams.delete("date");
     const query = searchParams.toString();
     window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
-  }, [naturalDate, sourceKey]);
+  }, [sourceKey]);
 
   return <section className="reader-shell">
     <aside className="reader-sidebar" aria-label="X 内容筛选">

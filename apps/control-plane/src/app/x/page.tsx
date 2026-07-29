@@ -31,6 +31,6 @@ export default async function XPage({ searchParams }: { searchParams?: Promise<X
       <ReaderSourceNavigation active="x" />
       <h1>X 信息采集</h1>
     </header>
-    <XReader days={days} initialSourceKey={singleValue(filters?.source)} initialNaturalDate={singleValue(filters?.date) ?? shanghaiNaturalDate()} />
+    <XReader days={days} initialSourceKey={singleValue(filters?.source)} initialNaturalDate={shanghaiNaturalDate()} />
   </main>;
 }

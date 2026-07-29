@@ -26,16 +26,21 @@ describe("XPage", () => {
     expect(html).not.toContain("按博主和日期阅读每日综合观点");
   });
 
-  it("restores blogger and date selections from the reader URL", async () => {
-    readerMocks.readXDay.mockResolvedValue([{ source: { sourceKey: "first", displayName: "First Author" }, naturalDate: "2099-01-01", status: "succeeded", segments: [] }, {
-      source: { sourceKey: "second", displayName: "Second Author" }, naturalDate: "2099-01-02", status: "succeeded", segments: [],
+  it("restores blogger selection but resets a stale date query to the current Shanghai date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-27T16:30:00.000Z"));
+    readerMocks.readXDay.mockResolvedValue([{ source: { sourceKey: "first", displayName: "First Author" }, naturalDate: "2026-07-26", status: "succeeded", segments: [] }, {
+      source: { sourceKey: "second", displayName: "Second Author" }, naturalDate: "2026-07-28", status: "succeeded", segments: [],
     }]);
 
-    const page = await XPage({ searchParams: Promise.resolve({ source: "second", date: "2099-01-02" }) } as never);
+    const page = await XPage({ searchParams: Promise.resolve({ source: "second", date: "2026-07-26" }) } as never);
     const html = renderToStaticMarkup(page);
 
     expect(html).toContain("Second Author");
     expect(html).not.toContain("<strong>First Author</strong>");
+    expect(html).toContain('<option value="second" selected="">Second Author</option>');
+    expect(html).toContain('<option value="2026-07-28" selected="">2026-07-28</option>');
+    expect(html).not.toContain('<option value="2026-07-26" selected="">');
   });
 
   it("defaults to the current Shanghai date even before that date has content", async () => {
