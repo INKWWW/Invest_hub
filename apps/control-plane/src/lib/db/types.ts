@@ -55,6 +55,8 @@ export interface Database {
           consumed_at: string | null;
           consumed_by: string | null;
           created_at: string;
+          code_mask: string | null;
+          validity_hours: number | null;
         };
         Insert: {
           id?: string;
@@ -66,8 +68,28 @@ export interface Database {
           consumed_at?: string | null;
           consumed_by?: string | null;
           created_at?: string;
+          code_mask?: string | null;
+          validity_hours?: number | null;
         };
         Update: Partial<Database["public"]["Tables"]["invites"]["Insert"]>;
+        Relationships: [];
+      };
+      invite_redemption_attempts: {
+        Row: {
+          source_hash: string;
+          window_started_at: string;
+          failure_count: number;
+          blocked_until: string | null;
+          expires_at: string;
+        };
+        Insert: {
+          source_hash: string;
+          window_started_at: string;
+          failure_count: number;
+          blocked_until?: string | null;
+          expires_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["invite_redemption_attempts"]["Insert"]>;
         Relationships: [];
       };
       workers: {
@@ -672,6 +694,14 @@ export interface Database {
       consume_invite: {
         Args: { p_code_hash: string; p_purpose?: string; p_user_id: string; p_now: string };
         Returns: Json | null;
+      };
+      can_attempt_invite_redemption: {
+        Args: { p_source_hash: string; p_now: string };
+        Returns: boolean;
+      };
+      record_failed_invite_redemption: {
+        Args: { p_source_hash: string; p_now: string };
+        Returns: boolean;
       };
       claim_next_task: {
         Args: { p_worker_id: string; p_now: string };
