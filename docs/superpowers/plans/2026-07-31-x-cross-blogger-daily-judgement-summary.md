@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan status:** 待用户审阅批准。本文不授权修改代码、迁移、部署或真实生产验收。
+**Plan status:** **已批准（用户确认 2026-07-31）**。代码、迁移与本地确定性验收已按本计划启动；远端 migration、部署、Worker 重启、真实 X/Browser/OpenCLI/Codex 调用和生产验收仍须逐项明确授权。
 
 **Spec:** [X 跨博主当日判断总结 Spec](../specs/2026-07-31-x-cross-blogger-daily-judgement-summary-design.md)（已批准）
 
