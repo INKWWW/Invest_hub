@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(37);
 
 select has_function(
   'public',
@@ -120,9 +120,10 @@ where id = (
     and batch_source.source_id = '00000000-0000-0000-0000-000000027011'
 );
 insert into public.x_daily_viewpoint_segments (
-  source_id, natural_date, range_task_id, segment_version,
+  id, source_id, natural_date, range_task_id, segment_version,
   occurred_from_at, occurred_through_at, window_viewpoints, post_analysis_refs, evidence_refs
 ) values (
+  '00000000-0000-0000-0000-000000027031',
   '00000000-0000-0000-0000-000000027011', '2026-07-31',
   (select batch_source.x_sync_task_id
    from public.x_collection_batch_sources batch_source
@@ -131,6 +132,20 @@ insert into public.x_daily_viewpoint_segments (
      and batch_source.source_id = '00000000-0000-0000-0000-000000027011'),
   1, '2026-07-31T12:00:00Z', '2026-07-31T15:59:00Z',
   '["fixture viewpoint"]'::jsonb, '[]'::jsonb, '[]'::jsonb
+);
+insert into public.x_daily_viewpoint_segments (
+  id, source_id, natural_date, range_task_id, segment_version,
+  occurred_from_at, occurred_through_at, window_viewpoints, post_analysis_refs, evidence_refs
+) values (
+  '00000000-0000-0000-0000-000000027032',
+  '00000000-0000-0000-0000-000000027011', '2026-08-01',
+  (select batch_source.x_sync_task_id
+   from public.x_collection_batch_sources batch_source
+   join public.x_collection_batches batch on batch.id = batch_source.batch_id
+   where batch.scheduled_window_key = '2026-08-01T00:00+08:00'
+     and batch_source.source_id = '00000000-0000-0000-0000-000000027011'),
+  1, '2026-07-31T15:59:30Z', '2026-07-31T16:00:00Z',
+  '["wrong-day fixture viewpoint"]'::jsonb, '[]'::jsonb, '[]'::jsonb
 );
 create temporary table midnight_settlement as
 select public.settle_x_collection_batch(
@@ -164,9 +179,65 @@ update public.x_daily_judgement_runs
 set status = 'queued', attempt = 0, lease_owner = null, lease_expires_at = null
 where batch_id = (select id from public.x_collection_batches where scheduled_window_key = '2026-08-01T00:00+08:00');
 create temporary table worker_b_claim as
-select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000027002', '2026-08-01T00:03:00+08:00') as payload;
+select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000027002', timezone('utc', now())) as payload;
 select isnt((select payload->>'run_id' from worker_b_claim), null, 'an authorized X-capable Worker for another frozen source may claim the shared judgement');
 select is((select payload->'batch'->>'coverage_status' from worker_b_claim), 'partial', 'the Worker receives partial rather than false complete coverage');
+
+create temporary table mixed_day_context as
+select public.get_x_daily_judgement_context(
+  (select (payload->>'run_id')::uuid from worker_b_claim),
+  (select (payload->>'attempt')::integer from worker_b_claim),
+  '00000000-0000-0000-0000-000000027002'
+) as payload;
+select is(
+  (select jsonb_array_length(payload->'sources'->0->'window_segments')::text from mixed_day_context),
+  '1',
+  'Worker context excludes a wrong-natural-date segment from the same range task'
+);
+select is(
+  (select payload->'sources'->0->'window_segments'->0->>'id' from mixed_day_context),
+  '00000000-0000-0000-0000-000000027031',
+  'Worker context retains only the batch-natural-date segment'
+);
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions (
+      batch_id, revision, coverage_status, input_snapshot, output, provider, model_reported, prompt_version, schema_version
+    ) values (
+      (select id from public.x_collection_batches where scheduled_window_key = '2026-08-01T00:00+08:00'),
+      1, 'partial',
+      '{"sources":[{"source_id":"00000000-0000-0000-0000-000000027011","display_name":"Current source A","settlement_status":"included","segments":[{"segment_id":"00000000-0000-0000-0000-000000027031","analysis_ids":[],"evidence_post_ids":[]},{"segment_id":"00000000-0000-0000-0000-000000027032","analysis_ids":[],"evidence_post_ids":[]}]}]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb,
+      'mock', null, 'v2-x-cross-blogger-1', 'v2-x-cross-blogger'
+    )$$,
+  '22023', 'invalid_x_daily_judgement_snapshot',
+  'immutable version authority rejects a wrong-natural-date segment even when the range task matches'
+);
+select is(
+  (select public.complete_x_daily_judgement(
+    (select (payload->>'run_id')::uuid from worker_b_claim),
+    (select (payload->>'attempt')::integer from worker_b_claim),
+    '00000000-0000-0000-0000-000000027002',
+    '{"schema_version":"v2-x-cross-blogger","provider":"mock","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb
+  )->>'status'),
+  'succeeded',
+  'completion persists the filtered immutable snapshot'
+);
+select is(
+  (select jsonb_array_length(input_snapshot->'sources'->0->'segments')::text
+   from public.x_daily_judgement_versions
+   where batch_id = (select id from public.x_collection_batches where scheduled_window_key = '2026-08-01T00:00+08:00')
+   order by revision desc limit 1),
+  '1',
+  'completion snapshot excludes the same-task wrong-day segment'
+);
+select is(
+  (select input_snapshot->'sources'->0->'segments'->0->>'segment_id'
+   from public.x_daily_judgement_versions
+   where batch_id = (select id from public.x_collection_batches where scheduled_window_key = '2026-08-01T00:00+08:00')
+   order by revision desc limit 1),
+  '00000000-0000-0000-0000-000000027031',
+  'completion snapshot retains only the correct natural-date segment'
+);
 
 insert into public.x_collection_batches (
   id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status
@@ -205,6 +276,113 @@ select is(
   'a segment from another natural date cannot satisfy this batch'
 );
 select is((select payload->>'coverage_status' from wrong_date_settlement), 'partial', 'a wrong-date-only source cannot yield complete coverage');
+
+select has_column(
+  'public', 'x_collection_batches', 'snapshot_completeness',
+  'batches record whether their frozen source universe is verified complete'
+);
+insert into public.x_collection_batches (
+  id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status
+) values (
+  '00000000-0000-0000-0000-000000027041', '2026-08-02T08:00+08:00', '2026-08-02',
+  '2026-08-02T00:00:00Z', '2026-08-02T02:00:00Z', 'succeeded'
+);
+insert into public.x_collection_batch_sources (batch_id, source_id, source_display_name)
+values (
+  '00000000-0000-0000-0000-000000027041',
+  '00000000-0000-0000-0000-000000027011',
+  'Current source A'
+);
+insert into public.x_daily_judgement_runs (id, batch_id, status, available_at)
+values (
+  '00000000-0000-0000-0000-000000027042',
+  '00000000-0000-0000-0000-000000027041',
+  'queued', timezone('utc', now())
+);
+select lives_ok(
+  $$update public.x_collection_batches
+    set snapshot_completeness = 'legacy_unverified'
+    where id = '00000000-0000-0000-0000-000000027041'$$,
+  'a pre-remediation incomplete source snapshot can be represented explicitly'
+);
+select is(
+  (select snapshot_completeness from public.x_collection_batches
+   where id = '00000000-0000-0000-0000-000000027041'),
+  'legacy_unverified',
+  'the incomplete historical batch carries an explicit legacy marker'
+);
+select is(
+  (select public.settle_x_collection_batch(
+    '00000000-0000-0000-0000-000000027041', timezone('utc', now())
+  )->>'settled'),
+  'false',
+  'direct settlement also fails closed for a legacy-unverified source snapshot'
+);
+update public.source_collection_coverage
+set coverage_through_at = '2026-08-02T00:00:00+08:00'
+where source_id in (
+  '00000000-0000-0000-0000-000000027011',
+  '00000000-0000-0000-0000-000000027012'
+);
+create temporary table legacy_batch_reuse as
+select public.ensure_due_x_collection_batches(
+  '00000000-0000-0000-0000-000000027001',
+  '2026-08-02T08:01:00+08:00'
+) as payload;
+select is(
+  (select jsonb_array_length(payload->'batches')::text from legacy_batch_reuse),
+  '0',
+  'an existing legacy-incomplete batch is not returned as a normal scheduled batch'
+);
+select is(
+  (select jsonb_array_length(payload->'unavailable_batches')::text from legacy_batch_reuse),
+  '1',
+  'the scheduler explicitly reports the legacy batch as unavailable without filling current sources'
+);
+select is(
+  (select status from public.x_collection_batches where id = '00000000-0000-0000-0000-000000027041'),
+  'judgement_failed',
+  'a legacy-incomplete batch cannot remain succeeded or complete'
+);
+select is(
+  (select public.claim_next_x_daily_judgement(
+    '00000000-0000-0000-0000-000000027001', timezone('utc', now())
+  )::text),
+  null,
+  'legacy-incomplete judgement work is unavailable to Workers'
+);
+
+select has_function(
+  'public',
+  'assert_x_collection_batch_identity_migration_safe',
+  array[]::text[],
+  'migration exposes a reusable fail-closed legacy identity preflight'
+);
+alter table public.x_collection_batches drop constraint x_collection_batches_logical_date_check;
+insert into public.x_collection_batches (
+  id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status
+) values (
+  '00000000-0000-0000-0000-000000027051', '2026-08-03T00:00+08:00', '2026-08-03',
+  '2026-08-02T16:00:00Z', '2026-08-02T18:00:00Z', 'succeeded'
+);
+insert into public.x_daily_judgement_versions (
+  batch_id, revision, coverage_status, input_snapshot, output, provider, model_reported, prompt_version, schema_version
+) values (
+  '00000000-0000-0000-0000-000000027051', 1, 'no_new_information',
+  '{"sources":[]}'::jsonb,
+  '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb,
+  'mock', null, 'v2-x-cross-blogger-1', 'v2-x-cross-blogger'
+);
+select throws_ok(
+  $$select public.assert_x_collection_batch_identity_migration_safe()$$,
+  '55000', 'unsafe_legacy_x_collection_batch_identity',
+  'migration fails closed instead of re-dating a midnight batch with immutable version evidence'
+);
+select is(
+  (select natural_date::text from public.x_collection_batches where id = '00000000-0000-0000-0000-000000027051'),
+  '2026-08-03',
+  'failed legacy preflight leaves historical version identity unchanged'
+);
 
 select * from finish();
 rollback;
