@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "../supabase-server";
 import type { Database, Json } from "../types";
+import { ensureDueXCollectionBatches } from "./x-daily-judgements";
 
 export type TaskScope = {
   mode: "incremental" | "history";
@@ -96,6 +97,10 @@ export async function scheduleDueSourceTasks(workerId: string, now = new Date())
   }
   const discord = discordResult.status === "fulfilled" ? discordResult.value : null;
   const x = xResult.status === "fulfilled" ? xResult.value : null;
+  // Batch settlement is deliberately independent from both source families:
+  // the pre-existing scheduler result remains durable even when its later
+  // judgement dispatch cannot run on this tick.
+  await ensureDueXCollectionBatches(workerId, now).catch(() => undefined);
   const scheduledAt = x?.scheduled_at ?? discord?.scheduled_at;
   if (!scheduledAt) throw new Error("invalid_scheduled_tick");
   return {

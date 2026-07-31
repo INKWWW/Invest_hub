@@ -36,6 +36,12 @@ const taskMocks = vi.hoisted(() => ({
   scheduleDueSourceTasks: vi.fn(),
   isScheduleWindowKey: (value: unknown) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/.test(value),
 }));
+const xDailyJudgementMocks = vi.hoisted(() => ({
+  claimNextXDailyJudgement: vi.fn(),
+  getXDailyJudgementContext: vi.fn(),
+  completeXDailyJudgement: vi.fn(),
+  failXDailyJudgement: vi.fn(),
+}));
 const windowedSyncMocks = vi.hoisted(() => ({
   createManualDiscordRefresh: vi.fn(),
   getSourceCoverage: vi.fn(),
@@ -84,6 +90,7 @@ vi.mock("../../lib/auth/login", () => loginMocks);
 vi.mock("../../lib/auth/logout", () => logoutMocks);
 vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
+vi.mock("../../lib/db/repositories/x-daily-judgements", () => xDailyJudgementMocks);
 vi.mock("../../lib/db/repositories/windowed-sync", () => windowedSyncMocks);
 vi.mock("../../lib/db/repositories/author-profiles", () => authorProfileMocks);
 vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
@@ -121,6 +128,10 @@ import { POST as postResolveXIdentity } from "./worker/x-sources/[sourceId]/reso
 import { DELETE as deleteXSource } from "./admin/x/sources/[sourceId]/route";
 import { POST as postAdminXSource } from "./admin/x/sources/route";
 import { POST as postAuthInvite } from "./auth/invite/route";
+import { POST as postXDailyJudgementClaim } from "./worker/x-daily-judgements/claim/route";
+import { POST as postXDailyJudgementContext } from "./worker/x-daily-judgements/[runId]/context/route";
+import { POST as postXDailyJudgementComplete } from "./worker/x-daily-judgements/[runId]/complete/route";
+import { POST as postXDailyJudgementFailure } from "./worker/x-daily-judgements/[runId]/failure/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}, method = "POST") {
   return new Request(`http://localhost${path}`, {
@@ -912,6 +923,197 @@ describe("v0 control-plane API authorization", () => {
     expect(await first.json()).toMatchObject({ tasks: [{ id: "scheduled-task-1", source_id: "source-1" }] });
     expect(taskMocks.scheduleDueSourceTasks).toHaveBeenCalledWith("worker-1");
     expect(taskMocks.scheduleDiscordSyncTasks).not.toHaveBeenCalled();
+  });
+
+  it("returns a safe X daily judgement claim to exactly one authenticated Worker", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.claimNextXDailyJudgement
+      .mockResolvedValueOnce({
+        run_id: "11111111-1111-4111-8111-111111111111",
+        attempt: 1,
+        lease_expires_at: "2099-01-01T00:10:00.000Z",
+        batch: {
+          id: "22222222-2222-4222-8222-222222222222",
+          natural_date: "2099-01-01",
+          cutoff_at: "2099-01-01T00:00:00.000Z",
+          coverage_status: "complete",
+        },
+      })
+      .mockResolvedValueOnce(null);
+
+    const first = await postXDailyJudgementClaim(jsonRequest("/api/worker/x-daily-judgements/claim", {}, { authorization: "Bearer device-secret" }));
+    const second = await postXDailyJudgementClaim(jsonRequest("/api/worker/x-daily-judgements/claim", {}, { authorization: "Bearer second-device-secret" }));
+
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({
+      run_id: "11111111-1111-4111-8111-111111111111",
+      attempt: 1,
+      lease_expires_at: "2099-01-01T00:10:00.000Z",
+      batch: {
+        id: "22222222-2222-4222-8222-222222222222",
+        natural_date: "2099-01-01",
+        cutoff_at: "2099-01-01T00:00:00.000Z",
+        coverage_status: "complete",
+      },
+    });
+    expect(second.status).toBe(204);
+  });
+
+  it("rejects non-Workers and an empty context request before judgement repositories", async () => {
+    const unauthenticated = await postXDailyJudgementClaim(jsonRequest("/api/worker/x-daily-judgements/claim", {}));
+    expect(unauthenticated.status).toBe(401);
+    expect(xDailyJudgementMocks.claimNextXDailyJudgement).not.toHaveBeenCalled();
+
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    const empty = await postXDailyJudgementContext(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/context", {}),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+    expect(empty.status).toBe(422);
+    expect(await empty.json()).toEqual({ error: "invalid_x_daily_judgement_context" });
+    expect(xDailyJudgementMocks.getXDailyJudgementContext).not.toHaveBeenCalled();
+  });
+
+  it("returns frozen included projections without canonical message content", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
+      run_id: "11111111-1111-4111-8111-111111111111",
+      attempt: 1,
+      prompt_version: "v2-x-cross-blogger-1",
+      sources: [{ source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher", window_segments: [] }],
+      excluded_sources: [{ source_id: "44444444-4444-4444-8444-444444444444", display_name: "Excluded fixture", reason: "deadline_elapsed" }],
+    });
+
+    const response = await postXDailyJudgementContext(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/context", { attempt: 1 }),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.sources).toEqual([{ source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher", window_segments: [] }]);
+    expect(JSON.stringify(body)).not.toContain("canonical_messages");
+    expect(JSON.stringify(body)).not.toContain("content");
+  });
+
+  it("rejects malformed or out-of-batch judgement references before completion", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
+      run_id: "11111111-1111-4111-8111-111111111111",
+      attempt: 1,
+      prompt_version: "v2-x-cross-blogger-1",
+      sources: [{
+        source_id: "33333333-3333-4333-8333-333333333333",
+        display_name: "Fixture researcher",
+        window_segments: [{
+          id: "44444444-4444-4444-8444-444444444444",
+          occurred_from_at: "2099-01-01T00:00:00.000Z",
+          occurred_through_at: "2099-01-01T00:01:00.000Z",
+          viewpoints: [], uncertainties: [],
+          analyses: [{
+            post_id: "post-a@1", blogger_viewpoint: null, arguments: [], quoted_post_viewpoint: null,
+            uncertainties: [], evidence_post_ids: ["post-a"],
+          }],
+        }],
+      }],
+      excluded_sources: [],
+    });
+    const response = await postXDailyJudgementComplete(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {
+        run_id: "11111111-1111-4111-8111-111111111111",
+        attempt: 1,
+        schema_version: "v2-x-cross-blogger",
+        provider: "codex_cli",
+        model_reported: null,
+        prompt_version: "v2-x-cross-blogger-1",
+        stock_viewpoints: [{
+          statement: "Synthetic statement",
+          supporting_source_ids: ["55555555-5555-4555-8555-555555555555"],
+          dissenting_source_ids: [],
+          analysis_ids: ["post-a@1"],
+          evidence_post_ids: ["post-a"],
+          uncertainties: [],
+        }],
+        market_industry_viewpoints: [],
+        uncertainties: [],
+      }),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_x_daily_judgement_completion" });
+    expect(xDailyJudgementMocks.completeXDailyJudgement).not.toHaveBeenCalled();
+  });
+
+  it("accepts a frozen, versioned completion without accepting any raw model payload", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
+      run_id: "11111111-1111-4111-8111-111111111111", attempt: 1,
+      prompt_version: "v2-x-cross-blogger-1",
+      sources: [{
+        source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher",
+        window_segments: [{
+          id: "44444444-4444-4444-8444-444444444444", occurred_from_at: "2099-01-01T00:00:00.000Z",
+          occurred_through_at: "2099-01-01T00:01:00.000Z", viewpoints: [], uncertainties: [],
+          analyses: [{ post_id: "post-a@1", blogger_viewpoint: null, arguments: [], quoted_post_viewpoint: null, uncertainties: [], evidence_post_ids: ["post-a"] }],
+        }],
+      }], excluded_sources: [],
+    });
+    xDailyJudgementMocks.completeXDailyJudgement.mockResolvedValue({ status: "succeeded" });
+    const completion = {
+      run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v2-x-cross-blogger",
+      provider: "codex_cli", model_reported: null, prompt_version: "v2-x-cross-blogger-1",
+      stock_viewpoints: [{
+        statement: "Synthetic statement", supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a"], uncertainties: [],
+      }], market_industry_viewpoints: [], uncertainties: [],
+    };
+
+    const response = await postXDailyJudgementComplete(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", completion),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+    expect(response.status).toBe(200);
+    expect(xDailyJudgementMocks.completeXDailyJudgement).toHaveBeenCalledWith(completion, "worker-1");
+  });
+
+  it("maps a stale X daily judgement attempt to 409 and only accepts bounded failure classes", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.completeXDailyJudgement.mockRejectedValue({ code: "PT409", message: "lease_mismatch" });
+    const stale = await postXDailyJudgementComplete(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {
+        run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v2-x-cross-blogger",
+        provider: "codex_cli", model_reported: null, prompt_version: "v2-x-cross-blogger-1",
+        stock_viewpoints: [], market_industry_viewpoints: [], uncertainties: [],
+      }),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ error: "lease_mismatch" });
+
+    const invalidFailure = await postXDailyJudgementFailure(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/failure", { attempt: 1, failure_class: "raw_output" }),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+    expect(invalidFailure.status).toBe(422);
+    expect(await invalidFailure.json()).toEqual({ error: "invalid_x_daily_judgement_failure" });
+    expect(xDailyJudgementMocks.failXDailyJudgement).not.toHaveBeenCalled();
+  });
+
+  it("reports a permitted judgement failure without calling any source-task repository", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.failXDailyJudgement.mockResolvedValue({
+      run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, status: "retryable_failed", failure_class: "timeout",
+    });
+
+    const response = await postXDailyJudgementFailure(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/failure", { attempt: 1, failure_class: "timeout" }),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+    expect(response.status).toBe(200);
+    expect(xDailyJudgementMocks.failXDailyJudgement).toHaveBeenCalledWith(
+      "11111111-1111-4111-8111-111111111111", 1, "worker-1", "timeout",
+    );
+    expect(taskMocks.recordTaskFailure).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated Workers and client-supplied schedule ranges", async () => {
