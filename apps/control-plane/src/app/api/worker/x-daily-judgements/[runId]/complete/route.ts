@@ -18,6 +18,14 @@ function isStringArray(value: unknown, max = 500): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0 && item.length <= max);
 }
 
+function isSafeModelReported(value: unknown): value is string | null {
+  if (value === null) return true;
+  return typeof value === "string" && value.length > 0 && value.length <= 160
+    && !/[\u0000-\u001f\u007f]/.test(value)
+    && !/^\s*\//.test(value) && !/^\s*[A-Za-z]:[\\/]/.test(value) && !/^\s*file:/i.test(value)
+    && !/^\s*(local_evidence(_path)?|local_path|raw_x_content|raw_content|cookie|browser[_ -]?profile)[\s:=/\\]/i.test(value);
+}
+
 function isJudgementItem(value: unknown): value is XDailyJudgementItem {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
@@ -37,7 +45,7 @@ function isCompletion(value: unknown): value is XDailyJudgementCompletion {
     && typeof completion.run_id === "string" && typeof completion.attempt === "number"
     && Number.isInteger(completion.attempt) && completion.attempt > 0
     && completion.schema_version === "v2-x-cross-blogger" && completion.provider === "codex_cli"
-    && (completion.model_reported === null || typeof completion.model_reported === "string")
+    && isSafeModelReported(completion.model_reported)
     && completion.prompt_version === "v2-x-cross-blogger-1"
     && Array.isArray(completion.stock_viewpoints) && completion.stock_viewpoints.every(isJudgementItem)
     && Array.isArray(completion.market_industry_viewpoints) && completion.market_industry_viewpoints.every(isJudgementItem)

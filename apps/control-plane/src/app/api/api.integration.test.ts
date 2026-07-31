@@ -1076,6 +1076,25 @@ describe("v0 control-plane API authorization", () => {
     expect(xDailyJudgementMocks.completeXDailyJudgement).toHaveBeenCalledWith(completion, "worker-1");
   });
 
+  it.each(["file:///private/worker/output.json", "x".repeat(161)])(
+    "rejects unsafe or raw-output-sized model_reported metadata before any repository call",
+    async (modelReported) => {
+      workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+      const response = await postXDailyJudgementComplete(
+        jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {
+          run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v2-x-cross-blogger",
+          provider: "codex_cli", model_reported: modelReported, prompt_version: "v2-x-cross-blogger-1",
+          stock_viewpoints: [], market_industry_viewpoints: [], uncertainties: [],
+        }),
+        { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+      );
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: "invalid_x_daily_judgement_completion" });
+      expect(xDailyJudgementMocks.getXDailyJudgementContext).not.toHaveBeenCalled();
+      expect(xDailyJudgementMocks.completeXDailyJudgement).not.toHaveBeenCalled();
+    },
+  );
+
   it("maps a stale X daily judgement attempt to 409 and only accepts bounded failure classes", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     xDailyJudgementMocks.completeXDailyJudgement.mockRejectedValue({ code: "PT409", message: "lease_mismatch" });
