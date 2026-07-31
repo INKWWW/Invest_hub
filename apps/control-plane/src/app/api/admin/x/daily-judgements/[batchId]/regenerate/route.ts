@@ -6,7 +6,7 @@ import { regenerateXDailyJudgement } from "../../../../../../../lib/db/repositor
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isEmptyJsonObject(value: unknown): value is Record<string, never> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
+  return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
 }
 
 export async function POST(

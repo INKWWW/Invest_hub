@@ -26,6 +26,12 @@ begin
     raise exception 'invalid_x_daily_judgement_regeneration_actor' using errcode = '22023';
   end if;
 
+  if not exists (
+    select 1 from public.profiles where id = p_requested_by and role = 'admin'
+  ) then
+    raise exception 'actor_not_authorized' using errcode = '42501';
+  end if;
+
   select * into v_batch
   from public.x_collection_batches
   where id = p_batch_id

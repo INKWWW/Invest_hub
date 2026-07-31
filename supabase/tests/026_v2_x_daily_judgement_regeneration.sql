@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(28);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values
@@ -24,7 +24,8 @@ values
   ('00000000-0000-0000-0000-000000026022', '2026-08-01T16:00+08:00', '2026-08-01', '2026-08-01T08:00:00Z', '2026-08-01T10:00:00Z', 'collecting'),
   ('00000000-0000-0000-0000-000000026023', '2026-08-01T20:00+08:00', '2026-08-01', '2026-08-01T12:00:00Z', '2026-08-01T14:00:00Z', 'judgement_pending'),
   ('00000000-0000-0000-0000-000000026024', '2026-08-02T08:00+08:00', '2026-08-02', '2026-08-02T00:00:00Z', '2026-08-02T02:00:00Z', 'judgement_failed'),
-  ('00000000-0000-0000-0000-000000026025', '2026-08-02T12:00+08:00', '2026-08-02', '2026-08-02T04:00:00Z', '2026-08-02T06:00:00Z', 'succeeded');
+  ('00000000-0000-0000-0000-000000026025', '2026-08-02T12:00+08:00', '2026-08-02', '2026-08-02T04:00:00Z', '2026-08-02T06:00:00Z', 'succeeded'),
+  ('00000000-0000-0000-0000-000000026026', '2026-08-02T16:00+08:00', '2026-08-02', '2026-08-02T08:00:00Z', '2026-08-02T10:00:00Z', 'judgement_pending');
 
 insert into public.x_daily_judgement_versions
   (batch_id, revision, coverage_status, input_snapshot, output, provider, model_reported, prompt_version, schema_version)
@@ -36,15 +37,21 @@ values
     '{"sources":[]}'::jsonb, '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb,
     'codex_cli', null, 'v2-x-cross-blogger-1', 'v2-x-cross-blogger');
 insert into public.x_collection_batch_sources (batch_id, source_id, source_display_name, settlement_status, settled_at)
-values ('00000000-0000-0000-0000-000000026020', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now()));
+values
+  ('00000000-0000-0000-0000-000000026020', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now())),
+  ('00000000-0000-0000-0000-000000026026', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now()));
+insert into public.x_daily_judgement_runs (id, batch_id, status, attempt, run_kind, available_at)
+values ('00000000-0000-0000-0000-000000026040', '00000000-0000-0000-0000-000000026026', 'retryable_failed', 0, 'initial', timezone('utc', now()) + interval '1 hour');
 
 select has_column('public', 'x_daily_judgement_runs', 'run_kind', 'judgement runs distinguish initial and explicit regeneration work');
 select has_column('public', 'x_daily_judgement_runs', 'requested_by', 'regeneration runs preserve the requesting actor');
+set local role service_role;
 select is(
   (select public.regenerate_x_daily_judgement('00000000-0000-0000-0000-000000026020', '00000000-0000-0000-0000-000000026010')->>'status'),
   'queued',
   'service-role regeneration queues independent work'
 );
+reset role;
 select is((select count(*)::text from public.x_daily_judgement_runs where batch_id = '00000000-0000-0000-0000-000000026020'), '1', 'regeneration inserts exactly one run');
 select is(
   (select run_kind || '|' || requested_by::text || '|' || status || '|' || attempt::text
@@ -81,6 +88,24 @@ select is(
   'completion leaves revision one byte-for-byte unchanged'
 );
 
+select is((select count(*)::text from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000026026'), '0', 'an initial retryable run starts without a version');
+update public.x_daily_judgement_runs
+set available_at = timezone('utc', now())
+where id = '00000000-0000-0000-0000-000000026040';
+create temporary table initial_retry_claim as
+select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000026001', timezone('utc', now())) as payload;
+select is((select payload->>'attempt' from initial_retry_claim), '1', 'normal Worker claim leases the initial retryable run');
+select is(
+  (select public.complete_x_daily_judgement(
+    (select (payload->>'run_id')::uuid from initial_retry_claim), 1, '00000000-0000-0000-0000-000000026001',
+    '{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb
+  )->>'status'),
+  'succeeded',
+  'normal completion succeeds the initial retryable run'
+);
+select is((select count(*)::text from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000026026'), '1', 'the initial retry writes exactly one version');
+select is((select max(revision)::text from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000026026'), '1', 'the initial retry writes revision one, not revision two');
+
 select throws_ok($$select public.regenerate_x_daily_judgement('00000000-0000-0000-0000-000000026021', '00000000-0000-0000-0000-000000026010')$$,
   '22023', 'x_daily_judgement_regeneration_requires_successful_version', 'a succeeded batch without a version cannot regenerate');
 select throws_ok($$select public.regenerate_x_daily_judgement('00000000-0000-0000-0000-000000026022', '00000000-0000-0000-0000-000000026010')$$,
@@ -93,6 +118,10 @@ select throws_ok($$select public.regenerate_x_daily_judgement('00000000-0000-000
   '22023', 'invalid_x_daily_judgement_regeneration_actor', 'a null actor cannot regenerate');
 select throws_ok($$select public.regenerate_x_daily_judgement('00000000-0000-0000-0000-000000026025', '00000000-0000-0000-0000-000000026099')$$,
   '22023', 'invalid_x_daily_judgement_regeneration_actor', 'an unknown actor cannot regenerate');
+set local role service_role;
+select throws_ok($$select public.regenerate_x_daily_judgement('00000000-0000-0000-0000-000000026021', '00000000-0000-0000-0000-000000026011')$$,
+  '42501', 'actor_not_authorized', 'service role cannot create regeneration work for an ordinary user actor');
+reset role;
 select is(
   (select public.regenerate_x_daily_judgement('00000000-0000-0000-0000-000000026025', '00000000-0000-0000-0000-000000026010')->>'status'),
   'queued',
