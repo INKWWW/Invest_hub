@@ -328,11 +328,14 @@ select has_column(
   'public', 'x_collection_batches', 'snapshot_completeness',
   'batches record whether their frozen source universe is verified complete'
 );
-insert into public.x_collection_batches (
-  id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status
-) values (
-  '00000000-0000-0000-0000-000000027041', '2026-08-02T08:00+08:00', '2026-08-02',
-  '2026-08-02T00:00:00Z', '2026-08-02T02:00:00Z', 'succeeded'
+select lives_ok(
+  $$insert into public.x_collection_batches (
+      id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status, snapshot_completeness
+    ) values (
+      '00000000-0000-0000-0000-000000027041', '2026-08-02T08:00+08:00', '2026-08-02',
+      '2026-08-02T00:00:00Z', '2026-08-02T02:00:00Z', 'succeeded', 'legacy_unverified'
+    )$$,
+  'a pre-remediation incomplete source snapshot can be represented explicitly'
 );
 insert into public.x_collection_batch_sources (batch_id, source_id, source_display_name)
 values (
@@ -345,12 +348,6 @@ values (
   '00000000-0000-0000-0000-000000027042',
   '00000000-0000-0000-0000-000000027041',
   'queued', timezone('utc', now())
-);
-select lives_ok(
-  $$update public.x_collection_batches
-    set snapshot_completeness = 'legacy_unverified'
-    where id = '00000000-0000-0000-0000-000000027041'$$,
-  'a pre-remediation incomplete source snapshot can be represented explicitly'
 );
 select is(
   (select snapshot_completeness from public.x_collection_batches

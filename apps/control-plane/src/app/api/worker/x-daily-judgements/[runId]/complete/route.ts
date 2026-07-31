@@ -18,6 +18,18 @@ function isStringArray(value: unknown, max = 500): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0 && item.length <= max);
 }
 
+function isUnique(values: string[]) {
+  return new Set(values).size === values.length;
+}
+
+function sameSet(left: Set<string>, right: Set<string>) {
+  return left.size === right.size && [...left].every((value) => right.has(value));
+}
+
+function containsOpaqueId(values: string[], opaqueIds: Set<string>) {
+  return values.some((value) => [...opaqueIds].some((opaqueId) => value.includes(opaqueId)));
+}
+
 function isSafeModelReported(value: unknown): value is string | null {
   if (value === null) return true;
   return typeof value === "string" && value.length > 0 && value.length <= 160
@@ -54,22 +66,49 @@ function isCompletion(value: unknown): value is XDailyJudgementCompletion {
 
 function referencesFrozenContext(completion: XDailyJudgementCompletion, judgementContext: XDailyJudgementContext): boolean {
   const sourceIds = new Set(judgementContext.sources.map((source) => source.source_id));
-  const analysisIds = new Set<string>();
+  if (sourceIds.size !== judgementContext.sources.length) return false;
+  const excludedSourceIds = new Set(judgementContext.excluded_sources.map((source) => source.source_id));
+  if (excludedSourceIds.size !== judgementContext.excluded_sources.length
+    || [...excludedSourceIds].some((sourceId) => sourceIds.has(sourceId))) return false;
+  const analysisSourceIds = new Map<string, string>();
+  const analysisEvidencePostIds = new Map<string, Set<string>>();
   const evidencePostIds = new Set<string>();
   for (const source of judgementContext.sources) {
     for (const segment of source.window_segments) {
       for (const analysis of segment.analyses) {
-        analysisIds.add(analysis.post_id);
-        for (const evidencePostId of analysis.evidence_post_ids) evidencePostIds.add(evidencePostId);
+        if (analysisSourceIds.has(analysis.post_id) || analysis.evidence_post_ids.length === 0
+          || !isUnique(analysis.evidence_post_ids)) return false;
+        analysisSourceIds.set(analysis.post_id, source.source_id);
+        const analysisEvidence = new Set(analysis.evidence_post_ids);
+        analysisEvidencePostIds.set(analysis.post_id, analysisEvidence);
+        for (const evidencePostId of analysisEvidence) evidencePostIds.add(evidencePostId);
       }
     }
   }
-  return [...completion.stock_viewpoints, ...completion.market_industry_viewpoints].every((item) =>
-    item.supporting_source_ids.every((id) => sourceIds.has(id))
-    && item.dissenting_source_ids.every((id) => sourceIds.has(id))
-    && item.analysis_ids.every((id) => analysisIds.has(id))
-    && item.evidence_post_ids.every((id) => evidencePostIds.has(id)),
-  );
+  const analysisIds = new Set(analysisSourceIds.keys());
+  const opaqueIds = new Set([...sourceIds, ...excludedSourceIds, ...analysisIds, ...evidencePostIds]);
+  if (containsOpaqueId(completion.uncertainties, opaqueIds)) return false;
+
+  return [...completion.stock_viewpoints, ...completion.market_industry_viewpoints].every((item) => {
+    if (!isUnique(item.supporting_source_ids) || !isUnique(item.dissenting_source_ids)
+      || !isUnique(item.analysis_ids) || !isUnique(item.evidence_post_ids)
+      || item.analysis_ids.length === 0 || item.evidence_post_ids.length === 0
+      || item.supporting_source_ids.some((id) => item.dissenting_source_ids.includes(id))
+      || containsOpaqueId([item.statement, ...item.uncertainties], opaqueIds)) return false;
+
+    const itemSourceIds = new Set([...item.supporting_source_ids, ...item.dissenting_source_ids]);
+    const citedAnalysisSourceIds = new Set<string>();
+    const citedEvidencePostIds = new Set<string>();
+    for (const analysisId of item.analysis_ids) {
+      const sourceId = analysisSourceIds.get(analysisId);
+      const analysisEvidence = analysisEvidencePostIds.get(analysisId);
+      if (!sourceId || !analysisEvidence) return false;
+      citedAnalysisSourceIds.add(sourceId);
+      for (const evidencePostId of analysisEvidence) citedEvidencePostIds.add(evidencePostId);
+    }
+    return sameSet(itemSourceIds, citedAnalysisSourceIds)
+      && sameSet(new Set(item.evidence_post_ids), citedEvidencePostIds);
+  });
 }
 
 export async function POST(request: Request, context: { params: Promise<{ runId: string }> }) {

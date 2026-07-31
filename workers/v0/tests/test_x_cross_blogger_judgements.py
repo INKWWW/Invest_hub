@@ -21,7 +21,7 @@ def valid_output() -> dict[str, object]:
             "uncertainties": ["仅覆盖当前日内新增观点"],
         }],
         "market_industry_viewpoints": [],
-        "uncertainties": ["source-d 本窗口没有新增信息"],
+        "uncertainties": ["一位未纳入比较的博主本窗口没有新增信息"],
     }
 
 
@@ -36,6 +36,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
             allowed_post_ids={"post-a", "post-b", "post-c"},
             analysis_source_ids={"post-a@1": "source-a", "post-b@1": "source-b", "post-c@1": "source-c"},
             analysis_evidence_post_ids={"post-a@1": {"post-a"}, "post-b@1": {"post-b"}, "post-c@1": {"post-c"}},
+            frozen_source_ids={"source-a", "source-b", "source-c", "source-d"},
         )
 
     def test_accepts_agreement_disagreement_and_omitted_no_new_information_source(self) -> None:
@@ -44,7 +45,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         item = parsed["stock_viewpoints"][0]
         self.assertEqual(item["supporting_source_ids"], ["source-a", "source-b"])
         self.assertEqual(item["dissenting_source_ids"], ["source-c"])
-        self.assertEqual(parsed["uncertainties"], ["source-d 本窗口没有新增信息"])
+        self.assertEqual(parsed["uncertainties"], ["一位未纳入比较的博主本窗口没有新增信息"])
 
     def test_rejects_unknown_source_and_excluded_source(self) -> None:
         unknown = valid_output()
@@ -83,6 +84,13 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(structured.SchemaError, "source ownership"):
             self.parse(spliced)
 
+    def test_requires_the_exact_evidence_union_for_referenced_analyses(self) -> None:
+        incomplete = valid_output()
+        incomplete["stock_viewpoints"][0]["evidence_post_ids"] = ["post-a", "post-b"]
+
+        with self.assertRaisesRegex(structured.SchemaError, "exactly match"):
+            self.parse(incomplete)
+
     def test_rejects_opaque_analysis_ids_in_natural_language_fields(self) -> None:
         statement = valid_output()
         statement["stock_viewpoints"][0]["statement"] = "post-a@1 表示估值仍需观察。"
@@ -98,6 +106,27 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         global_uncertainty["uncertainties"] = ["post-c@1 的上下文不足"]
         with self.assertRaisesRegex(structured.SchemaError, "opaque analysis ID"):
             self.parse(global_uncertainty)
+
+    def test_rejects_opaque_source_and_evidence_ids_in_natural_language_fields(self) -> None:
+        source_token = valid_output()
+        source_token["stock_viewpoints"][0]["statement"] = "source-a 表示估值仍需观察。"
+        with self.assertRaisesRegex(structured.SchemaError, "opaque source ID"):
+            self.parse(source_token)
+
+        excluded_source_token = valid_output()
+        excluded_source_token["uncertainties"] = ["source-d 本窗口没有新增信息"]
+        with self.assertRaisesRegex(structured.SchemaError, "opaque source ID"):
+            self.parse(excluded_source_token)
+
+        item_evidence_token = valid_output()
+        item_evidence_token["stock_viewpoints"][0]["uncertainties"] = ["post-b 的上下文不足"]
+        with self.assertRaisesRegex(structured.SchemaError, "opaque evidence ID"):
+            self.parse(item_evidence_token)
+
+        global_evidence_token = valid_output()
+        global_evidence_token["uncertainties"] = ["post-c 的上下文不足"]
+        with self.assertRaisesRegex(structured.SchemaError, "opaque evidence ID"):
+            self.parse(global_evidence_token)
 
     def test_rejects_conflicting_sources_empty_evidence_and_imperative_recommendation(self) -> None:
         conflicting = valid_output()

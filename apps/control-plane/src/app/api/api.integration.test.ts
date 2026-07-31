@@ -1099,6 +1099,202 @@ describe("v0 control-plane API authorization", () => {
     expect(xDailyJudgementMocks.completeXDailyJudgement).toHaveBeenCalledWith(completion, "worker-1");
   });
 
+  it.each([
+    {
+      name: "cross-source analysis splicing",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-b@1"],
+        evidence_post_ids: ["post-b"],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "duplicate source IDs",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333", "33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "duplicate analysis IDs",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1", "post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "duplicate evidence IDs",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a", "post-a"],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "support and dissent overlap",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "empty evidence",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: [],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "incomplete analysis evidence",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a"],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "opaque source ID in statement",
+      item: {
+        statement: "33333333-3333-4333-8333-333333333333 supports this statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "opaque excluded source ID in global uncertainty",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: [],
+      },
+      uncertainties: ["77777777-7777-4777-8777-777777777777 has no new information"],
+    },
+    {
+      name: "opaque evidence ID in uncertainty",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: ["quote-a needs more context"],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "opaque analysis ID in global uncertainty",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: [],
+      },
+      uncertainties: ["post-a@1 needs more context"],
+    },
+  ])("rejects $name at the HTTP completion boundary", async ({ item, uncertainties }) => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
+      run_id: "11111111-1111-4111-8111-111111111111",
+      attempt: 1,
+      prompt_version: "v2-x-cross-blogger-1",
+      sources: [
+        {
+          source_id: "33333333-3333-4333-8333-333333333333",
+          display_name: "Fixture researcher A",
+          window_segments: [{
+            id: "44444444-4444-4444-8444-444444444444",
+            occurred_from_at: "2099-01-01T00:00:00.000Z",
+            occurred_through_at: "2099-01-01T00:01:00.000Z",
+            viewpoints: [], uncertainties: [],
+            analyses: [{
+              post_id: "post-a@1", blogger_viewpoint: null, arguments: [], quoted_post_viewpoint: null,
+              uncertainties: [], evidence_post_ids: ["post-a", "quote-a"],
+            }],
+          }],
+        },
+        {
+          source_id: "55555555-5555-4555-8555-555555555555",
+          display_name: "Fixture researcher B",
+          window_segments: [{
+            id: "66666666-6666-4666-8666-666666666666",
+            occurred_from_at: "2099-01-01T00:00:00.000Z",
+            occurred_through_at: "2099-01-01T00:01:00.000Z",
+            viewpoints: [], uncertainties: [],
+            analyses: [{
+              post_id: "post-b@1", blogger_viewpoint: null, arguments: [], quoted_post_viewpoint: null,
+              uncertainties: [], evidence_post_ids: ["post-b"],
+            }],
+          }],
+        },
+      ],
+      excluded_sources: [{
+        source_id: "77777777-7777-4777-8777-777777777777",
+        display_name: "Excluded fixture researcher",
+        reason: "no_new_information",
+      }],
+    });
+
+    const response = await postXDailyJudgementComplete(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {
+        run_id: "11111111-1111-4111-8111-111111111111",
+        attempt: 1,
+        schema_version: "v2-x-cross-blogger",
+        provider: "codex_cli",
+        model_reported: null,
+        prompt_version: "v2-x-cross-blogger-1",
+        stock_viewpoints: [item],
+        market_industry_viewpoints: [],
+        uncertainties,
+      }),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_x_daily_judgement_completion" });
+    expect(xDailyJudgementMocks.completeXDailyJudgement).not.toHaveBeenCalled();
+  });
+
   it.each(["file:///private/worker/output.json", "x".repeat(161)])(
     "rejects unsafe or raw-output-sized model_reported metadata before any repository call",
     async (modelReported) => {
