@@ -51,7 +51,7 @@ class XDailyJudgementRuntime:
         if not isinstance(run_id, str) or not run_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
             raise RuntimeExecutionError("schema_error", "daily judgement claim is invalid")
         try:
-            allowed_source_ids, allowed_analysis_ids, allowed_post_ids = self._validate_context(context, run_id, attempt)
+            allowed_source_ids, allowed_analysis_ids, allowed_post_ids, analysis_source_ids, analysis_evidence_post_ids = self._validate_context(context, run_id, attempt)
         except (TypeError, ValueError) as exc:
             raise RuntimeExecutionError("schema_error", "daily judgement context is invalid") from exc
         provider_context = ProviderContext(
@@ -66,6 +66,8 @@ class XDailyJudgementRuntime:
             allowed_source_ids=frozenset(allowed_source_ids),
             allowed_analysis_ids=frozenset(allowed_analysis_ids),
             allowed_post_ids=frozenset(allowed_post_ids),
+            allowed_analysis_source_ids=tuple(sorted(analysis_source_ids.items())),
+            allowed_analysis_evidence_post_ids=tuple(sorted((analysis_id, tuple(sorted(post_ids))) for analysis_id, post_ids in analysis_evidence_post_ids.items())),
         )
         response = self.provider.complete(tuple(context["sources"]), provider_context)
         if response.status != "success" or response.parsed_output is None:
@@ -73,12 +75,16 @@ class XDailyJudgementRuntime:
                 response.failure_class or response.error_code or "provider_failure",
                 "Codex CLI did not produce a valid cross-blogger judgement",
             )
+        if not _safe_model_reported(response.model_reported):
+            raise RuntimeExecutionError("schema_error", "model telemetry is unsafe")
         try:
             parsed = parse_v2_x_cross_blogger_output(
                 json.dumps(response.parsed_output, ensure_ascii=False),
                 allowed_source_ids=allowed_source_ids,
                 allowed_analysis_ids=allowed_analysis_ids,
                 allowed_post_ids=allowed_post_ids,
+                analysis_source_ids=analysis_source_ids,
+                analysis_evidence_post_ids=analysis_evidence_post_ids,
             )
         except SchemaError as exc:
             raise RuntimeExecutionError("schema_error", "cross-blogger judgement failed evidence validation") from exc
@@ -95,7 +101,7 @@ class XDailyJudgementRuntime:
         }
 
     @staticmethod
-    def _validate_context(context: Mapping[str, object], run_id: str, attempt: int) -> tuple[set[str], set[str], set[str]]:
+    def _validate_context(context: Mapping[str, object], run_id: str, attempt: int) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]]]:
         if set(context) != {"run_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") != "v2-x-cross-blogger-1":
             raise ValueError("context identity is invalid")
         sources = context.get("sources")
@@ -105,6 +111,8 @@ class XDailyJudgementRuntime:
         source_ids: set[str] = set()
         analysis_ids: set[str] = set()
         post_ids: set[str] = set()
+        analysis_source_ids: dict[str, str] = {}
+        analysis_evidence_post_ids: dict[str, set[str]] = {}
         for source in sources:
             if not isinstance(source, Mapping) or set(source) != {"source_id", "display_name", "window_segments"}:
                 raise ValueError("source is invalid")
@@ -126,11 +134,28 @@ class XDailyJudgementRuntime:
                     if not isinstance(analysis_id, str) or not analysis_id or analysis_id in analysis_ids or not isinstance(evidence, list) or not all(isinstance(post_id, str) and post_id for post_id in evidence):
                         raise ValueError("analysis evidence is invalid")
                     analysis_ids.add(analysis_id)
-                    post_ids.update(evidence)
+                    evidence_ids = set(evidence)
+                    post_ids.update(evidence_ids)
+                    analysis_source_ids[analysis_id] = source_id
+                    analysis_evidence_post_ids[analysis_id] = evidence_ids
         excluded_ids = {source.get("source_id") for source in excluded_sources if isinstance(source, Mapping)}
         if source_ids & excluded_ids:
             raise ValueError("source cannot be included and excluded")
-        return source_ids, analysis_ids, post_ids
+        return source_ids, analysis_ids, post_ids, analysis_source_ids, analysis_evidence_post_ids
+
+
+def _safe_model_reported(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str) or not 1 <= len(value) <= 160 or any(ord(character) < 32 or ord(character) == 127 for character in value):
+        return False
+    stripped = value.lstrip()
+    return not (
+        stripped.startswith("/")
+        or bool(re.match(r"^[A-Za-z]:[\\/]", stripped))
+        or stripped.lower().startswith("file:")
+        or bool(re.match(r"^(local_evidence(_path)?|local_path|raw_x_content|raw_content|cookie|browser[_ -]?profile)[\s:=/\\]", stripped, re.IGNORECASE))
+    )
 
 
 @dataclass(frozen=True)

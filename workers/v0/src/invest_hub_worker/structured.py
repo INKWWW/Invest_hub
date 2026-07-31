@@ -138,6 +138,8 @@ def parse_v2_x_cross_blogger_output(
     allowed_source_ids: set[str],
     allowed_analysis_ids: set[str],
     allowed_post_ids: set[str],
+    analysis_source_ids: Mapping[str, str],
+    analysis_evidence_post_ids: Mapping[str, set[str]],
 ) -> dict[str, object]:
     """Validate the safe, cross-blogger completion sent to the control plane."""
 
@@ -149,6 +151,14 @@ def parse_v2_x_cross_blogger_output(
         raise SchemaError("invalid_v2_x_cross_blogger", "viewpoints must be arrays")
     if not _string_list(payload.get("uncertainties")):
         raise SchemaError("invalid_v2_x_cross_blogger", "uncertainties must be a string array")
+    if set(analysis_source_ids) != allowed_analysis_ids or set(analysis_evidence_post_ids) != allowed_analysis_ids:
+        raise SchemaError("analysis", "analysis ownership catalog is incomplete")
+    for analysis_id in allowed_analysis_ids:
+        source_id = analysis_source_ids.get(analysis_id)
+        evidence_ids = analysis_evidence_post_ids.get(analysis_id)
+        if source_id not in allowed_source_ids or not isinstance(evidence_ids, set) or not evidence_ids or not evidence_ids <= allowed_post_ids:
+            raise SchemaError("analysis", "analysis ownership catalog is invalid")
+    _reject_opaque_analysis_ids(payload["uncertainties"], allowed_analysis_ids)
 
     def normalized_items(values: list[object], category: str) -> list[dict[str, object]]:
         result: list[dict[str, object]] = []
@@ -161,6 +171,7 @@ def parse_v2_x_cross_blogger_output(
                 raise SchemaError("invalid_v2_x_cross_blogger_item", "statement must be a non-empty string")
             if _IMPERATIVE_INVESTMENT_RECOMMENDATION.search(statement):
                 raise SchemaError("invalid_v2_x_cross_blogger_item", "imperative system investment recommendation is not allowed")
+            _reject_opaque_analysis_ids([statement], allowed_analysis_ids)
             supporting = value["supporting_source_ids"]
             dissenting = value["dissenting_source_ids"]
             if not _string_list(supporting) or not _string_list(dissenting) or len(set(supporting)) != len(supporting) or len(set(dissenting)) != len(dissenting):
@@ -183,6 +194,14 @@ def parse_v2_x_cross_blogger_output(
                 raise SchemaError("evidence", "unknown evidence post")
             if not _string_list(value["uncertainties"]):
                 raise SchemaError("invalid_v2_x_cross_blogger_item", "uncertainties must be a string array")
+            _reject_opaque_analysis_ids(value["uncertainties"], allowed_analysis_ids)
+            item_source_ids = set(supporting) | set(dissenting)
+            analysis_sources = {analysis_source_ids[analysis_id] for analysis_id in analyses}
+            if not analysis_sources <= item_source_ids or not item_source_ids <= analysis_sources:
+                raise SchemaError("source", "analysis source ownership does not match item sources")
+            analysis_evidence = set().union(*(analysis_evidence_post_ids[analysis_id] for analysis_id in analyses))
+            if not set(evidence) <= analysis_evidence:
+                raise SchemaError("evidence", "evidence post is not owned by a referenced analysis")
             result.append(dict(value))
         return result
 
@@ -192,6 +211,16 @@ def parse_v2_x_cross_blogger_output(
         "market_industry_viewpoints": normalized_items(payload["market_industry_viewpoints"], "market_industry"),
         "uncertainties": list(payload["uncertainties"]),
     }
+
+
+def _reject_opaque_analysis_ids(values: object, allowed_analysis_ids: set[str]) -> None:
+    if not isinstance(values, list):
+        raise SchemaError("invalid_v2_x_cross_blogger", "natural language fields must be string arrays")
+    for value in values:
+        if not isinstance(value, str):
+            raise SchemaError("invalid_v2_x_cross_blogger", "natural language fields must be strings")
+        if any(analysis_id in value for analysis_id in allowed_analysis_ids):
+            raise SchemaError("analysis", "opaque analysis ID is not allowed in natural language")
 
 
 def parse_structured_output(text: str) -> dict[str, Any]:

@@ -259,6 +259,8 @@ class CodexCLIProvider:
                 allowed_source_ids=set(context.allowed_source_ids),
                 allowed_analysis_ids=set(context.allowed_analysis_ids),
                 allowed_post_ids=set(context.allowed_post_ids),
+                analysis_source_ids=dict(context.allowed_analysis_source_ids),
+                analysis_evidence_post_ids={analysis_id: set(post_ids) for analysis_id, post_ids in context.allowed_analysis_evidence_post_ids},
             )
 
         parsed = parse_v1_1_daily_output(raw_text)
