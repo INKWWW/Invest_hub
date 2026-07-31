@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(30);
 
 select is(
   (position('settle_x_collection_batch' in pg_get_functiondef('public.complete_windowed_capture_range(uuid, integer, uuid, jsonb)'::regprocedure)) = 0)::text,
@@ -12,6 +12,20 @@ select is(
   'true',
   'the independent post-commit scheduler dispatches already-committed batch settlement'
 );
+select ok(
+  not has_function_privilege('service_role', 'public.ensure_due_x_collection_batches_core(uuid, timestamp with time zone)', 'EXECUTE'),
+  'service_role cannot execute the scheduler implementation directly'
+);
+select ok(
+  has_function_privilege('service_role', 'public.ensure_due_x_collection_batches(uuid, timestamp with time zone)', 'EXECUTE'),
+  'service_role can execute the scheduler wrapper'
+);
+select ok(public.x_daily_judgement_safe_text('A/B', 100), 'normal slash-separated labels remain valid');
+select ok(public.x_daily_judgement_safe_text('risk/reward', 100), 'normal risk/reward text remains valid');
+select ok(not public.x_daily_judgement_safe_text('/private/evidence.json', 100), 'absolute Unix paths are rejected');
+select ok(not public.x_daily_judgement_safe_text('C:\\evidence\\raw.json', 100), 'Windows drive paths are rejected');
+select ok(not public.x_daily_judgement_safe_text('file:///private/evidence.json', 100), 'file URI paths are rejected');
+select ok(not public.x_daily_judgement_safe_text('local_evidence_path: evidence.json', 100), 'local evidence prefixes are rejected');
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000025001', 'authenticated', 'authenticated', 'task1-regression-admin@example.invalid', 'not-a-secret', now());
@@ -19,6 +33,18 @@ insert into public.profiles (id, role, display_name)
 values ('00000000-0000-0000-0000-000000025001', 'admin', 'Task 1 regression admin');
 insert into public.workers (id, name, device_secret_hash, status)
 values ('00000000-0000-0000-0000-000000025002', 'task1-regression-worker', 'task1-regression-worker-hash', 'online');
+
+set local role service_role;
+select throws_ok(
+  $$select public.ensure_due_x_collection_batches_core('00000000-0000-0000-0000-000000025002', '2026-07-26T00:01:00Z')$$,
+  '42501', 'permission denied for function ensure_due_x_collection_batches_core',
+  'service_role cannot call the scheduler implementation directly'
+);
+select lives_ok(
+  $$select public.ensure_due_x_collection_batches('00000000-0000-0000-0000-000000025002', '2026-07-26T00:01:00Z')$$,
+  'service_role can call the scheduler wrapper'
+);
+reset role;
 
 insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)
 values
@@ -167,6 +193,44 @@ select throws_ok(
   $$select public.complete_x_daily_judgement('00000000-0000-0000-0000-000000025051', 1, '00000000-0000-0000-0000-000000025002',
     '{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[{"statement":"safe","supporting_source_ids":["00000000-0000-0000-0000-000000025021"],"dissenting_source_ids":[],"analysis_ids":["safe-post@1"],"evidence_post_ids":["safe-post"],"uncertainties":[],"raw_x_content":"must-not-persist"}],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb)$$,
   '22023', 'invalid_x_daily_judgement_output', 'completion rejects nested raw content instead of persisting it'
+);
+
+insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
+values ('00000000-0000-0000-0000-000000025024', 'task1-dispatch-isolation', 'x', 'Dispatch isolation source', 'v2-task1-regression', '00000000-0000-0000-0000-000000025002');
+insert into public.x_source_profiles (source_id, requested_handle, account_id, display_name, resolution_status)
+values ('00000000-0000-0000-0000-000000025024', 'dispatch_isolation', 'dispatch_isolation', 'Dispatch isolation source', 'resolved');
+insert into public.source_collection_coverage (source_id, coverage_start_at, coverage_through_at)
+values ('00000000-0000-0000-0000-000000025024', '2026-07-26T00:00:00Z', '2026-07-26T00:00:00Z');
+insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)
+values ('00000000-0000-0000-0000-000000025016', '2026-07-28T08:00+08:00', '2026-07-28', '2026-07-28T00:00:00Z', '2026-07-28T02:00:00Z', 'collecting');
+create function public.task1_inject_dispatch_failure()
+returns trigger language plpgsql as $$
+begin
+  if new.id = '00000000-0000-0000-0000-000000025016' then
+    raise exception 'injected dispatcher failure' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger task1_inject_dispatch_failure
+before update on public.x_collection_batches
+for each row execute function public.task1_inject_dispatch_failure();
+create temporary table scheduler_dispatch_isolation as
+select public.ensure_due_x_collection_batches('00000000-0000-0000-0000-000000025002', '2026-07-26T08:01:00Z') as payload;
+select is(
+  (select count(*)::text from public.sync_tasks where source_id = '00000000-0000-0000-0000-000000025024' and collection_batch_id is not null),
+  '1',
+  'a dispatcher exception does not roll back new scheduler task creation'
+);
+select is(
+  (select payload->>'settlement_dispatch_failed' from scheduler_dispatch_isolation),
+  'true',
+  'the scheduler reports an isolated dispatcher failure without raising it'
+);
+select is(
+  (select status from public.x_collection_batches where id = '00000000-0000-0000-0000-000000025016'),
+  'collecting',
+  'a failed dispatcher leaves its batch for a later independent retry'
 );
 
 select * from finish();
