@@ -187,7 +187,7 @@ select is(
 );
 update public.x_daily_judgement_runs
 set id = '00000000-0000-0000-0000-000000025051', status = 'leased', attempt = 1,
-    lease_owner = '00000000-0000-0000-0000-000000025002', lease_expires_at = '2026-07-26T08:11:00Z'
+    lease_owner = '00000000-0000-0000-0000-000000025002', lease_expires_at = timezone('utc', now()) + interval '10 minutes'
 where batch_id = '00000000-0000-0000-0000-000000025013' and status = 'queued';
 select throws_ok(
   $$select public.complete_x_daily_judgement('00000000-0000-0000-0000-000000025051', 1, '00000000-0000-0000-0000-000000025002',
