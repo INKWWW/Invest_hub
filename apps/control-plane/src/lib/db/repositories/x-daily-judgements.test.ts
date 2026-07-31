@@ -10,6 +10,7 @@ import {
   claimNextXDailyJudgement,
   completeXDailyJudgement,
   getXDailyJudgementContext,
+  regenerateXDailyJudgement,
 } from "./x-daily-judgements";
 
 const claim = {
@@ -102,6 +103,26 @@ describe("X daily judgement repository", () => {
         market_industry_viewpoints: [],
         uncertainties: [],
       },
+    });
+  });
+
+  it("returns only the queued regeneration identity from the audited RPC", async () => {
+    databaseMocks.rpc.mockResolvedValue({
+      data: { run_id: "55555555-5555-4555-8555-555555555555", status: "queued", attempt: 0 },
+      error: null,
+    });
+
+    await expect(regenerateXDailyJudgement(
+      "22222222-2222-4222-8222-222222222222",
+      "66666666-6666-4666-8666-666666666666",
+    )).resolves.toEqual({
+      runId: "55555555-5555-4555-8555-555555555555",
+      status: "queued",
+      attempt: 0,
+    });
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("regenerate_x_daily_judgement", {
+      p_batch_id: "22222222-2222-4222-8222-222222222222",
+      p_requested_by: "66666666-6666-4666-8666-666666666666",
     });
   });
 });

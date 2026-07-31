@@ -70,6 +70,12 @@ export type XDailyJudgementFailureClass =
   | "schema_error"
   | "persistence_failure";
 
+export type XDailyJudgementRegeneration = {
+  runId: string;
+  status: "queued";
+  attempt: 0;
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
@@ -93,6 +99,11 @@ function parseClaim(value: unknown): XDailyJudgementClaim | null {
       coverage_status: value.batch.coverage_status,
     },
   };
+}
+
+function parseRegeneration(value: unknown): XDailyJudgementRegeneration | null {
+  if (!isObject(value) || typeof value.run_id !== "string" || value.status !== "queued" || value.attempt !== 0) return null;
+  return { runId: value.run_id, status: value.status, attempt: value.attempt };
 }
 
 function parseAnalysis(value: unknown): XDailyJudgementAnalysis | null {
@@ -209,4 +220,15 @@ export async function failXDailyJudgement(
   });
   if (error) throw error;
   return data;
+}
+
+export async function regenerateXDailyJudgement(batchId: string, actorId: string): Promise<XDailyJudgementRegeneration> {
+  const { data, error } = await createSupabaseAdminClient().rpc("regenerate_x_daily_judgement", {
+    p_batch_id: batchId,
+    p_requested_by: actorId,
+  });
+  if (error) throw error;
+  const regeneration = parseRegeneration(data);
+  if (!regeneration) throw new Error("invalid_x_daily_judgement_regeneration");
+  return regeneration;
 }
