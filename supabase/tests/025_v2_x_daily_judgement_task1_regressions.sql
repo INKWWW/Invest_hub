@@ -31,8 +31,8 @@ insert into auth.users (id, aud, role, email, encrypted_password, email_confirme
 values ('00000000-0000-0000-0000-000000025001', 'authenticated', 'authenticated', 'task1-regression-admin@example.invalid', 'not-a-secret', now());
 insert into public.profiles (id, role, display_name)
 values ('00000000-0000-0000-0000-000000025001', 'admin', 'Task 1 regression admin');
-insert into public.workers (id, name, device_secret_hash, status)
-values ('00000000-0000-0000-0000-000000025002', 'task1-regression-worker', 'task1-regression-worker-hash', 'online');
+insert into public.workers (id, name, device_secret_hash, status, capabilities)
+values ('00000000-0000-0000-0000-000000025002', 'task1-regression-worker', 'task1-regression-worker-hash', 'online', array['x_sync']);
 
 set local role service_role;
 select throws_ok(
@@ -40,9 +40,10 @@ select throws_ok(
   '42501', 'permission denied for function ensure_due_x_collection_batches_core',
   'service_role cannot call the scheduler implementation directly'
 );
-select lives_ok(
+select throws_ok(
   $$select public.ensure_due_x_collection_batches('00000000-0000-0000-0000-000000025002', '2026-07-26T00:01:00Z')$$,
-  'service_role can call the scheduler wrapper'
+  '42501', 'worker_not_authorized',
+  'service_role reaches the scheduler wrapper, which still enforces X source authorization'
 );
 reset role;
 

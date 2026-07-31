@@ -10,10 +10,10 @@ insert into public.profiles (id, role, display_name)
 values
   ('00000000-0000-0000-0000-000000026010', 'admin', 'Regeneration admin'),
   ('00000000-0000-0000-0000-000000026011', 'user', 'Regeneration user');
-insert into public.workers (id, name, device_secret_hash, status)
-values ('00000000-0000-0000-0000-000000026001', 'regeneration-worker', 'regeneration-worker-hash', 'online');
-insert into public.sources (id, source_key, source_type, display_name, parameter_version)
-values ('00000000-0000-0000-0000-000000026030', 'regeneration-excluded-source', 'x', 'Excluded regeneration source', 'v2-regeneration');
+insert into public.workers (id, name, device_secret_hash, status, capabilities)
+values ('00000000-0000-0000-0000-000000026001', 'regeneration-worker', 'regeneration-worker-hash', 'online', array['x_sync']);
+insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
+values ('00000000-0000-0000-0000-000000026030', 'regeneration-excluded-source', 'x', 'Excluded regeneration source', 'v2-regeneration', '00000000-0000-0000-0000-000000026001');
 insert into public.x_source_profiles (source_id, requested_handle, account_id, display_name, resolution_status)
 values ('00000000-0000-0000-0000-000000026030', 'regeneration_excluded', 'regeneration_excluded', 'Excluded regeneration source', 'resolved');
 

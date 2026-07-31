@@ -15,8 +15,8 @@ insert into public.profiles (id, role, display_name)
 values
   ('00000000-0000-0000-0000-000000024010', 'admin', 'Daily judgement admin'),
   ('00000000-0000-0000-0000-000000024015', 'user', 'Daily judgement user');
-insert into public.workers (id, name, device_secret_hash, status)
-values ('00000000-0000-0000-0000-000000024001', 'daily-judgement-worker', 'daily-judgement-worker-hash', 'online');
+insert into public.workers (id, name, device_secret_hash, status, capabilities)
+values ('00000000-0000-0000-0000-000000024001', 'daily-judgement-worker', 'daily-judgement-worker-hash', 'online', array['x_sync']);
 
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values

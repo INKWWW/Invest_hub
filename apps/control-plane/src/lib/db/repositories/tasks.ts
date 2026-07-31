@@ -26,6 +26,10 @@ export type DueScheduledTick = {
   deferred_source_ids: string[];
 };
 
+export type DueSourceScheduledTick = DueScheduledTick & {
+  judgement_dispatch_failed: boolean;
+};
+
 const scheduleWindowPattern = /^\d{4}-\d{2}-\d{2}T(?:08:00|20:50)\+08:00$/;
 
 export function isScheduleWindowKey(value: unknown): value is string {
@@ -87,7 +91,7 @@ export async function scheduleDueXTasks(workerId: string, now = new Date()): Pro
   return scheduleDueTasksByRpc(workerId, "enqueue_due_x_tasks", now);
 }
 
-export async function scheduleDueSourceTasks(workerId: string, now = new Date()): Promise<DueScheduledTick> {
+export async function scheduleDueSourceTasks(workerId: string, now = new Date()): Promise<DueSourceScheduledTick> {
   const [discordResult, xResult] = await Promise.allSettled([
     scheduleDueDiscordTasks(workerId, now),
     scheduleDueXTasks(workerId, now),
@@ -100,13 +104,26 @@ export async function scheduleDueSourceTasks(workerId: string, now = new Date())
   // Batch settlement is deliberately independent from both source families:
   // the pre-existing scheduler result remains durable even when its later
   // judgement dispatch cannot run on this tick.
-  await ensureDueXCollectionBatches(workerId, now).catch(() => undefined);
+  let judgementDispatchFailed = false;
+  try {
+    const judgementDispatch = await ensureDueXCollectionBatches(workerId, now);
+    judgementDispatchFailed = Boolean(
+      judgementDispatch
+      && typeof judgementDispatch === "object"
+      && !Array.isArray(judgementDispatch)
+      && "settlement_dispatch_failed" in judgementDispatch
+      && judgementDispatch.settlement_dispatch_failed === true,
+    );
+  } catch {
+    judgementDispatchFailed = true;
+  }
   const scheduledAt = x?.scheduled_at ?? discord?.scheduled_at;
   if (!scheduledAt) throw new Error("invalid_scheduled_tick");
   return {
     scheduled_at: scheduledAt,
     tasks: [...(discord?.tasks ?? []), ...(x?.tasks ?? [])],
     deferred_source_ids: [...(discord?.deferred_source_ids ?? []), ...(x?.deferred_source_ids ?? [])],
+    judgement_dispatch_failed: judgementDispatchFailed,
   };
 }
 
