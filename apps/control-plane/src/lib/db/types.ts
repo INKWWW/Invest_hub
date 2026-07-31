@@ -927,6 +927,10 @@ export interface Database {
         Args: { p_worker_id: string; p_now: string };
         Returns: Json;
       };
+      dispatch_due_x_collection_batch_settlements: {
+        Args: { p_now: string };
+        Returns: Json;
+      };
       settle_x_collection_batch: {
         Args: { p_batch_id: string; p_now: string };
         Returns: Json;
