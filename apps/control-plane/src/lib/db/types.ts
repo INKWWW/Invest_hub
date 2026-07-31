@@ -943,6 +943,14 @@ export interface Database {
         Args: { p_run_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
         Returns: Json;
       };
+      get_x_daily_judgement_context: {
+        Args: { p_run_id: string; p_attempt: number; p_worker_id: string };
+        Returns: Json;
+      };
+      fail_x_daily_judgement: {
+        Args: { p_run_id: string; p_attempt: number; p_worker_id: string; p_failure_class: string };
+        Returns: Json;
+      };
       get_window_daily_fact_context: {
         Args: { p_task_id: string; p_attempt: number; p_worker_id: string };
         Returns: Json;

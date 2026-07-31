@@ -1,15 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 const databaseMocks = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }));
+const judgementMocks = vi.hoisted(() => ({ ensureDueXCollectionBatches: vi.fn() }));
 
 vi.mock("../supabase-server", () => ({
   createSupabaseAdminClient: () => ({ from: databaseMocks.from, rpc: databaseMocks.rpc }),
 }));
+vi.mock("./x-daily-judgements", () => judgementMocks);
 
 import { completeWindowedCaptureRange, scheduleDueSourceTasks } from "./tasks";
 
 describe("due source scheduling", () => {
   it("keeps X scheduling available when the retired Discord scheduler fails", async () => {
+    judgementMocks.ensureDueXCollectionBatches.mockResolvedValue({});
     databaseMocks.rpc.mockImplementation((name: string) => {
       if (name === "enqueue_due_discord_tasks") {
         return Promise.resolve({ data: null, error: { message: "discord scheduler unavailable" } });
@@ -23,6 +26,7 @@ describe("due source scheduling", () => {
     await expect(scheduleDueSourceTasks("worker-1", new Date("2026-07-25T12:00:00Z"))).resolves.toEqual({
       scheduled_at: "2026-07-25T12:00:00Z", tasks: [], deferred_source_ids: [],
     });
+    expect(judgementMocks.ensureDueXCollectionBatches).toHaveBeenCalledWith("worker-1", new Date("2026-07-25T12:00:00Z"));
   });
 
   it("binds window range completion directly to the caller cancellation signal", async () => {

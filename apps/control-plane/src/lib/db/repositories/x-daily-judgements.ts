@@ -1,0 +1,212 @@
+import { createSupabaseAdminClient } from "../supabase-server";
+import type { Json } from "../types";
+
+export type XDailyJudgementClaim = {
+  run_id: string;
+  attempt: number;
+  lease_expires_at: string;
+  batch: {
+    id: string;
+    natural_date: string;
+    cutoff_at: string;
+    coverage_status: "complete" | "partial";
+  };
+};
+
+type XDailyJudgementAnalysis = {
+  post_id: string;
+  blogger_viewpoint: string | null;
+  arguments: string[];
+  quoted_post_viewpoint: string | null;
+  uncertainties: string[];
+  evidence_post_ids: string[];
+};
+
+export type XDailyJudgementContext = {
+  run_id: string;
+  attempt: number;
+  prompt_version: "v2-x-cross-blogger-1";
+  sources: Array<{
+    source_id: string;
+    display_name: string;
+    window_segments: Array<{
+      id: string;
+      occurred_from_at: string;
+      occurred_through_at: string;
+      viewpoints: string[];
+      uncertainties: string[];
+      analyses: XDailyJudgementAnalysis[];
+    }>;
+  }>;
+  excluded_sources: Array<{ source_id: string; display_name: string; reason: string }>;
+};
+
+export type XDailyJudgementItem = {
+  statement: string;
+  supporting_source_ids: string[];
+  dissenting_source_ids: string[];
+  analysis_ids: string[];
+  evidence_post_ids: string[];
+  uncertainties: string[];
+};
+
+export type XDailyJudgementCompletion = {
+  run_id: string;
+  attempt: number;
+  schema_version: "v2-x-cross-blogger";
+  provider: "codex_cli";
+  model_reported: string | null;
+  prompt_version: "v2-x-cross-blogger-1";
+  stock_viewpoints: XDailyJudgementItem[];
+  market_industry_viewpoints: XDailyJudgementItem[];
+  uncertainties: string[];
+};
+
+export type XDailyJudgementFailureClass =
+  | "timeout"
+  | "provider_failure"
+  | "empty_response"
+  | "invalid_json"
+  | "schema_error"
+  | "persistence_failure";
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "string");
+
+function parseClaim(value: unknown): XDailyJudgementClaim | null {
+  if (!isObject(value) || typeof value.run_id !== "string" || typeof value.attempt !== "number" || !Number.isInteger(value.attempt)
+    || value.attempt < 1 || typeof value.lease_expires_at !== "string" || !isObject(value.batch)
+    || typeof value.batch.id !== "string" || typeof value.batch.natural_date !== "string"
+    || typeof value.batch.cutoff_at !== "string"
+    || (value.batch.coverage_status !== "complete" && value.batch.coverage_status !== "partial")) return null;
+  return {
+    run_id: value.run_id,
+    attempt: value.attempt,
+    lease_expires_at: value.lease_expires_at,
+    batch: {
+      id: value.batch.id,
+      natural_date: value.batch.natural_date,
+      cutoff_at: value.batch.cutoff_at,
+      coverage_status: value.batch.coverage_status,
+    },
+  };
+}
+
+function parseAnalysis(value: unknown): XDailyJudgementAnalysis | null {
+  if (!isObject(value) || typeof value.post_id !== "string"
+    || (value.blogger_viewpoint !== null && typeof value.blogger_viewpoint !== "string")
+    || !isStringArray(value.arguments)
+    || (value.quoted_post_viewpoint !== null && typeof value.quoted_post_viewpoint !== "string")
+    || !isStringArray(value.uncertainties) || !isStringArray(value.evidence_post_ids)) return null;
+  return {
+    post_id: value.post_id,
+    blogger_viewpoint: value.blogger_viewpoint,
+    arguments: value.arguments,
+    quoted_post_viewpoint: value.quoted_post_viewpoint,
+    uncertainties: value.uncertainties,
+    evidence_post_ids: value.evidence_post_ids,
+  };
+}
+
+function parseContext(value: unknown): XDailyJudgementContext | null {
+  if (!isObject(value) || typeof value.run_id !== "string" || typeof value.attempt !== "number" || !Number.isInteger(value.attempt)
+    || value.attempt < 1 || value.prompt_version !== "v2-x-cross-blogger-1"
+    || !Array.isArray(value.sources) || !Array.isArray(value.excluded_sources)) return null;
+  const sources = value.sources.map((source) => {
+    if (!isObject(source) || typeof source.source_id !== "string" || typeof source.display_name !== "string"
+      || !Array.isArray(source.window_segments)) return null;
+    const windowSegments = source.window_segments.map((segment) => {
+      if (!isObject(segment) || typeof segment.id !== "string" || typeof segment.occurred_from_at !== "string"
+        || typeof segment.occurred_through_at !== "string" || !isStringArray(segment.viewpoints)
+        || !isStringArray(segment.uncertainties) || !Array.isArray(segment.analyses)) return null;
+      const analyses = segment.analyses.map(parseAnalysis);
+      if (analyses.some((analysis) => !analysis)) return null;
+      return {
+        id: segment.id,
+        occurred_from_at: segment.occurred_from_at,
+        occurred_through_at: segment.occurred_through_at,
+        viewpoints: segment.viewpoints,
+        uncertainties: segment.uncertainties,
+        analyses: analyses as XDailyJudgementAnalysis[],
+      };
+    });
+    if (windowSegments.some((segment) => !segment)) return null;
+    return { source_id: source.source_id, display_name: source.display_name, window_segments: windowSegments as XDailyJudgementContext["sources"][number]["window_segments"] };
+  });
+  const excludedSources = value.excluded_sources.map((source) => {
+    if (!isObject(source) || typeof source.source_id !== "string" || typeof source.display_name !== "string" || typeof source.reason !== "string") return null;
+    return { source_id: source.source_id, display_name: source.display_name, reason: source.reason };
+  });
+  if (sources.some((source) => !source) || excludedSources.some((source) => !source)) return null;
+  return {
+    run_id: value.run_id,
+    attempt: value.attempt,
+    prompt_version: value.prompt_version,
+    sources: sources as XDailyJudgementContext["sources"],
+    excluded_sources: excludedSources as XDailyJudgementContext["excluded_sources"],
+  };
+}
+
+export async function claimNextXDailyJudgement(workerId: string, now = new Date().toISOString()): Promise<XDailyJudgementClaim | null> {
+  const { data, error } = await createSupabaseAdminClient().rpc("claim_next_x_daily_judgement", {
+    p_worker_id: workerId,
+    p_now: now,
+  });
+  if (error) throw error;
+  if (data === null) return null;
+  const claim = parseClaim(data);
+  if (!claim) throw new Error("invalid_x_daily_judgement_claim");
+  return claim;
+}
+
+export async function ensureDueXCollectionBatches(workerId: string, now = new Date()) {
+  const { data, error } = await createSupabaseAdminClient().rpc("ensure_due_x_collection_batches", {
+    p_worker_id: workerId,
+    p_now: now.toISOString(),
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function getXDailyJudgementContext(runId: string, attempt: number, workerId: string): Promise<XDailyJudgementContext> {
+  const { data, error } = await createSupabaseAdminClient().rpc("get_x_daily_judgement_context", {
+    p_run_id: runId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+  });
+  if (error) throw error;
+  const context = parseContext(data);
+  if (!context) throw new Error("invalid_x_daily_judgement_context");
+  return context;
+}
+
+export async function completeXDailyJudgement(completion: XDailyJudgementCompletion, workerId: string) {
+  const { run_id: _runId, attempt: _attempt, ...output } = completion;
+  const { data, error } = await createSupabaseAdminClient().rpc("complete_x_daily_judgement", {
+    p_run_id: completion.run_id,
+    p_attempt: completion.attempt,
+    p_worker_id: workerId,
+    p_payload: output as Json,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function failXDailyJudgement(
+  runId: string,
+  attempt: number,
+  workerId: string,
+  failureClass: XDailyJudgementFailureClass,
+) {
+  const { data, error } = await createSupabaseAdminClient().rpc("fail_x_daily_judgement", {
+    p_run_id: runId,
+    p_attempt: attempt,
+    p_worker_id: workerId,
+    p_failure_class: failureClass,
+  });
+  if (error) throw error;
+  return data;
+}
