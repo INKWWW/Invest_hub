@@ -41,6 +41,7 @@
 - `apps/control-plane/src/components/admin/UserInviteList.tsx`: 倒计时、状态投影和无掩码历史记录显示。
 - `apps/control-plane/src/components/admin/user-invite.ts`: 浏览器安全响应解析、时长校验与列表 DTO 类型。
 - `apps/control-plane/src/components/admin/user-invite-list.test.tsx`: 静态渲染与模拟时间下的倒计时/状态测试。
+- `apps/control-plane/src/components/admin/user-invite-form.test.tsx`: 时长字段位置、默认值和动态创建按钮文案测试。
 - `apps/control-plane/src/app/globals.css`: 邀请码表格、状态标签和移动端可读样式。
 - `apps/control-plane/.env.example`、`apps/control-plane/src/lib/deployment-contract.test.ts`: 增加并锁定 server-only pepper 环境契约。
 - `docs/engineering-journal/2026-07-28-user-invite-duration-and-mask.md`、`docs/project-status.md`: 记录范围、验证结果和部署前置条件。
@@ -81,7 +82,7 @@ public.record_failed_invite_redemption(p_source_hash text, p_now timestamptz)
 
 - [ ] **Step 2: 运行新测试，确认它失败。**
 
-  Run: `SUPABASE_DISABLE_TELEMETRY=1 supabase test db --file supabase/tests/021_user_invite_duration_and_mask.sql`
+  Run: `SUPABASE_DISABLE_TELEMETRY=1 supabase test db supabase/tests/021_user_invite_duration_and_mask.sql`
 
   Expected: FAIL，因为新增列、表和 RPC 尚不存在；不得通过删减断言使其通过。
 
@@ -97,7 +98,7 @@ public.record_failed_invite_redemption(p_source_hash text, p_now timestamptz)
 
   ```bash
   SUPABASE_DISABLE_TELEMETRY=1 supabase db reset
-  SUPABASE_DISABLE_TELEMETRY=1 supabase test db --file supabase/tests/021_user_invite_duration_and_mask.sql
+  SUPABASE_DISABLE_TELEMETRY=1 supabase test db supabase/tests/021_user_invite_duration_and_mask.sql
   SUPABASE_DISABLE_TELEMETRY=1 supabase test db
   ```
 
@@ -197,6 +198,7 @@ export async function listRecentUserInvites(limit?: number): Promise<RecentUserI
 - Modify: `apps/control-plane/src/components/admin/UserInviteForm.tsx`
 - Create: `apps/control-plane/src/components/admin/UserInviteList.tsx`
 - Create: `apps/control-plane/src/components/admin/user-invite-list.test.tsx`
+- Create: `apps/control-plane/src/components/admin/user-invite-form.test.tsx`
 - Modify: `apps/control-plane/src/app/globals.css`
 
 **Interfaces:**
@@ -298,3 +300,10 @@ export function inviteDisplayState(invite: UserInviteListItem, now: Date):
 - Spec coverage: Task 1 covers nullable historical metadata, status source fields and atomic source-HMAC throttling; Task 2 covers 8 位生成、掩码、同一生成基准、HMAC、旧码/Worker 兼容；Task 3 covers exact管理员 API、统一兑换错误、刷新列表、倒计时与访问控制；Task 4 covers全部验证、秘密配置审计与脱敏记录。
 - Placeholder scan: 没有未选择的存储方案或笼统错误处理描述；限流计数、窗口、封锁时长、DTO 和文件路径均已固定。
 - Type consistency: `UserInviteCode` 由 Task 2 产生并只给管理员 POST 成功响应使用；`RecentUserInvite` 经 Task 3 的 snake_case DTO 转入 `UserInviteList`；`INVITE_CODE_PEPPER` 只由 server-side invite-code 模块读取，Worker 路径继续调用 legacy hash。
+
+## Execution Record
+
+- [x] Task 1: 完成数据库字段、有效期校验、掩码存储和失败尝试限流迁移，并通过 18 项 focused pgTAP 与完整 315 项数据库测试。
+- [x] Task 2: 完成邀请码生成、HMAC 存储/兑换、Worker 长随机码兼容、管理员 API 和部署环境契约。
+- [x] Task 3: 完成管理员表单、掩码列表、有效期倒计时和刷新后重新加载，并通过 165 项控制台测试、lint 和 build。
+- [x] Task 4: 已记录完整验证、本地网页验收、生产迁移、Vercel 正式部署和生产页面冒烟检查。

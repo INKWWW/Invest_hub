@@ -9,6 +9,9 @@ export async function createInviteRecord(input: {
   purpose?: "user" | "worker";
   expiresAt: string;
   createdBy: string;
+  codeMask?: string;
+  validityHours?: number;
+  createdAt?: string;
 }) {
   const db = createSupabaseAdminClient();
   const row: InviteInsert = {
@@ -17,8 +20,23 @@ export async function createInviteRecord(input: {
     purpose: input.purpose ?? "user",
     expires_at: input.expiresAt,
     created_by: input.createdBy,
+    ...(input.codeMask === undefined ? {} : { code_mask: input.codeMask }),
+    ...(input.validityHours === undefined ? {} : { validity_hours: input.validityHours }),
+    ...(input.createdAt === undefined ? {} : { created_at: input.createdAt }),
   };
   const { data, error } = await db.from("invites").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listRecentUserInviteRecords(limit = 20) {
+  const db = createSupabaseAdminClient();
+  const { data, error } = await db
+    .from("invites")
+    .select("code_mask, validity_hours, created_at, expires_at, consumed_at")
+    .eq("purpose", "user")
+    .order("created_at", { ascending: false })
+    .limit(limit);
   if (error) throw error;
   return data;
 }

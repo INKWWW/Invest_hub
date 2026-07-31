@@ -5,6 +5,10 @@ const authMocks = vi.hoisted(() => ({
 }));
 const inviteMocks = vi.hoisted(() => ({
   createOneTimeInvite: vi.fn(),
+  createOneTimeUserInvite: vi.fn(),
+  createOneTimeWorkerInvite: vi.fn(),
+  listRecentUserInvites: vi.fn(),
+  redeemInviteAccount: vi.fn(),
   hashInviteCode: vi.fn((code: string) => `hash:${code}`),
   consumeInvite: vi.fn(),
   consumeWorkerInvite: vi.fn(),
@@ -88,7 +92,7 @@ vi.mock("../../lib/db/repositories/x-sources", () => xSourceMocks);
 vi.mock("../../lib/db/repositories/rules", () => ruleMocks);
 vi.mock("../../lib/db/repositories/reader", () => readerMocks);
 
-import { POST as postAdminInvite } from "./admin/invites/route";
+import { GET as getAdminInvites, POST as postAdminInvite } from "./admin/invites/route";
 import { POST as postLogin } from "./auth/login/route";
 import { POST as postLogout } from "./auth/logout/route";
 import { POST as postEnrol } from "./worker/enrol/route";
@@ -116,6 +120,7 @@ import { POST as postResolveAuthorProfiles } from "./worker/tasks/[taskId]/resol
 import { POST as postResolveXIdentity } from "./worker/x-sources/[sourceId]/resolve-identity/route";
 import { DELETE as deleteXSource } from "./admin/x/sources/[sourceId]/route";
 import { POST as postAdminXSource } from "./admin/x/sources/route";
+import { POST as postAuthInvite } from "./auth/invite/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}, method = "POST") {
   return new Request(`http://localhost${path}`, {
@@ -189,6 +194,7 @@ const validPersistencePayload = {
 describe("v0 control-plane API authorization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("INVITE_CODE_PEPPER", "fixture-invite-pepper");
     authMocks.getCurrentUser.mockResolvedValue({ id: "user-1", role: "user", email: "user@example.invalid" });
     workerMocks.authenticateWorker.mockResolvedValue(null);
   });
@@ -337,6 +343,7 @@ describe("v0 control-plane API authorization", () => {
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden" });
     expect(inviteMocks.createOneTimeInvite).not.toHaveBeenCalled();
+    expect(inviteMocks.createOneTimeUserInvite).not.toHaveBeenCalled();
   });
 
   it("blocks ordinary users from admin task detail without reading evidence", async () => {
@@ -741,9 +748,99 @@ describe("v0 control-plane API authorization", () => {
     expect(xSourceMocks.removeXSource).not.toHaveBeenCalled();
   });
 
-  it("returns a one-time invite code only to an admin", async () => {
+  it("creates a configurable eight-character user invite only for an admin", async () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
-    inviteMocks.createOneTimeInvite.mockResolvedValue({
+    inviteMocks.createOneTimeUserInvite.mockResolvedValue({
+      inviteId: "invite-user-1",
+      code: "Ab3xYz91",
+      purpose: "user",
+      expiresAt: "2099-01-01T02:00:00.000Z",
+      validityHours: 2,
+      codeMask: "Ab••••91",
+    });
+
+    const response = await postAdminInvite(
+      jsonRequest("/api/admin/invites", { purpose: "user", expires_in_hours: 2 }),
+    );
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      invite_id: "invite-user-1",
+      code: "Ab3xYz91",
+      purpose: "user",
+      expires_at: "2099-01-01T02:00:00.000Z",
+    });
+    expect(inviteMocks.createOneTimeUserInvite).toHaveBeenCalledWith(expect.objectContaining({
+      role: "user",
+      createdBy: "admin-1",
+      expiresInHours: 2,
+    }));
+  });
+
+  it.each([
+    { purpose: "user", expires_in_hours: 0 },
+    { purpose: "user", expires_in_hours: 1.5 },
+    { purpose: "user", expires_in_hours: 169 },
+    { purpose: "user", expires_in_hours: 2, unexpected: true },
+  ])("rejects invalid user invite creation parameters", async (body) => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+
+    const response = await postAdminInvite(jsonRequest("/api/admin/invites", body));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_invite_parameters" });
+    expect(inviteMocks.createOneTimeUserInvite).not.toHaveBeenCalled();
+  });
+
+  it("returns only safe recent user invite metadata to an admin", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    inviteMocks.listRecentUserInvites.mockResolvedValue([{
+      codeMask: "Ab••••91",
+      validityHours: 2,
+      createdAt: "2099-01-01T00:00:00.000Z",
+      expiresAt: "2099-01-01T02:00:00.000Z",
+      consumedAt: null,
+    }]);
+
+    const response = await getAdminInvites(new Request("http://localhost/api/admin/invites"));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ invites: [{
+      code_mask: "Ab••••91",
+      validity_hours: 2,
+      created_at: "2099-01-01T00:00:00.000Z",
+      expires_at: "2099-01-01T02:00:00.000Z",
+      consumed_at: null,
+    }] });
+    expect(body).not.toHaveProperty("code");
+    expect(body).not.toHaveProperty("code_hash");
+  });
+
+  it("blocks ordinary users from reading the invite list", async () => {
+    const response = await getAdminInvites(new Request("http://localhost/api/admin/invites"));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "forbidden" });
+    expect(inviteMocks.listRecentUserInvites).not.toHaveBeenCalled();
+  });
+
+  it("returns one generic error for any failed invite redemption", async () => {
+    inviteMocks.redeemInviteAccount.mockResolvedValue({ ok: false, error: "invite_replayed" });
+
+    const response = await postAuthInvite(jsonRequest("/api/auth/invite", {
+      code: "wrong-code",
+      email: "person@example.invalid",
+      password: "password-123",
+    }, { "x-forwarded-for": "192.0.2.10" }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_invite" });
+    expect(inviteMocks.redeemInviteAccount).toHaveBeenCalledWith(expect.objectContaining({
+      code: "wrong-code",
+      sourceHash: expect.any(String),
+    }));
+  });
+
+  it("returns a one-time Worker invite code only to an admin", async () => {
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    inviteMocks.createOneTimeWorkerInvite.mockResolvedValue({
       inviteId: "invite-1",
       code: "one-time-code",
       purpose: "worker",
@@ -757,6 +854,7 @@ describe("v0 control-plane API authorization", () => {
     const body = await response.json();
     expect(body).toMatchObject({ invite_id: "invite-1", code: "one-time-code", purpose: "worker" });
     expect(body).not.toHaveProperty("code_hash");
+    expect(inviteMocks.createOneTimeInvite).not.toHaveBeenCalled();
   });
 
   it("consumes a worker enrolment code once and rejects replay", async () => {
