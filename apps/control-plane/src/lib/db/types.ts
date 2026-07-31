@@ -173,6 +173,7 @@ export interface Database {
           capture_range: Json | null;
           author_profile_snapshot: Json;
           x_source_snapshot: Json | null;
+          collection_batch_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -192,6 +193,7 @@ export interface Database {
           capture_range?: Json | null;
           author_profile_snapshot?: Json;
           x_source_snapshot?: Json | null;
+          collection_batch_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -686,6 +688,108 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["x_daily_viewpoint_segments"]["Insert"]>;
         Relationships: [];
       };
+      x_collection_batches: {
+        Row: {
+          id: string;
+          scheduled_window_key: string;
+          natural_date: string;
+          cutoff_at: string;
+          settlement_deadline_at: string;
+          status: "collecting" | "judgement_pending" | "judgement_failed" | "succeeded";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          scheduled_window_key: string;
+          natural_date: string;
+          cutoff_at: string;
+          settlement_deadline_at: string;
+          status?: "collecting" | "judgement_pending" | "judgement_failed" | "succeeded";
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_collection_batches"]["Insert"]>;
+        Relationships: [];
+      };
+      x_collection_batch_sources: {
+        Row: {
+          batch_id: string;
+          source_id: string;
+          source_display_name: string;
+          x_sync_task_id: string | null;
+          settlement_status: "pending" | "included" | "no_new_information" | "excluded";
+          exclusion_code: string | null;
+          settled_at: string | null;
+        };
+        Insert: {
+          batch_id: string;
+          source_id: string;
+          source_display_name: string;
+          x_sync_task_id?: string | null;
+          settlement_status?: "pending" | "included" | "no_new_information" | "excluded";
+          exclusion_code?: string | null;
+          settled_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_collection_batch_sources"]["Insert"]>;
+        Relationships: [];
+      };
+      x_daily_judgement_runs: {
+        Row: {
+          id: string;
+          batch_id: string;
+          status: "queued" | "leased" | "running" | "succeeded" | "retryable_failed" | "failed";
+          attempt: number;
+          lease_owner: string | null;
+          lease_expires_at: string | null;
+          available_at: string;
+          failure_class: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          batch_id: string;
+          status?: "queued" | "leased" | "running" | "succeeded" | "retryable_failed" | "failed";
+          attempt?: number;
+          lease_owner?: string | null;
+          lease_expires_at?: string | null;
+          available_at?: string;
+          failure_class?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_daily_judgement_runs"]["Insert"]>;
+        Relationships: [];
+      };
+      x_daily_judgement_versions: {
+        Row: {
+          id: string;
+          batch_id: string;
+          revision: number;
+          coverage_status: "complete" | "partial" | "no_new_information";
+          input_snapshot: Json;
+          output: Json;
+          provider: "codex_cli" | "mock";
+          model_reported: string | null;
+          prompt_version: string;
+          schema_version: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          batch_id: string;
+          revision: number;
+          coverage_status: "complete" | "partial" | "no_new_information";
+          input_snapshot: Json;
+          output: Json;
+          provider: "codex_cli" | "mock";
+          model_reported?: string | null;
+          prompt_version: string;
+          schema_version: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_daily_judgement_versions"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Enums: Record<string, never>;
@@ -817,6 +921,22 @@ export interface Database {
       };
       enqueue_due_x_tasks: {
         Args: { p_worker_id: string; p_now: string };
+        Returns: Json;
+      };
+      ensure_due_x_collection_batches: {
+        Args: { p_worker_id: string; p_now: string };
+        Returns: Json;
+      };
+      settle_x_collection_batch: {
+        Args: { p_batch_id: string; p_now: string };
+        Returns: Json;
+      };
+      claim_next_x_daily_judgement: {
+        Args: { p_worker_id: string; p_now: string };
+        Returns: Json | null;
+      };
+      complete_x_daily_judgement: {
+        Args: { p_run_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
         Returns: Json;
       };
       get_window_daily_fact_context: {

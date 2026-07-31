@@ -1,6 +1,6 @@
 begin;
 
-select plan(5);
+select plan(6);
 
 insert into public.workers (id, name, device_secret_hash, status)
 values ('00000000-0000-0000-0000-000000023001', 'terminal-failure-scheduler-worker', 'terminal-failure-scheduler-hash', 'online');
@@ -31,22 +31,27 @@ set status = 'failed'
 where id = (select (payload->>'id')::uuid from terminal_failure_task);
 
 create temporary table due_tick as
-select public.enqueue_due_x_tasks('00000000-0000-0000-0000-000000023001', '2026-07-24T04:01:00Z') as payload;
+select public.ensure_due_x_collection_batches('00000000-0000-0000-0000-000000023001', '2026-07-24T04:01:00Z') as payload;
 
 select is(
-  (select jsonb_array_length(payload->'tasks')::text from due_tick),
+  (select jsonb_array_length(payload->'batches')::text from due_tick),
   '1',
-  'a terminal failed X source is deferred while a healthy source is scheduled'
+  'a terminal failed X source and a healthy source still form one scheduled batch'
 );
 select is(
-  (select payload->'tasks'->0->>'source_id' from due_tick),
-  '00000000-0000-0000-0000-000000023012',
-  'the healthy source remains independently schedulable'
+  (select count(*)::text from public.x_collection_batch_sources),
+  '2',
+  'the batch freezes both the terminal source and the healthy source for partial settlement'
 );
 select is(
-  (select jsonb_array_length(payload->'deferred_source_ids')::text from due_tick),
-  '1',
-  'the terminal failed source is explicitly reported as deferred'
+  (select x_sync_task_id::text from public.x_collection_batch_sources where source_id = '00000000-0000-0000-0000-000000023011'),
+  (select id::text from public.sync_tasks where source_id = '00000000-0000-0000-0000-000000023011'),
+  'the terminal task is retained as the frozen source audit task'
+);
+select is(
+  (select collection_batch_id is not null from public.sync_tasks where source_id = '00000000-0000-0000-0000-000000023012')::text,
+  'true',
+  'the healthy source remains independently scheduled and linked to its batch'
 );
 select is(
   (select count(*)::text from public.sync_tasks where source_id = '00000000-0000-0000-0000-000000023011'),
