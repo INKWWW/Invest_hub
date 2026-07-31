@@ -1,12 +1,59 @@
 begin;
 
-select plan(37);
+select plan(41);
 
 select has_function(
   'public',
   'x_collection_batch_logical_date',
   array['timestamp with time zone'],
   'batch logical dates are derived by one database authority'
+);
+
+select has_function(
+  'public',
+  'lock_and_assert_x_collection_batch_identity_migration_safe',
+  array[]::text[],
+  'migration identity preflight is guarded by one lock-order authority'
+);
+select ok(
+  coalesce((
+    select
+      position('lock table public.x_collection_batches in access exclusive mode' in definition) > 0
+      and position('lock table public.x_collection_batches in access exclusive mode' in definition)
+        < position('lock table public.x_collection_batch_sources in access exclusive mode' in definition)
+      and position('lock table public.x_collection_batch_sources in access exclusive mode' in definition)
+        < position('lock table public.x_daily_judgement_runs in access exclusive mode' in definition)
+      and position('lock table public.x_daily_judgement_runs in access exclusive mode' in definition)
+        < position('lock table public.x_daily_judgement_versions in access exclusive mode' in definition)
+      and position('lock table public.x_daily_judgement_versions in access exclusive mode' in definition)
+        < position('perform public.assert_x_collection_batch_identity_migration_safe()' in definition)
+    from (
+      select lower(pg_get_functiondef(
+        to_regprocedure('public.lock_and_assert_x_collection_batch_identity_migration_safe()')
+      )) as definition
+    ) migration_lock_source
+  ), false),
+  'all four ACCESS EXCLUSIVE locks are acquired in fixed order before legacy preflight'
+);
+select lives_ok(
+  $$select public.lock_and_assert_x_collection_batch_identity_migration_safe()$$,
+  'the migration lock authority can acquire all four table locks before preflight'
+);
+select is(
+  (select count(distinct relation)::text
+   from pg_locks
+   where pid = pg_backend_pid()
+     and locktype = 'relation'
+     and mode = 'AccessExclusiveLock'
+     and granted
+     and relation in (
+       'public.x_collection_batches'::regclass,
+       'public.x_collection_batch_sources'::regclass,
+       'public.x_daily_judgement_runs'::regclass,
+       'public.x_daily_judgement_versions'::regclass
+     )),
+  '4',
+  'the lock authority holds all protected legacy identity tables for the transaction'
 );
 
 insert into public.workers (id, name, device_secret_hash, status, capabilities)

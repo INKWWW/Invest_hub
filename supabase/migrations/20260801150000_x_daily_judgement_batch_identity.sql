@@ -55,7 +55,26 @@ begin
 end;
 $$;
 
-select public.assert_x_collection_batch_identity_migration_safe();
+-- Hold the strongest table locks for the remainder of the migration
+-- transaction.  The fixed order is part of the migration authority: no
+-- settlement or judgement DML may commit between the legacy identity read and
+-- the natural-date correction below.
+create function public.lock_and_assert_x_collection_batch_identity_migration_safe()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  lock table public.x_collection_batches in access exclusive mode;
+  lock table public.x_collection_batch_sources in access exclusive mode;
+  lock table public.x_daily_judgement_runs in access exclusive mode;
+  lock table public.x_daily_judgement_versions in access exclusive mode;
+  perform public.assert_x_collection_batch_identity_migration_safe();
+end;
+$$;
+
+select public.lock_and_assert_x_collection_batch_identity_migration_safe();
 
 do $$
 declare
@@ -864,6 +883,7 @@ $$;
 revoke all on function public.x_collection_batch_logical_date(timestamptz) from public, anon, authenticated;
 grant execute on function public.x_collection_batch_logical_date(timestamptz) to service_role;
 revoke all on function public.assert_x_collection_batch_identity_migration_safe(),
+  public.lock_and_assert_x_collection_batch_identity_migration_safe(),
   public.build_x_daily_judgement_input_snapshot(uuid)
   from public, anon, authenticated;
 grant execute on function public.build_x_daily_judgement_input_snapshot(uuid)
