@@ -23,7 +23,7 @@
 
 ## Task 4：线上部署与验收
 
-- [ ] 使用 Supabase `apply_migration` 部署到生产项目 `invest-hub-v1`。
-- [ ] 只读确认 `enqueue_due_x_tasks` 已包含延后逻辑，并确认当前失败来源不再生成重复终态任务。
-- [ ] 重启本机 `com.investhub.x-worker`，观察其他来源继续领取/完成窗口。
-- [ ] 记录线上结果；若失败来源仍为 `opencli_contract`，保持来源级隔离，不把它解释为“博主没有更新”。
+- [x] 使用 Supabase `apply_migration` 部署到生产项目 `invest-hub-v1`（远端版本 `20260731084640`）。
+- [x] 只读确认 `enqueue_due_x_tasks` 已包含延后逻辑；部署后没有新增相同窗口的终态失败任务。
+- [x] 重启本机 `com.investhub.x-worker`；连续两个 tick 报告 1 个延后来源、5 个正常调度来源。
+- [x] 记录线上结果；`硅谷居士` 仍保留 `opencli_contract` 失败审计并被来源级隔离，不解释为“博主没有更新”。
