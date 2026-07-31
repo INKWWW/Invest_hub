@@ -186,6 +186,92 @@ begin
 end;
 $$;
 
+create or replace function public.validate_x_daily_judgement_input_snapshot(p_snapshot jsonb)
+returns void
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_source jsonb;
+  v_segment jsonb;
+  v_analysis jsonb;
+begin
+  if jsonb_typeof(p_snapshot) <> 'object'
+     or (p_snapshot - 'sources') <> '{}'::jsonb
+     or jsonb_typeof(p_snapshot->'sources') <> 'array' then
+    raise exception 'invalid_x_daily_judgement_snapshot' using errcode = '22023';
+  end if;
+  for v_source in select value from jsonb_array_elements(p_snapshot->'sources') loop
+    if jsonb_typeof(v_source) <> 'object'
+       or (v_source - 'source_id' - 'display_name' - 'settlement_status' - 'segments') <> '{}'::jsonb
+       or jsonb_typeof(v_source->'source_id') <> 'string'
+       or jsonb_typeof(v_source->'display_name') <> 'string'
+       or v_source->>'settlement_status' not in ('included', 'no_new_information', 'excluded')
+       or jsonb_typeof(v_source->'segments') <> 'array' then
+      raise exception 'invalid_x_daily_judgement_snapshot' using errcode = '22023';
+    end if;
+    for v_segment in select value from jsonb_array_elements(v_source->'segments') loop
+      if jsonb_typeof(v_segment) <> 'object'
+         or (v_segment - 'segment_id' - 'analysis_ids' - 'evidence_post_ids') <> '{}'::jsonb
+         or jsonb_typeof(v_segment->'segment_id') <> 'string'
+         or jsonb_typeof(v_segment->'analysis_ids') <> 'array'
+         or jsonb_typeof(v_segment->'evidence_post_ids') <> 'array'
+         or exists (select 1 from jsonb_array_elements(v_segment->'evidence_post_ids') value where jsonb_typeof(value) <> 'string') then
+        raise exception 'invalid_x_daily_judgement_snapshot' using errcode = '22023';
+      end if;
+      for v_analysis in select value from jsonb_array_elements(v_segment->'analysis_ids') loop
+        if jsonb_typeof(v_analysis) <> 'object'
+           or (v_analysis - 'post_id' - 'analysis_version') <> '{}'::jsonb
+           or jsonb_typeof(v_analysis->'post_id') <> 'string'
+           or jsonb_typeof(v_analysis->'analysis_version') <> 'number' then
+          raise exception 'invalid_x_daily_judgement_snapshot' using errcode = '22023';
+        end if;
+      end loop;
+    end loop;
+  end loop;
+end;
+$$;
+
+create or replace function public.validate_x_daily_judgement_output(p_output jsonb)
+returns void
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_item jsonb;
+begin
+  if jsonb_typeof(p_output) <> 'object'
+     or (p_output - 'stock_viewpoints' - 'market_industry_viewpoints' - 'uncertainties') <> '{}'::jsonb
+     or jsonb_typeof(p_output->'stock_viewpoints') <> 'array'
+     or jsonb_typeof(p_output->'market_industry_viewpoints') <> 'array'
+     or jsonb_typeof(p_output->'uncertainties') <> 'array'
+     or exists (select 1 from jsonb_array_elements(p_output->'uncertainties') value where jsonb_typeof(value) <> 'string') then
+    raise exception 'invalid_x_daily_judgement_output' using errcode = '22023';
+  end if;
+  for v_item in
+    select value from jsonb_array_elements(p_output->'stock_viewpoints')
+    union all
+    select value from jsonb_array_elements(p_output->'market_industry_viewpoints')
+  loop
+    if jsonb_typeof(v_item) <> 'object'
+       or (v_item - 'statement' - 'supporting_source_ids' - 'dissenting_source_ids' - 'analysis_ids' - 'evidence_post_ids' - 'uncertainties') <> '{}'::jsonb
+       or jsonb_typeof(v_item->'statement') <> 'string'
+       or jsonb_typeof(v_item->'supporting_source_ids') <> 'array'
+       or jsonb_typeof(v_item->'dissenting_source_ids') <> 'array'
+       or jsonb_typeof(v_item->'analysis_ids') <> 'array'
+       or jsonb_typeof(v_item->'evidence_post_ids') <> 'array'
+       or jsonb_typeof(v_item->'uncertainties') <> 'array'
+       or exists (select 1 from jsonb_array_elements(v_item->'supporting_source_ids') value where jsonb_typeof(value) <> 'string')
+       or exists (select 1 from jsonb_array_elements(v_item->'dissenting_source_ids') value where jsonb_typeof(value) <> 'string')
+       or exists (select 1 from jsonb_array_elements(v_item->'analysis_ids') value where jsonb_typeof(value) <> 'string')
+       or exists (select 1 from jsonb_array_elements(v_item->'evidence_post_ids') value where jsonb_typeof(value) <> 'string')
+       or exists (select 1 from jsonb_array_elements(v_item->'uncertainties') value where jsonb_typeof(value) <> 'string') then
+      raise exception 'invalid_x_daily_judgement_output' using errcode = '22023';
+    end if;
+  end loop;
+end;
+$$;
+
 create or replace function public.enforce_x_daily_judgement_version()
 returns trigger
 language plpgsql
@@ -201,12 +287,8 @@ begin
   if new.revision <> v_expected_revision then
     raise exception 'invalid_x_daily_judgement_revision' using errcode = '23514';
   end if;
-  if jsonb_typeof(new.input_snapshot) <> 'object'
-     or (new.input_snapshot - 'sources') <> '{}'::jsonb
-     or jsonb_typeof(new.input_snapshot->'sources') <> 'array'
-     or jsonb_typeof(new.output) <> 'object' then
-    raise exception 'invalid_x_daily_judgement_evidence' using errcode = '22023';
-  end if;
+  perform public.validate_x_daily_judgement_input_snapshot(new.input_snapshot);
+  perform public.validate_x_daily_judgement_output(new.output);
   if new.coverage_status = 'complete' and jsonb_array_length(new.input_snapshot->'sources') = 0 then
     raise exception 'invalid_x_daily_judgement_evidence' using errcode = '22023';
   end if;
@@ -345,6 +427,21 @@ begin
         select source_id, x_sync_task_id from public.x_collection_batch_sources
         where batch_id = v_batch.id order by source_id
       loop
+        if exists (
+          select 1 from public.sync_tasks task
+          where task.source_id = v_source.source_id and task.task_type = 'x_sync'
+            and task.status in ('queued', 'leased', 'running', 'retryable_failed')
+            and (
+              task.collection_scope->>'mode' <> 'window'
+              or task.capture_range->>'trigger' <> 'scheduled'
+              or task.capture_range->>'scheduled_window_key' <> v_batch.scheduled_window_key
+            )
+        ) then
+          update public.x_collection_batch_sources
+          set settlement_status = 'excluded', exclusion_code = 'collection_conflict', settled_at = p_now
+          where batch_id = v_batch.id and source_id = v_source.source_id;
+          continue;
+        end if;
         select to_jsonb(task) || jsonb_build_object('idempotent', true) into v_task
         from public.sync_tasks task
         join public.source_collection_coverage coverage on coverage.source_id = task.source_id
@@ -352,6 +449,8 @@ begin
           and task.collection_scope->>'mode' = 'window' and task.status = 'failed'
           and (task.capture_range->>'start_at')::timestamptz = coverage.coverage_through_at
           and (task.capture_range->>'end_at')::timestamptz = v_window.end_at
+          and task.capture_range->>'trigger' = 'scheduled'
+          and task.capture_range->>'scheduled_window_key' = v_batch.scheduled_window_key
         order by task.queued_at, task.id limit 1;
         if v_task is null then
           select public.create_windowed_x_sync_task(
@@ -587,13 +686,8 @@ set lock_timeout = '5s'
 as $$
 declare
   v_result jsonb;
-  v_batch_id uuid;
 begin
   v_result := public.complete_windowed_capture_range_v2_x_core(p_task_id, p_attempt, p_worker_id, p_payload);
-  select collection_batch_id into v_batch_id from public.sync_tasks where id = p_task_id;
-  if v_batch_id is not null then
-    perform public.settle_x_collection_batch(v_batch_id, timezone('utc', now()));
-  end if;
   return v_result;
 exception
   when sqlstate '40001' then
