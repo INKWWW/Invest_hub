@@ -1,11 +1,16 @@
 begin;
 
-select plan(9);
+select plan(17);
 
 select is(
   (position('settle_x_collection_batch' in pg_get_functiondef('public.complete_windowed_capture_range(uuid, integer, uuid, jsonb)'::regprocedure)) = 0)::text,
   'true',
   'dual-source range completions cannot enter judgement settlement while holding independent source locks'
+);
+select is(
+  (position('dispatch_due_x_collection_batch_settlements' in pg_get_functiondef('public.ensure_due_x_collection_batches(uuid, timestamptz)'::regprocedure)) > 0)::text,
+  'true',
+  'the independent post-commit scheduler dispatches already-committed batch settlement'
 );
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
@@ -18,7 +23,24 @@ values ('00000000-0000-0000-0000-000000025002', 'task1-regression-worker', 'task
 insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)
 values
   ('00000000-0000-0000-0000-000000025011', '2026-07-27T08:00+08:00', '2026-07-27', '2026-07-27T00:00:00Z', '2026-07-27T02:00:00Z', 'collecting'),
-  ('00000000-0000-0000-0000-000000025012', '2026-07-27T12:00+08:00', '2026-07-27', '2026-07-27T04:00:00Z', '2026-07-27T06:00:00Z', 'collecting');
+  ('00000000-0000-0000-0000-000000025012', '2026-07-27T12:00+08:00', '2026-07-27', '2026-07-27T04:00:00Z', '2026-07-27T06:00:00Z', 'collecting'),
+  ('00000000-0000-0000-0000-000000025014', '2026-07-27T16:00+08:00', '2026-07-27', '2026-07-27T08:00:00Z', '2026-07-27T10:00:00Z', 'collecting'),
+  ('00000000-0000-0000-0000-000000025015', '2026-07-27T20:00+08:00', '2026-07-27', '2026-07-27T12:00:00Z', '2026-07-27T14:00:00Z', 'collecting');
+
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+    values ('00000000-0000-0000-0000-000000025014', 1, 'no_new_information',
+      '{"sources":[{"source_id":"00000000-0000-0000-0000-000000025021","display_name":"Safe","settlement_status":"included"}]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb, 'codex_cli','v2-x-cross-blogger-1','v2-x-cross-blogger')$$,
+  '22023', 'invalid_x_daily_judgement_snapshot', 'missing snapshot segment fields are rejected'
+);
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+    values ('00000000-0000-0000-0000-000000025015', 1, 'no_new_information',
+      '{"sources":[{"source_id":"/tmp/path-disguised-as-identity","display_name":"Safe","settlement_status":"included","segments":[]}]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb, 'codex_cli','v2-x-cross-blogger-1','v2-x-cross-blogger')$$,
+  '22023', 'invalid_x_daily_judgement_snapshot', 'path-disguised-as-source identity is rejected'
+);
 
 select throws_ok(
   $$insert into public.x_daily_judgement_versions
@@ -105,8 +127,42 @@ insert into public.x_collection_batch_sources (batch_id, source_id, source_displ
 values ('00000000-0000-0000-0000-000000025013', '00000000-0000-0000-0000-000000025021', 'Regression source', '00000000-0000-0000-0000-000000025033', 'included', '2026-07-26T08:01:00Z');
 insert into public.x_daily_viewpoint_segments (id, source_id, natural_date, range_task_id, segment_version, occurred_from_at, occurred_through_at, window_viewpoints, post_analysis_refs, evidence_refs)
 values ('00000000-0000-0000-0000-000000025041', '00000000-0000-0000-0000-000000025021', '2026-07-26', '00000000-0000-0000-0000-000000025033', 1, '2026-07-26T04:00:00Z', '2026-07-26T04:00:00Z', '[]'::jsonb, '[{"post_id":"safe-post","analysis_version":1}]'::jsonb, '["safe-post"]'::jsonb);
-insert into public.x_daily_judgement_runs (id, batch_id, status, attempt, lease_owner, lease_expires_at)
-values ('00000000-0000-0000-0000-000000025051', '00000000-0000-0000-0000-000000025013', 'leased', 1, '00000000-0000-0000-0000-000000025002', '2026-07-26T08:11:00Z');
+
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+    values ('00000000-0000-0000-0000-000000025013', 1, 'complete',
+      '{"sources":[{"source_id":"00000000-0000-0000-0000-000000025024","display_name":"Regression source","settlement_status":"included","segments":[{"segment_id":"00000000-0000-0000-0000-000000025041","analysis_ids":[{"post_id":"safe-post","analysis_version":1}],"evidence_post_ids":["safe-post"]}]}]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb, 'codex_cli','v2-x-cross-blogger-1','v2-x-cross-blogger')$$,
+  '22023', 'invalid_x_daily_judgement_snapshot', 'a UUID-shaped source from outside the frozen batch is rejected'
+);
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+    values ('00000000-0000-0000-0000-000000025013', 1, 'complete',
+      '{"sources":[{"source_id":"00000000-0000-0000-0000-000000025021","display_name":"Regression source","settlement_status":"included","segments":[{"segment_id":"00000000-0000-0000-0000-000000025042","analysis_ids":[{"post_id":"safe-post","analysis_version":1}],"evidence_post_ids":["safe-post"]}]}]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb, 'codex_cli','v2-x-cross-blogger-1','v2-x-cross-blogger')$$,
+  '22023', 'invalid_x_daily_judgement_snapshot', 'a UUID-shaped segment outside the frozen range task is rejected'
+);
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+    values ('00000000-0000-0000-0000-000000025013', 1, 'complete',
+      '{"sources":[{"source_id":"00000000-0000-0000-0000-000000025021","display_name":"Regression source","settlement_status":"included","segments":[{"segment_id":"00000000-0000-0000-0000-000000025041","analysis_ids":[{"post_id":"forged-post","analysis_version":1}],"evidence_post_ids":["forged-post"]}]}]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb, 'codex_cli','v2-x-cross-blogger-1','v2-x-cross-blogger')$$,
+  '22023', 'invalid_x_daily_judgement_snapshot', 'forged analysis and post identities are rejected even when their JSON shape is valid'
+);
+
+select lives_ok(
+  $$select public.dispatch_due_x_collection_batch_settlements('2026-07-26T08:01:00Z')$$,
+  'a later independent dispatcher settles a committed successful source'
+);
+select is(
+  (select count(*)::text from public.x_daily_judgement_runs where batch_id = '00000000-0000-0000-0000-000000025013' and status = 'queued'),
+  '1',
+  'post-commit settlement reaches a queued judgement run'
+);
+update public.x_daily_judgement_runs
+set id = '00000000-0000-0000-0000-000000025051', status = 'leased', attempt = 1,
+    lease_owner = '00000000-0000-0000-0000-000000025002', lease_expires_at = '2026-07-26T08:11:00Z'
+where batch_id = '00000000-0000-0000-0000-000000025013' and status = 'queued';
 select throws_ok(
   $$select public.complete_x_daily_judgement('00000000-0000-0000-0000-000000025051', 1, '00000000-0000-0000-0000-000000025002',
     '{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[{"statement":"safe","supporting_source_ids":["00000000-0000-0000-0000-000000025021"],"dissenting_source_ids":[],"analysis_ids":["safe-post@1"],"evidence_post_ids":["safe-post"],"uncertainties":[],"raw_x_content":"must-not-persist"}],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb)$$,

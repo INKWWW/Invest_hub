@@ -288,10 +288,10 @@ begin
     raise exception 'invalid_x_daily_judgement_revision' using errcode = '23514';
   end if;
   perform public.validate_x_daily_judgement_input_snapshot(new.input_snapshot);
-  perform public.validate_x_daily_judgement_output(new.output);
   if new.coverage_status = 'complete' and jsonb_array_length(new.input_snapshot->'sources') = 0 then
     raise exception 'invalid_x_daily_judgement_evidence' using errcode = '22023';
   end if;
+  perform public.validate_x_daily_judgement_output(new.output);
   select coalesce(array_agg(distinct value), '{}') into v_allowed_evidence
   from jsonb_path_query(new.input_snapshot, '$.sources[*].segments[*].evidence_post_ids[*]') as value_json(value_json)
   cross join lateral (select trim(both '"' from value_json::text) as value) safe;
