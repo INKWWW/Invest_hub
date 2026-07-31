@@ -1,0 +1,117 @@
+begin;
+
+select plan(9);
+
+select is(
+  (position('settle_x_collection_batch' in pg_get_functiondef('public.complete_windowed_capture_range(uuid, integer, uuid, jsonb)'::regprocedure)) = 0)::text,
+  'true',
+  'dual-source range completions cannot enter judgement settlement while holding independent source locks'
+);
+
+insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
+values ('00000000-0000-0000-0000-000000025001', 'authenticated', 'authenticated', 'task1-regression-admin@example.invalid', 'not-a-secret', now());
+insert into public.profiles (id, role, display_name)
+values ('00000000-0000-0000-0000-000000025001', 'admin', 'Task 1 regression admin');
+insert into public.workers (id, name, device_secret_hash, status)
+values ('00000000-0000-0000-0000-000000025002', 'task1-regression-worker', 'task1-regression-worker-hash', 'online');
+
+insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)
+values
+  ('00000000-0000-0000-0000-000000025011', '2026-07-27T08:00+08:00', '2026-07-27', '2026-07-27T00:00:00Z', '2026-07-27T02:00:00Z', 'collecting'),
+  ('00000000-0000-0000-0000-000000025012', '2026-07-27T12:00+08:00', '2026-07-27', '2026-07-27T04:00:00Z', '2026-07-27T06:00:00Z', 'collecting');
+
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions
+      (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+    values ('00000000-0000-0000-0000-000000025011', 1, 'no_new_information',
+      '{"sources":[]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[],"raw_x_content":"must-not-persist"}'::jsonb,
+      'codex_cli', 'v2-x-cross-blogger-1', 'v2-x-cross-blogger')$$,
+  '22023', 'invalid_x_daily_judgement_output', 'versions reject unknown raw-content output fields'
+);
+select throws_ok(
+  $$insert into public.x_daily_judgement_versions
+      (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+    values ('00000000-0000-0000-0000-000000025012', 1, 'no_new_information',
+      '{"sources":[{"source_id":"safe-source","display_name":"Safe","settlement_status":"no_new_information","segments":[],"local_evidence_path":"/private/secret"}]}'::jsonb,
+      '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb,
+      'codex_cli', 'v2-x-cross-blogger-1', 'v2-x-cross-blogger')$$,
+  '22023', 'invalid_x_daily_judgement_snapshot', 'versions reject nested local evidence paths in input snapshots'
+);
+
+insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
+values
+  ('00000000-0000-0000-0000-000000025021', 'task1-regression-source', 'x', 'Regression source', 'v2-task1-regression', '00000000-0000-0000-0000-000000025002'),
+  ('00000000-0000-0000-0000-000000025022', 'task1-active-manual', 'x', 'Active manual source', 'v2-task1-regression', '00000000-0000-0000-0000-000000025002'),
+  ('00000000-0000-0000-0000-000000025023', 'task1-terminal-manual', 'x', 'Terminal manual source', 'v2-task1-regression', '00000000-0000-0000-0000-000000025002');
+insert into public.x_source_profiles (source_id, requested_handle, account_id, display_name, resolution_status)
+values
+  ('00000000-0000-0000-0000-000000025021', 'regression_source', 'regression_source', 'Regression source', 'resolved'),
+  ('00000000-0000-0000-0000-000000025022', 'active_manual', 'active_manual', 'Active manual source', 'resolved'),
+  ('00000000-0000-0000-0000-000000025023', 'terminal_manual', 'terminal_manual', 'Terminal manual source', 'resolved');
+insert into public.source_collection_coverage (source_id, coverage_start_at, coverage_through_at)
+values
+  ('00000000-0000-0000-0000-000000025021', '2026-07-26T00:00:00+08:00', '2026-07-26T00:00:00+08:00'),
+  ('00000000-0000-0000-0000-000000025022', '2026-07-26T00:00:00+08:00', '2026-07-26T00:00:00+08:00'),
+  ('00000000-0000-0000-0000-000000025023', '2026-07-26T00:00:00+08:00', '2026-07-26T00:00:00+08:00');
+
+insert into public.sync_tasks (id, task_type, source_id, status, parameter_version, requested_by, collection_scope, capture_range, author_profile_snapshot, x_source_snapshot)
+values (
+  '00000000-0000-0000-0000-000000025031', 'x_sync', '00000000-0000-0000-0000-000000025022', 'queued', 'v2-task1-regression', '00000000-0000-0000-0000-000000025001',
+  '{"mode":"window"}'::jsonb,
+  '{"mode":"window","trigger":"manual","timezone":"Asia/Shanghai","start_at":"2026-07-25T16:00:00Z","end_at":"2026-07-26T00:00:00Z","scheduled_window_key":null,"overlap_start_at":"2026-07-25T16:00:00Z"}'::jsonb,
+  '[]'::jsonb, '{"source_type":"x","account_id":"active_manual","display_name":"Active manual source","parameter_version":"v2-task1-regression"}'::jsonb
+), (
+  '00000000-0000-0000-0000-000000025032', 'x_sync', '00000000-0000-0000-0000-000000025023', 'failed', 'v2-task1-regression', '00000000-0000-0000-0000-000000025001',
+  '{"mode":"window"}'::jsonb,
+  '{"mode":"window","trigger":"manual","timezone":"Asia/Shanghai","start_at":"2026-07-25T16:00:00Z","end_at":"2026-07-26T00:00:00Z","scheduled_window_key":null,"overlap_start_at":"2026-07-25T16:00:00Z"}'::jsonb,
+  '[]'::jsonb, '{"source_type":"x","account_id":"terminal_manual","display_name":"Terminal manual source","parameter_version":"v2-task1-regression"}'::jsonb
+);
+
+select lives_ok(
+  $$select public.ensure_due_x_collection_batches('00000000-0000-0000-0000-000000025002', '2026-07-26T00:01:00Z')$$,
+  'an active manual window does not make scheduled batch creation fail'
+);
+select is(
+  (select collection_batch_id::text from public.sync_tasks where id = '00000000-0000-0000-0000-000000025031'),
+  null,
+  'an active manual task remains unbound from a scheduled batch'
+);
+select is(
+  (select settlement_status from public.x_collection_batch_sources where source_id = '00000000-0000-0000-0000-000000025022'),
+  'excluded',
+  'an active manual conflict is safely excluded from its frozen batch'
+);
+select is(
+  (select collection_batch_id::text from public.sync_tasks where id = '00000000-0000-0000-0000-000000025032'),
+  null,
+  'a terminal manual task remains unbound from a scheduled batch'
+);
+select is(
+  (select count(*)::text from public.sync_tasks where source_id = '00000000-0000-0000-0000-000000025023' and capture_range->>'trigger' = 'scheduled'),
+  '1',
+  'a terminal manual task does not prevent creation of its scheduled task'
+);
+
+insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)
+values ('00000000-0000-0000-0000-000000025013', '2026-07-26T16:00+08:00', '2026-07-26', '2026-07-26T08:00:00Z', '2026-07-26T10:00:00Z', 'collecting');
+insert into public.sync_tasks (id, task_type, source_id, status, parameter_version, collection_scope, capture_range, author_profile_snapshot, x_source_snapshot, collection_batch_id)
+values ('00000000-0000-0000-0000-000000025033', 'x_sync', '00000000-0000-0000-0000-000000025021', 'succeeded', 'v2-task1-regression',
+  '{"mode":"window"}'::jsonb,
+  '{"mode":"window","trigger":"scheduled","timezone":"Asia/Shanghai","start_at":"2026-07-26T04:00:00Z","end_at":"2026-07-26T08:00:00Z","scheduled_window_key":"2026-07-26T16:00+08:00","overlap_start_at":"2026-07-26T04:00:00Z"}'::jsonb,
+  '[]'::jsonb, '{"source_type":"x","account_id":"regression_source","display_name":"Regression source","parameter_version":"v2-task1-regression"}'::jsonb,
+  '00000000-0000-0000-0000-000000025013');
+insert into public.x_collection_batch_sources (batch_id, source_id, source_display_name, x_sync_task_id, settlement_status, settled_at)
+values ('00000000-0000-0000-0000-000000025013', '00000000-0000-0000-0000-000000025021', 'Regression source', '00000000-0000-0000-0000-000000025033', 'included', '2026-07-26T08:01:00Z');
+insert into public.x_daily_viewpoint_segments (id, source_id, natural_date, range_task_id, segment_version, occurred_from_at, occurred_through_at, window_viewpoints, post_analysis_refs, evidence_refs)
+values ('00000000-0000-0000-0000-000000025041', '00000000-0000-0000-0000-000000025021', '2026-07-26', '00000000-0000-0000-0000-000000025033', 1, '2026-07-26T04:00:00Z', '2026-07-26T04:00:00Z', '[]'::jsonb, '[{"post_id":"safe-post","analysis_version":1}]'::jsonb, '["safe-post"]'::jsonb);
+insert into public.x_daily_judgement_runs (id, batch_id, status, attempt, lease_owner, lease_expires_at)
+values ('00000000-0000-0000-0000-000000025051', '00000000-0000-0000-0000-000000025013', 'leased', 1, '00000000-0000-0000-0000-000000025002', '2026-07-26T08:11:00Z');
+select throws_ok(
+  $$select public.complete_x_daily_judgement('00000000-0000-0000-0000-000000025051', 1, '00000000-0000-0000-0000-000000025002',
+    '{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[{"statement":"safe","supporting_source_ids":["00000000-0000-0000-0000-000000025021"],"dissenting_source_ids":[],"analysis_ids":["safe-post@1"],"evidence_post_ids":["safe-post"],"uncertainties":[],"raw_x_content":"must-not-persist"}],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb)$$,
+  '22023', 'invalid_x_daily_judgement_output', 'completion rejects nested raw content instead of persisting it'
+);
+
+select * from finish();
+rollback;
