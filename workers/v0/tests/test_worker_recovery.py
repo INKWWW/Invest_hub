@@ -45,6 +45,9 @@ class FakeProtocol:
         self.reported_failures: list[dict[str, object]] = []
         self.report_result_value: dict[str, object] = {"status": "succeeded", "idempotent": False}
         self.report_result_error: Exception | None = None
+        self.judgement_claim_value: dict[str, object] | None = None
+        self.judgement_failures: list[dict[str, object]] = []
+        self.judgement_completions: list[dict[str, object]] = []
 
     def heartbeat(self, *_args: object, **_kwargs: object) -> dict[str, object]:
         if self.heartbeat_error:
@@ -82,6 +85,20 @@ class FakeProtocol:
 
     def report_failure(self, failure: dict[str, object]) -> dict[str, object]:
         self.reported_failures.append(failure)
+        return {"status": "retryable_failed"}
+
+    def claim_x_daily_judgement(self) -> dict[str, object] | None:
+        return self.judgement_claim_value
+
+    def get_x_daily_judgement_context(self, run_id: str, attempt: int) -> dict[str, object]:
+        return {"run_id": run_id, "attempt": attempt, "prompt_version": "v2-x-cross-blogger-1", "sources": [], "excluded_sources": []}
+
+    def complete_x_daily_judgement(self, completion: dict[str, object]) -> dict[str, object]:
+        self.judgement_completions.append(completion)
+        return {"status": "succeeded"}
+
+    def fail_x_daily_judgement(self, run_id: str, attempt: int, failure_class: str) -> dict[str, object]:
+        self.judgement_failures.append({"run_id": run_id, "attempt": attempt, "failure_class": failure_class})
         return {"status": "retryable_failed"}
 
 
@@ -302,6 +319,31 @@ class WorkerRecoveryTests(unittest.TestCase):
         self.assertEqual(len(protocol.persisted_payloads), 1)
         self.assertEqual(protocol.capture_segments, [])
         self.assertEqual(len(protocol.range_completions), 1)
+
+    def test_judgement_failure_is_independent_from_source_task_failure_and_coverage(self) -> None:
+        protocol = FakeProtocol()
+        protocol.judgement_claim_value = {
+            "run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
+            "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"},
+        }
+
+        outcome = Worker(protocol).run_x_daily_judgement_once(
+            lambda _claim, _context: (_ for _ in ()).throw(RuntimeExecutionError("provider_failure", "fixture failure")),
+        )
+
+        self.assertEqual(outcome.status, "recovering")
+        self.assertEqual(protocol.reported_failures, [])
+        self.assertEqual(protocol.range_completions, [])
+        self.assertEqual(protocol.judgement_failures, [{"run_id": "judgement-run-1", "attempt": 1, "failure_class": "provider_failure"}])
+
+    def test_no_ready_judgement_is_a_no_task_without_invoking_runtime(self) -> None:
+        protocol = FakeProtocol()
+        invoked: list[bool] = []
+
+        outcome = Worker(protocol).run_x_daily_judgement_once(lambda _claim, _context: invoked.append(True) or {})
+
+        self.assertEqual(outcome.status, "no_task")
+        self.assertEqual(invoked, [])
 
 
 if __name__ == "__main__":

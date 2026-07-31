@@ -112,6 +112,40 @@ class WorkerProtocol:
         _, value = self._request("POST", "api/worker/schedule/tick", {})
         return self._object(value, "invalid schedule tick response")
 
+    def claim_x_daily_judgement(self) -> dict[str, Any] | None:
+        self._require_credential()
+        status, value = self._request("POST", "api/worker/x-daily-judgements/claim", {})
+        if status == 204 or value is None:
+            return None
+        return _parse_x_daily_judgement_claim(self._object(value, "invalid x daily judgement claim"))
+
+    def get_x_daily_judgement_context(self, run_id: str, attempt: int) -> dict[str, Any]:
+        self._require_credential()
+        _validate_x_daily_judgement_identity(run_id, attempt, "context")
+        _, value = self._request("POST", f"api/worker/x-daily-judgements/{run_id}/context", {"attempt": attempt})
+        return _parse_x_daily_judgement_context(self._object(value, "invalid x daily judgement context"), run_id, attempt)
+
+    def complete_x_daily_judgement(self, completion: dict[str, Any]) -> dict[str, Any]:
+        self._require_credential()
+        _validate_x_daily_judgement_completion(completion)
+        run_id = str(completion["run_id"])
+        _, value = self._request("POST", f"api/worker/x-daily-judgements/{run_id}/complete", completion)
+        acknowledgement = self._object(value, "invalid x daily judgement completion acknowledgement")
+        if acknowledgement.get("status") != "succeeded":
+            raise ProtocolError("x daily judgement completion was not acknowledged")
+        return acknowledgement
+
+    def fail_x_daily_judgement(self, run_id: str, attempt: int, failure_class: str) -> dict[str, Any]:
+        self._require_credential()
+        _validate_x_daily_judgement_identity(run_id, attempt, "failure")
+        if failure_class not in {"timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure"}:
+            raise ProtocolError("invalid x daily judgement failure")
+        _, value = self._request(
+            "POST", f"api/worker/x-daily-judgements/{run_id}/failure",
+            {"attempt": attempt, "failure_class": failure_class},
+        )
+        return self._object(value, "invalid x daily judgement failure acknowledgement")
+
     def claim_x_activation(self) -> dict[str, Any] | None:
         self._require_credential()
         status, value = self._request("POST", "api/worker/x-activations/claim", {})
@@ -325,3 +359,66 @@ class WorkerProtocol:
             return exc.code, value
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise ProtocolError("control-plane request failed") from exc
+
+
+def _non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _string_array(value: object) -> bool:
+    return isinstance(value, list) and all(_non_empty_string(item) for item in value)
+
+
+def _validate_x_daily_judgement_identity(run_id: object, attempt: object, label: str) -> None:
+    if not _non_empty_string(run_id) or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+        raise ProtocolError(f"invalid x daily judgement {label} request")
+
+
+def _parse_x_daily_judgement_claim(value: dict[str, Any]) -> dict[str, Any]:
+    if set(value) != {"run_id", "attempt", "lease_expires_at", "batch"}:
+        raise ProtocolError("invalid x daily judgement claim")
+    _validate_x_daily_judgement_identity(value.get("run_id"), value.get("attempt"), "claim")
+    batch = value.get("batch")
+    if not _non_empty_string(value.get("lease_expires_at")) or not isinstance(batch, dict) or set(batch) != {"id", "natural_date", "cutoff_at", "coverage_status"}:
+        raise ProtocolError("invalid x daily judgement claim")
+    if not all(_non_empty_string(batch.get(key)) for key in ("id", "natural_date", "cutoff_at")) or batch.get("coverage_status") not in {"complete", "partial"}:
+        raise ProtocolError("invalid x daily judgement claim")
+    return {"run_id": value["run_id"], "attempt": value["attempt"], "lease_expires_at": value["lease_expires_at"], "batch": dict(batch)}
+
+
+def _parse_x_daily_judgement_context(value: dict[str, Any], run_id: str, attempt: int) -> dict[str, Any]:
+    if set(value) != {"run_id", "attempt", "prompt_version", "sources", "excluded_sources"} or value.get("run_id") != run_id or value.get("attempt") != attempt or value.get("prompt_version") != "v2-x-cross-blogger-1":
+        raise ProtocolError("invalid x daily judgement context")
+    sources = value.get("sources")
+    excluded = value.get("excluded_sources")
+    if not isinstance(sources, list) or not isinstance(excluded, list):
+        raise ProtocolError("invalid x daily judgement context")
+    source_ids: set[str] = set()
+    for source in sources:
+        if not isinstance(source, dict) or set(source) != {"source_id", "display_name", "window_segments"} or not _non_empty_string(source.get("source_id")) or not _non_empty_string(source.get("display_name")) or not isinstance(source.get("window_segments"), list) or source["source_id"] in source_ids:
+            raise ProtocolError("invalid x daily judgement context")
+        source_ids.add(source["source_id"])
+        for segment in source["window_segments"]:
+            if not isinstance(segment, dict) or set(segment) != {"id", "occurred_from_at", "occurred_through_at", "viewpoints", "uncertainties", "analyses"} or not all(_non_empty_string(segment.get(key)) for key in ("id", "occurred_from_at", "occurred_through_at")) or not _string_array(segment.get("viewpoints")) and segment.get("viewpoints") != [] or not isinstance(segment.get("uncertainties"), list) or not isinstance(segment.get("analyses"), list):
+                raise ProtocolError("invalid x daily judgement context")
+            for analysis in segment["analyses"]:
+                if not isinstance(analysis, dict) or set(analysis) != {"post_id", "blogger_viewpoint", "arguments", "quoted_post_viewpoint", "uncertainties", "evidence_post_ids"} or not _non_empty_string(analysis.get("post_id")) or analysis.get("blogger_viewpoint") is not None and not _non_empty_string(analysis.get("blogger_viewpoint")) or analysis.get("quoted_post_viewpoint") is not None and not _non_empty_string(analysis.get("quoted_post_viewpoint")) or not isinstance(analysis.get("arguments"), list) or not isinstance(analysis.get("uncertainties"), list) or not _string_array(analysis.get("evidence_post_ids")):
+                    raise ProtocolError("invalid x daily judgement context")
+    for source in excluded:
+        if not isinstance(source, dict) or set(source) != {"source_id", "display_name", "reason"} or not all(_non_empty_string(source.get(key)) for key in ("source_id", "display_name", "reason")):
+            raise ProtocolError("invalid x daily judgement context")
+    return value
+
+
+def _validate_x_daily_judgement_completion(value: dict[str, Any]) -> None:
+    required = {"run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version", "stock_viewpoints", "market_industry_viewpoints", "uncertainties"}
+    if set(value) != required or value.get("schema_version") != "v2-x-cross-blogger" or value.get("provider") != "codex_cli" or value.get("prompt_version") != "v2-x-cross-blogger-1":
+        raise ProtocolError("invalid x daily judgement completion")
+    _validate_x_daily_judgement_identity(value.get("run_id"), value.get("attempt"), "completion")
+    if value.get("model_reported") is not None and not _non_empty_string(value.get("model_reported")) or not isinstance(value.get("stock_viewpoints"), list) or not isinstance(value.get("market_industry_viewpoints"), list) or not isinstance(value.get("uncertainties"), list):
+        raise ProtocolError("invalid x daily judgement completion")
+    for item in [*value["stock_viewpoints"], *value["market_industry_viewpoints"]]:
+        if not isinstance(item, dict) or set(item) != {"statement", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"} or not _non_empty_string(item.get("statement")):
+            raise ProtocolError("invalid x daily judgement completion")
+        if not all(isinstance(item.get(key), list) and all(_non_empty_string(entry) for entry in item[key]) for key in ("supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties")):
+            raise ProtocolError("invalid x daily judgement completion")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
@@ -57,6 +58,9 @@ V1_1_VIEWPOINT_FIELDS = frozenset(
 V2_X_CHUNK_FIELDS = frozenset({"schema_version", "analyses"})
 V2_X_ANALYSIS_FIELDS = frozenset({"post_id", "blogger_viewpoint", "arguments", "quoted_post_viewpoint", "uncertainties", "evidence_post_ids", "post_link"})
 V2_X_WINDOW_FIELDS = frozenset({"schema_version", "natural_date", "range_task_id", "occurred_from_at", "occurred_through_at", "window_viewpoints", "analysis_ids", "evidence_post_ids", "uncertainties"})
+V2_X_CROSS_BLOGGER_FIELDS = frozenset({"schema_version", "stock_viewpoints", "market_industry_viewpoints", "uncertainties"})
+V2_X_CROSS_BLOGGER_ITEM_FIELDS = frozenset({"statement", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"})
+_IMPERATIVE_INVESTMENT_RECOMMENDATION = re.compile(r"(?:系统\s*)?(?:建议|应当|应该|必须|请|立即).{0,24}(?:买入|卖出|加仓|减仓|建仓|清仓|抄底|追涨)")
 
 
 def parse_v2_x_chunk_output(
@@ -126,6 +130,68 @@ def parse_v2_x_window_output(text: str, allowed_analysis_ids: set[str]) -> dict[
     if not set(payload["analysis_ids"]) <= allowed_analysis_ids:
         raise SchemaError("analysis", "window cites an unpersisted post analysis")
     return dict(payload)
+
+
+def parse_v2_x_cross_blogger_output(
+    text: str,
+    *,
+    allowed_source_ids: set[str],
+    allowed_analysis_ids: set[str],
+    allowed_post_ids: set[str],
+) -> dict[str, object]:
+    """Validate the safe, cross-blogger completion sent to the control plane."""
+
+    payload = _json_object(text)
+    _require_exact_fields(payload, V2_X_CROSS_BLOGGER_FIELDS, "invalid_v2_x_cross_blogger")
+    if payload.get("schema_version") != "v2-x-cross-blogger":
+        raise SchemaError("invalid_v2_x_cross_blogger", "schema_version must be v2-x-cross-blogger")
+    if not isinstance(payload.get("stock_viewpoints"), list) or not isinstance(payload.get("market_industry_viewpoints"), list):
+        raise SchemaError("invalid_v2_x_cross_blogger", "viewpoints must be arrays")
+    if not _string_list(payload.get("uncertainties")):
+        raise SchemaError("invalid_v2_x_cross_blogger", "uncertainties must be a string array")
+
+    def normalized_items(values: list[object], category: str) -> list[dict[str, object]]:
+        result: list[dict[str, object]] = []
+        for index, value in enumerate(values):
+            if not isinstance(value, Mapping):
+                raise SchemaError("invalid_v2_x_cross_blogger_item", f"{category} item {index} must be an object")
+            _require_exact_fields(value, V2_X_CROSS_BLOGGER_ITEM_FIELDS, "invalid_v2_x_cross_blogger_item")
+            statement = value["statement"]
+            if not _non_empty_string(statement):
+                raise SchemaError("invalid_v2_x_cross_blogger_item", "statement must be a non-empty string")
+            if _IMPERATIVE_INVESTMENT_RECOMMENDATION.search(statement):
+                raise SchemaError("invalid_v2_x_cross_blogger_item", "imperative system investment recommendation is not allowed")
+            supporting = value["supporting_source_ids"]
+            dissenting = value["dissenting_source_ids"]
+            if not _string_list(supporting) or not _string_list(dissenting) or len(set(supporting)) != len(supporting) or len(set(dissenting)) != len(dissenting):
+                raise SchemaError("invalid_v2_x_cross_blogger_item", "source IDs must be unique string arrays")
+            if not set(supporting) <= allowed_source_ids or not set(dissenting) <= allowed_source_ids:
+                raise SchemaError("source", "unknown source")
+            if set(supporting) & set(dissenting):
+                raise SchemaError("source", "source cannot be both supporting and dissenting")
+            analyses = value["analysis_ids"]
+            if not _non_empty_string_list(analyses) or len(set(analyses)) != len(analyses):
+                raise SchemaError("analysis", "analysis IDs must be unique and non-empty")
+            if not set(analyses) <= allowed_analysis_ids:
+                raise SchemaError("analysis", "unknown analysis")
+            evidence = value["evidence_post_ids"]
+            if not _non_empty_string_list(evidence):
+                raise SchemaError("evidence", "evidence must be non-empty")
+            if len(set(evidence)) != len(evidence):
+                raise SchemaError("evidence", "duplicate evidence ID")
+            if not set(evidence) <= allowed_post_ids:
+                raise SchemaError("evidence", "unknown evidence post")
+            if not _string_list(value["uncertainties"]):
+                raise SchemaError("invalid_v2_x_cross_blogger_item", "uncertainties must be a string array")
+            result.append(dict(value))
+        return result
+
+    return {
+        "schema_version": "v2-x-cross-blogger",
+        "stock_viewpoints": normalized_items(payload["stock_viewpoints"], "stock"),
+        "market_industry_viewpoints": normalized_items(payload["market_industry_viewpoints"], "market_industry"),
+        "uncertainties": list(payload["uncertainties"]),
+    }
 
 
 def parse_structured_output(text: str) -> dict[str, Any]:

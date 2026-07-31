@@ -20,6 +20,7 @@ _SAFE_PROTOCOL_FAILURE_CODES = frozenset({
     "range completion was not acknowledged",
     "range_completion_rejected",
 })
+_X_DAILY_JUDGEMENT_FAILURES = frozenset({"timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure"})
 
 
 class WorkerState(StrEnum):
@@ -100,6 +101,43 @@ class Worker:
         """Ask the control plane to enqueue every due source window."""
 
         return self.protocol.schedule_tick()
+
+    def run_x_daily_judgement_once(
+        self,
+        execute: Callable[[dict[str, object], dict[str, object]], dict[str, object]],
+    ) -> RunOutcome:
+        """Claim and settle one independent daily judgement lease, if ready."""
+
+        try:
+            self.protocol.heartbeat("idle", self.capabilities, self.clock().isoformat())
+            claim = self.protocol.claim_x_daily_judgement()
+        except Exception as exc:
+            return self._recover(None, exc)
+        if claim is None:
+            self.state = WorkerState.IDLE
+            return RunOutcome("no_task")
+
+        run_id = claim.get("run_id")
+        attempt = claim.get("attempt")
+        if not isinstance(run_id, str) or not run_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            return self._recover(None, RuntimeError("invalid daily judgement claim identity"))
+        self.state = WorkerState.CLAIMED
+        try:
+            lease = LeaseState(run_id, attempt, str(claim["lease_expires_at"]))
+            if lease.is_expired(self.clock()):
+                raise LeaseUncertain("daily judgement lease expired before execution")
+            context = self.protocol.get_x_daily_judgement_context(run_id, attempt)
+            self.state = WorkerState.EXECUTING
+            completion = execute(dict(claim), dict(context))
+            self.state = WorkerState.REPORTING
+            acknowledgement = self.protocol.complete_x_daily_judgement(dict(completion))
+            if acknowledgement.get("status") != "succeeded":
+                raise LeaseUncertain("control plane did not acknowledge daily judgement completion")
+            self.state = WorkerState.IDLE
+            return RunOutcome("succeeded", run_id, acknowledgement=acknowledgement)
+        except Exception as exc:
+            self._report_x_daily_judgement_failure(run_id, attempt, exc)
+            return self._recover(run_id, exc)
 
     def stop(self) -> None:
         self.state = WorkerState.STOPPED
@@ -256,6 +294,15 @@ class Worker:
         except Exception:
             # A failed failure report must not be mistaken for a successful
             # task completion; the lease will remain conservative for retry.
+            return
+
+    def _report_x_daily_judgement_failure(self, run_id: str, attempt: int, error: Exception) -> None:
+        failure_class = str(getattr(error, "failure_class", "persistence_failure"))
+        if failure_class not in _X_DAILY_JUDGEMENT_FAILURES:
+            failure_class = "persistence_failure"
+        try:
+            self.protocol.fail_x_daily_judgement(run_id, attempt, failure_class)
+        except Exception:
             return
 
     @staticmethod
