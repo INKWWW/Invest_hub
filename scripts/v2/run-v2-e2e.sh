@@ -14,6 +14,7 @@ elif [[ $# -ne 0 ]]; then
   exit 2
 fi
 python_bin="${V2_PYTHON_BIN:-$repo_root/workers/v0/.venv/bin/python}"
+PYTHONPATH="workers/v0/src" "$python_bin" -m unittest tests/e2e/v2/test_x_cross_blogger_daily_judgements.py -v
 PYTHONPATH="workers/v0/src:tests/e2e/v2" "$python_bin" -m unittest discover -s tests/e2e/v2 -p 'test_*.py' -v
 V1_PYTHON_BIN="${V1_PYTHON_BIN:-$python_bin}" bash scripts/v1/run-v1-1-e2e.sh
 (
