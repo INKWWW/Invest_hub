@@ -9,6 +9,7 @@ vi.mock("../../../../lib/db/repositories/reader", () => readerMocks);
 import { GET } from "./route";
 
 const rawContentSentinel = "FORBIDDEN_RAW_X_CONTENT_SENTINEL";
+const localPathSentinel = "/private/reader-unsafe/evidence.json";
 
 describe("GET /api/reader/x", () => {
   beforeEach(() => {
@@ -16,6 +17,10 @@ describe("GET /api/reader/x", () => {
     authMocks.getCurrentUser.mockResolvedValue({ id: "ordinary-user", role: "user" });
     readerMocks.readXDay.mockResolvedValue([{
       naturalDate: "2099-01-02",
+      provider: "must not escape",
+      prompt: "must not escape",
+      task: "must not escape",
+      rawContent: rawContentSentinel,
       judgement: {
         visible: true,
         batches: [{
@@ -23,18 +28,46 @@ describe("GET /api/reader/x", () => {
           coverageStatus: "complete",
           status: "succeeded",
           revision: 2,
+          provider: "must not escape",
+          prompt: "must not escape",
+          task: "must not escape",
+          analysis_ids: ["private-analysis-id"],
+          evidence_post_ids: ["private-post-id"],
+          local_path: localPathSentinel,
+          raw_content: rawContentSentinel,
           stockViewpoints: [{
             statement: "Only the latest safe judgement is visible.",
             supportingDisplayNames: ["Beta"],
             dissentingDisplayNames: ["Alpha"],
             uncertainties: [],
+            analysis_ids: ["private-analysis-id"],
+            evidence_post_ids: ["private-post-id"],
           }],
           marketIndustryViewpoints: [],
           uncertainties: [],
           excludedSourceCount: 0,
         }],
       },
-      bloggers: [],
+      bloggers: [{
+        source: { sourceKey: "alpha", displayName: "Alpha", raw_content: rawContentSentinel },
+        status: "succeeded",
+        segments: [{
+          occurredFromAt: "2099-01-02T08:00:00.000Z",
+          occurredThroughAt: "2099-01-02T12:00:00.000Z",
+          viewpoints: ["Safe viewpoint"],
+          uncertainties: [],
+          local_path: localPathSentinel,
+          analyses: [{
+            postLink: "https://x.com/alpha/status/1",
+            bloggerViewpoint: "Safe analysis",
+            arguments: ["Safe argument"],
+            quotedPostViewpoint: null,
+            uncertainties: [],
+            raw_content: rawContentSentinel,
+            provider: "must not escape",
+          }],
+        }],
+      }],
     }]);
   });
 
@@ -45,10 +78,14 @@ describe("GET /api/reader/x", () => {
 
     expect(response.status).toBe(200);
     expect(body).toEqual({ status: "ok", days: expect.arrayContaining([
-      expect.objectContaining({ naturalDate: "2099-01-02" }),
+      expect.objectContaining({
+        naturalDate: "2099-01-02",
+        judgement: expect.objectContaining({ batches: [expect.objectContaining({ revision: 2, stockViewpoints: [expect.objectContaining({ statement: "Only the latest safe judgement is visible." })] })] }),
+        bloggers: [expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, segments: [expect.objectContaining({ analyses: [expect.objectContaining({ postLink: "https://x.com/alpha/status/1" })] })] })],
+      }),
     ]) });
     expect(readerMocks.readXDay).toHaveBeenCalledWith({ sourceKey: undefined, date: undefined });
-    for (const forbidden of [rawContentSentinel, "analysis_ids", "evidence_post_ids", "provider", "prompt", "task"]) {
+    for (const forbidden of [rawContentSentinel, localPathSentinel, "analysis_ids", "evidence_post_ids", "provider", "prompt", "task", "raw_content"]) {
       expect(serialized).not.toContain(forbidden);
     }
   });

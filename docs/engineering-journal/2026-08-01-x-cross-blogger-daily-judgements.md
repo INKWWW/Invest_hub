@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-已批准的显式 regeneration 语义已在本地确定性边界验证：同一 batch 的 revision 1 保持不可改写，管理员再生成经既有 `claim_next_x_daily_judgement` Worker 路径领取并完成后追加 revision 2，Reader 只投影 revision 2。实际 `GET /api/reader/x` handler 的普通用户鉴权、过滤参数和安全 JSON DTO 已有 Node route test；Python synthetic fixture 不再被用作 Reader 或 HTML 的生产证明。
+已批准的显式 regeneration 语义已在本地确定性边界验证：同一 batch 的 revision 1 保持不可改写，管理员再生成经既有 `claim_next_x_daily_judgement` Worker 路径领取并完成后追加 revision 2，Reader 只投影 revision 2。实际 `GET /api/reader/x` handler 在 `NextResponse.json` 前建立 runtime whitelist，只复制 `XReaderDate` 的 Reader-safe 字段；route test 向 `readXDay` mock 注入 raw sentinel、provider、prompt、task、内部 ID 和本地路径，证明这些字段不会因未来 repository DTO 回归而泄露。Python synthetic fixture 不再被用作 Reader 或 HTML 的生产证明。
 
 这只是本地验证，不代表 remote migration、控制面部署、Worker 重启、真实 X/OpenCLI/Browser 读取、真实 Codex CLI 调用或生产页面验收已经执行。没有新增 Worker 命令，也没有自动再生成调度循环。
 
@@ -13,7 +13,7 @@
 | 范围 | 命令 | 结果 |
 | --- | --- | --- |
 | pgTAP | `supabase db reset`；`supabase test db` | reset 成功；29 files / 416 tests 通过。 |
-| regeneration 边界 | 聚焦 Node route/repository tests | 3 files / 13 tests 通过：实际 Reader handler、admin regeneration route、revision 2 safe projection。 |
+| regeneration 边界 | 聚焦 Node route/repository tests | 3 files / 13 tests 通过：实际 Reader handler runtime whitelist、admin regeneration route、revision 2 safe projection。 |
 | regeneration Worker | `test_x_cross_blogger_judgements.py` | 11/11 通过；标准 claim 完成 regeneration 且来源 task/coverage fixture 不变。 |
 | V2 runner | `V2_PYTHON_BIN=/opt/homebrew/bin/python3.12 bash scripts/v2/run-v2-e2e.sh` | 两个本地 OpenCLI 门禁通过；V2 4/4、V1.1 16/16、control-plane 95/95 和 regeneration Node 13/13 通过；0 skipped。 |
 | 全量 Worker | `PYTHONPATH=workers/v0/src /opt/homebrew/bin/python3.12 -m unittest discover -s workers/v0/tests -p 'test_*.py' -v` | 未通过：112 tests 通过，4 个模块因本 worktree 无 virtualenv 且 Python 3.12 缺少 `jsonschema` 无法导入（`test_cli`、`test_contracts`、`test_protocol`、`test_x_windowed_runtime`）；未安装依赖或改写环境。 |
