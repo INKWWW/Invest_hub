@@ -1,12 +1,14 @@
 # Project Status
 
-Last updated: 2026-07-31
+Last updated: 2026-08-01
 
 ## Current phase
 
 **V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、真实持久化范围闭环、X 专用本机常驻 Worker 的实际自动窗口完成，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：自动增量链路已验证，但真实关系类别与可恢复失败恢复仍未完整覆盖，因此不得标记为“V2 X 正式可用”或无人值守 SLA。**
 
 **X 终态失败来源调度隔离修复（2026-07-31）：** 用户已明确批准对应 Spec/Plan、实现与线上 migration，远端版本 `20260731084640` 已部署并验收。修复目标是防止不可重试的 `opencli_contract` 终态失败窗口被调度器每个 tick 重复创建；失败来源保持审计状态和未推进 coverage，其他来源继续独立调度。部署后 Worker 连续两个 tick 均隔离 1 个失败来源并调度其余 5 个来源；该修复不改变来源标识、登录态、采集合同或历史数据，V2 仍保持受控生产试运行，不宣称无人值守 SLA。
+
+**X 跨博主当日判断总结本地验收准备（2026-08-01）：** Task 1–4 已完成 batch、独立 judgement Worker 与安全 Reader 的本地实现。Task 5 已加入公开 synthetic E2E、脚本入口和受控生产清单，但**不得标记为完成或进入生产验收**：Spec §3/验收标准 6 要求 retry 成功为同一 batch 追加 revision 2，而当前实现的失败状态机在 retry 前不写 version、成功后又没有再次生成入口。该用例保持显式 blocked，须由用户先决定是否设计“成功 batch 显式再生成”的追加机制。生产 checklist 仅已准备；未执行远程 migration、部署、Worker 重启、真实 X/Provider 调用或生产页面验收。详见 [工程记录](engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md)。
 
 **Discord 采集状态（2026-07-22 决定）：** 个人账号的 Page Fetch、页面 UI 自动化、直接接口和导出器路线均不再进入生产；不启用 Discord 定时或手动采集。既有 Reader 与已持久化数据保持可用，但不构成持续采集能力。未来仅在频道管理员明确授权 Bot 后，才以新的独立 Spec/Plan 评估重新启动；详见 [Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)。本段优先于下文历史 Browser Bridge 受限描述。
 
