@@ -12,7 +12,7 @@ from .config import LocalWorkerConfig, LocalWorkerConfigSet
 from .activation import activate_one_x_source
 from .errors import ConfigError, ProtocolError, RemoteConflict
 from .protocol import WorkerProtocol
-from .runtime import build_authorized_runtime_set
+from .runtime import build_authorized_runtime_set, build_authorized_x_daily_judgement_runtime
 from .worker import Worker
 from .x_identity import IdentityResolutionError, OpenCLIProfileInvoker, resolve_configured_x_identity
 
@@ -88,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
         opencli_contract_path=Path(args.opencli_contract),
         opencli_executable=args.opencli_executable,
     )
+    judgement_runtime = build_authorized_x_daily_judgement_runtime(
+        evidence_dir=evidence_dir,
+        prompt_path=Path(args.prompt_path),
+    ) if has_x else None
     capabilities = (["discord_sync"] if has_discord else []) + (["x_sync"] if has_x else [])
     worker = Worker(protocol, execute=runtime.execute, execute_windowed=runtime.execute_windowed, capabilities=capabilities)
     if args.command == "run-once":
@@ -95,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": outcome.status, "task_id": outcome.task_id, "error": outcome.error}, sort_keys=True))
         return 0 if outcome.status in {"succeeded", "no_task"} else 1
     activation_invoker = OpenCLIProfileInvoker(_require_controlled_x_opencli_executable(args.opencli_executable)) if has_x else None
-    return _run_scheduled(worker, once=args.once, poll_seconds=args.poll_seconds, activation_invoker=activation_invoker)
+    return _run_scheduled(worker, once=args.once, poll_seconds=args.poll_seconds, activation_invoker=activation_invoker, judgement_runtime=judgement_runtime)
 
 
 def _resolve_x_identity(args: argparse.Namespace) -> int:
@@ -276,7 +280,14 @@ def _print_identity_result(status: str, resolution_status: str | None, idempoten
     }, sort_keys=True))
 
 
-def _run_scheduled(worker: Worker, *, once: bool, poll_seconds: int, activation_invoker: OpenCLIProfileInvoker | None = None) -> int:
+def _run_scheduled(
+    worker: Worker,
+    *,
+    once: bool,
+    poll_seconds: int,
+    activation_invoker: OpenCLIProfileInvoker | None = None,
+    judgement_runtime: object | None = None,
+) -> int:
     while True:
         tick: dict[str, object] = {}
         activation_error: str | None = None
@@ -293,6 +304,8 @@ def _run_scheduled(worker: Worker, *, once: bool, poll_seconds: int, activation_
             print(json.dumps({"status": "schedule_failed", "error": type(exc).__name__}, sort_keys=True), flush=True)
 
         outcome = worker.run_once()
+        if outcome.status == "no_task" and judgement_runtime is not None:
+            outcome = worker.run_x_daily_judgement_once(judgement_runtime.execute if hasattr(judgement_runtime, "execute") else judgement_runtime)
         scheduled_at = tick.get("scheduled_at") if isinstance(tick.get("scheduled_at"), str) else None
         tasks = tick.get("tasks")
         deferred_sources = tick.get("deferred_source_ids")

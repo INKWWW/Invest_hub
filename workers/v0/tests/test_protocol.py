@@ -323,6 +323,58 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(transport.calls[1]["timeout"], 30.0)
             self.assertEqual(transport.calls[2]["timeout"], 110.0)
 
+    def test_x_daily_judgement_protocol_uses_only_safe_worker_endpoints(self) -> None:
+        claim = {
+            "run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
+            "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"},
+        }
+        context = {
+            "run_id": "judgement-run-1", "attempt": 1, "prompt_version": "v2-x-cross-blogger-1",
+            "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
+                "id": "segment-1", "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
+                "viewpoints": ["观点"], "uncertainties": [], "analyses": [{
+                    "post_id": "post-a@1", "blogger_viewpoint": "观点", "arguments": [], "quoted_post_viewpoint": None,
+                    "uncertainties": [], "evidence_post_ids": ["post-a"],
+                }],
+            }]}], "excluded_sources": [{"source_id": "source-z", "display_name": "Z", "reason": "no_new_information"}],
+        }
+        completion = {
+            "run_id": "judgement-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger", "provider": "codex_cli",
+            "model_reported": None, "prompt_version": "v2-x-cross-blogger-1", "stock_viewpoints": [],
+            "market_industry_viewpoints": [], "uncertainties": ["不足"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, claim), (200, context), (200, {"status": "succeeded"}), (200, {"status": "retryable_failed"}))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(protocol.claim_x_daily_judgement()["run_id"], "judgement-run-1")
+            self.assertEqual(protocol.get_x_daily_judgement_context("judgement-run-1", 1)["sources"][0]["source_id"], "source-a")
+            self.assertEqual(protocol.complete_x_daily_judgement(completion)["status"], "succeeded")
+            self.assertEqual(protocol.fail_x_daily_judgement("judgement-run-1", 1, "provider_failure")["status"], "retryable_failed")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/x-daily-judgements/claim"))
+            self.assertEqual(transport.calls[1]["body"], {})
+            self.assertTrue(str(transport.calls[2]["url"]).endswith("/api/worker/x-daily-judgements/judgement-run-1/context"))
+            self.assertEqual(transport.calls[2]["body"], {"attempt": 1})
+            self.assertTrue(str(transport.calls[3]["url"]).endswith("/api/worker/x-daily-judgements/judgement-run-1/complete"))
+            self.assertTrue(str(transport.calls[4]["url"]).endswith("/api/worker/x-daily-judgements/judgement-run-1/failure"))
+
+    def test_x_daily_judgement_completion_rejects_unsafe_item_before_transport(self) -> None:
+        completion = {
+            "run_id": "judgement-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger", "provider": "codex_cli",
+            "model_reported": None, "prompt_version": "v2-x-cross-blogger-1", "stock_viewpoints": [{"statement": "only this"}],
+            "market_industry_viewpoints": [], "uncertainties": [],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            with self.assertRaisesRegex(ProtocolError, "invalid x daily judgement completion"):
+                protocol.complete_x_daily_judgement(completion)
+
+            self.assertEqual(len(transport.calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

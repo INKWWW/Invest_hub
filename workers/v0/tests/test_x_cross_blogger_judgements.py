@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import json
+import unittest
+
+from invest_hub_worker import structured
+from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
+from invest_hub_worker import runtime
+
+
+def valid_output() -> dict[str, object]:
+    return {
+        "schema_version": "v2-x-cross-blogger",
+        "stock_viewpoints": [{
+            "statement": "两位博主都认为估值仍需观察。",
+            "supporting_source_ids": ["source-a", "source-b"],
+            "dissenting_source_ids": ["source-c"],
+            "analysis_ids": ["post-a@1", "post-b@1", "post-c@1"],
+            "evidence_post_ids": ["post-a", "post-b", "post-c"],
+            "uncertainties": ["仅覆盖当前日内新增观点"],
+        }],
+        "market_industry_viewpoints": [],
+        "uncertainties": ["source-d 本窗口没有新增信息"],
+    }
+
+
+class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
+    def parse(self, output: dict[str, object]) -> dict[str, object]:
+        parser = getattr(structured, "parse_v2_x_cross_blogger_output", None)
+        self.assertIsNotNone(parser, "cross-blogger parser must be public")
+        return parser(  # type: ignore[misc,no-any-return]
+            json.dumps(output, ensure_ascii=False),
+            allowed_source_ids={"source-a", "source-b", "source-c"},
+            allowed_analysis_ids={"post-a@1", "post-b@1", "post-c@1"},
+            allowed_post_ids={"post-a", "post-b", "post-c"},
+        )
+
+    def test_accepts_agreement_disagreement_and_omitted_no_new_information_source(self) -> None:
+        parsed = self.parse(valid_output())
+
+        item = parsed["stock_viewpoints"][0]
+        self.assertEqual(item["supporting_source_ids"], ["source-a", "source-b"])
+        self.assertEqual(item["dissenting_source_ids"], ["source-c"])
+        self.assertEqual(parsed["uncertainties"], ["source-d 本窗口没有新增信息"])
+
+    def test_rejects_unknown_source_and_excluded_source(self) -> None:
+        unknown = valid_output()
+        unknown["stock_viewpoints"][0]["supporting_source_ids"] = ["source-a", "source-other"]
+        with self.assertRaisesRegex(structured.SchemaError, "unknown source"):
+            self.parse(unknown)
+
+        excluded = valid_output()
+        excluded["stock_viewpoints"][0]["supporting_source_ids"] = ["source-a", "source-d"]
+        with self.assertRaisesRegex(structured.SchemaError, "unknown source"):
+            self.parse(excluded)
+
+    def test_rejects_unpersisted_or_duplicate_evidence_references(self) -> None:
+        unknown_analysis = valid_output()
+        unknown_analysis["stock_viewpoints"][0]["analysis_ids"] = ["post-a@1", "unknown@1"]
+        with self.assertRaisesRegex(structured.SchemaError, "unknown analysis"):
+            self.parse(unknown_analysis)
+
+        unknown_post = valid_output()
+        unknown_post["stock_viewpoints"][0]["evidence_post_ids"] = ["post-a", "unknown-post"]
+        with self.assertRaisesRegex(structured.SchemaError, "unknown evidence post"):
+            self.parse(unknown_post)
+
+        duplicate = valid_output()
+        duplicate["stock_viewpoints"][0]["evidence_post_ids"] = ["post-a", "post-a"]
+        with self.assertRaisesRegex(structured.SchemaError, "duplicate evidence"):
+            self.parse(duplicate)
+
+    def test_rejects_conflicting_sources_empty_evidence_and_imperative_recommendation(self) -> None:
+        conflicting = valid_output()
+        conflicting["stock_viewpoints"][0]["dissenting_source_ids"] = ["source-a"]
+        with self.assertRaisesRegex(structured.SchemaError, "both supporting and dissenting"):
+            self.parse(conflicting)
+
+        empty_evidence = valid_output()
+        empty_evidence["stock_viewpoints"][0]["evidence_post_ids"] = []
+        with self.assertRaisesRegex(structured.SchemaError, "evidence.*non-empty"):
+            self.parse(empty_evidence)
+
+        imperative = valid_output()
+        imperative["stock_viewpoints"][0]["statement"] = "系统建议立即买入该股票。"
+        with self.assertRaisesRegex(structured.SchemaError, "imperative"):
+            self.parse(imperative)
+
+    def test_allows_no_input_viewpoints_without_inventing_a_theme(self) -> None:
+        empty = {
+            "schema_version": "v2-x-cross-blogger",
+            "stock_viewpoints": [],
+            "market_industry_viewpoints": [],
+            "uncertainties": ["没有可用于跨博主比较的新观点"],
+        }
+        self.assertEqual(self.parse(empty)["stock_viewpoints"], [])
+
+    def test_rejects_an_unlisted_third_theme(self) -> None:
+        invalid = valid_output()
+        invalid["third_theme"] = []
+        with self.assertRaisesRegex(structured.SchemaError, "unknown"):
+            self.parse(invalid)
+
+    def test_runtime_returns_only_validated_completion_and_safe_provider_telemetry(self) -> None:
+        class MockProvider:
+            def __init__(self) -> None:
+                self.context: ProviderContext | None = None
+
+            def complete(self, input_chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
+                self.context = context
+                self.assertEqual(input_chunk, tuple(context_payload["sources"]))
+                return ProviderResponse(
+                    status="success", provider="codex_cli", model_reported="gpt-fixture",
+                    prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
+                    raw_ref="/private/evidence/raw.json", parsed_output_ref="/private/evidence/structured.json",
+                    parsed_output=valid_output(),
+                )
+
+            def assertEqual(self, left: object, right: object) -> None:
+                if left != right:
+                    raise AssertionError("runtime must pass only frozen included source context")
+
+        context_payload = {
+            "run_id": "judgement-run-1", "attempt": 1, "prompt_version": "v2-x-cross-blogger-1",
+            "sources": [
+                {"source_id": source_id, "display_name": source_id, "window_segments": [{
+                    "id": f"segment-{source_id}", "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
+                    "viewpoints": ["观点"], "uncertainties": [], "analyses": [{
+                        "post_id": analysis_id, "blogger_viewpoint": "观点", "arguments": [], "quoted_post_viewpoint": None,
+                        "uncertainties": [], "evidence_post_ids": [post_id],
+                    }],
+                }]} for source_id, analysis_id, post_id in (
+                    ("source-a", "post-a@1", "post-a"), ("source-b", "post-b@1", "post-b"), ("source-c", "post-c@1", "post-c"),
+                )
+            ],
+            "excluded_sources": [{"source_id": "source-z", "display_name": "Z", "reason": "no_new_information"}],
+        }
+        provider = MockProvider()
+        runtime_type = getattr(runtime, "XDailyJudgementRuntime", None)
+        self.assertIsNotNone(runtime_type, "daily judgement runtime must be public")
+        result = runtime_type(provider=provider, prompt_template="private supplement").execute(  # type: ignore[misc]
+            {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z", "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"}},
+            context_payload,
+        )
+        self.assertEqual(result["provider"], "codex_cli")
+        self.assertEqual(result["model_reported"], "gpt-fixture")
+        self.assertNotIn("raw_ref", result)
+        self.assertEqual(provider.context.operation, "v2_x_cross_blogger")
+
+
+if __name__ == "__main__":
+    unittest.main()

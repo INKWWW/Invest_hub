@@ -21,6 +21,7 @@ from .structured import (
     SchemaError,
     parse_v1_1_chunk_output,
     parse_v2_x_chunk_output,
+    parse_v2_x_cross_blogger_output,
     parse_v2_x_window_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -32,6 +33,104 @@ class RuntimeExecutionError(RuntimeError):
     def __init__(self, failure_class: str, message: str) -> None:
         super().__init__(message)
         self.failure_class = failure_class
+
+
+class XDailyJudgementRuntime:
+    """Generate one safe daily cross-blogger judgement from frozen Task 2 context."""
+
+    def __init__(self, *, provider: Provider, prompt_template: str) -> None:
+        if not prompt_template.strip():
+            raise ValueError("prompt_template must be non-empty")
+        self.provider = provider
+        self.prompt_template = prompt_template
+        self.public_template = _read_public_prompt("v2_x_cross_blogger.md")
+
+    def execute(self, claim: dict[str, object], context: dict[str, object]) -> dict[str, object]:
+        run_id = claim.get("run_id")
+        attempt = claim.get("attempt")
+        if not isinstance(run_id, str) or not run_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            raise RuntimeExecutionError("schema_error", "daily judgement claim is invalid")
+        try:
+            allowed_source_ids, allowed_analysis_ids, allowed_post_ids = self._validate_context(context, run_id, attempt)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeExecutionError("schema_error", "daily judgement context is invalid") from exc
+        provider_context = ProviderContext(
+            chunk_id=run_id,
+            prompt_version="v2-x-cross-blogger-1",
+            prompt_text=(
+                f"{self.public_template}\n\n本地私有补充说明：\n{self.prompt_template}"
+                f"\n\n已验证的跨博主上下文（仅本地 Codex CLI 可见）：\n{json.dumps(context, ensure_ascii=False)}"
+            ),
+            attempt=attempt,
+            operation="v2_x_cross_blogger",
+            allowed_source_ids=frozenset(allowed_source_ids),
+            allowed_analysis_ids=frozenset(allowed_analysis_ids),
+            allowed_post_ids=frozenset(allowed_post_ids),
+        )
+        response = self.provider.complete(tuple(context["sources"]), provider_context)
+        if response.status != "success" or response.parsed_output is None:
+            raise RuntimeExecutionError(
+                response.failure_class or response.error_code or "provider_failure",
+                "Codex CLI did not produce a valid cross-blogger judgement",
+            )
+        try:
+            parsed = parse_v2_x_cross_blogger_output(
+                json.dumps(response.parsed_output, ensure_ascii=False),
+                allowed_source_ids=allowed_source_ids,
+                allowed_analysis_ids=allowed_analysis_ids,
+                allowed_post_ids=allowed_post_ids,
+            )
+        except SchemaError as exc:
+            raise RuntimeExecutionError("schema_error", "cross-blogger judgement failed evidence validation") from exc
+        return {
+            "run_id": run_id,
+            "attempt": attempt,
+            "schema_version": "v2-x-cross-blogger",
+            "provider": "codex_cli",
+            "model_reported": response.model_reported,
+            "prompt_version": "v2-x-cross-blogger-1",
+            "stock_viewpoints": parsed["stock_viewpoints"],
+            "market_industry_viewpoints": parsed["market_industry_viewpoints"],
+            "uncertainties": parsed["uncertainties"],
+        }
+
+    @staticmethod
+    def _validate_context(context: Mapping[str, object], run_id: str, attempt: int) -> tuple[set[str], set[str], set[str]]:
+        if set(context) != {"run_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") != "v2-x-cross-blogger-1":
+            raise ValueError("context identity is invalid")
+        sources = context.get("sources")
+        excluded_sources = context.get("excluded_sources")
+        if not isinstance(sources, list) or not isinstance(excluded_sources, list):
+            raise ValueError("context collections are invalid")
+        source_ids: set[str] = set()
+        analysis_ids: set[str] = set()
+        post_ids: set[str] = set()
+        for source in sources:
+            if not isinstance(source, Mapping) or set(source) != {"source_id", "display_name", "window_segments"}:
+                raise ValueError("source is invalid")
+            source_id = source.get("source_id")
+            if not isinstance(source_id, str) or not source_id or source_id in source_ids or not isinstance(source.get("display_name"), str) or not source.get("display_name"):
+                raise ValueError("source identity is invalid")
+            source_ids.add(source_id)
+            segments = source.get("window_segments")
+            if not isinstance(segments, list):
+                raise ValueError("segments are invalid")
+            for segment in segments:
+                if not isinstance(segment, Mapping) or set(segment) != {"id", "occurred_from_at", "occurred_through_at", "viewpoints", "uncertainties", "analyses"} or not isinstance(segment.get("analyses"), list):
+                    raise ValueError("segment is invalid")
+                for analysis in segment["analyses"]:
+                    if not isinstance(analysis, Mapping):
+                        raise ValueError("analysis is invalid")
+                    analysis_id = analysis.get("post_id")
+                    evidence = analysis.get("evidence_post_ids")
+                    if not isinstance(analysis_id, str) or not analysis_id or analysis_id in analysis_ids or not isinstance(evidence, list) or not all(isinstance(post_id, str) and post_id for post_id in evidence):
+                        raise ValueError("analysis evidence is invalid")
+                    analysis_ids.add(analysis_id)
+                    post_ids.update(evidence)
+        excluded_ids = {source.get("source_id") for source in excluded_sources if isinstance(source, Mapping)}
+        if source_ids & excluded_ids:
+            raise ValueError("source cannot be included and excluded")
+        return source_ids, analysis_ids, post_ids
 
 
 @dataclass(frozen=True)
@@ -1313,6 +1412,13 @@ def build_authorized_x_runtime(
         evidence=LocalEvidenceStore(Path(evidence_dir)),
         canonicalizer=Canonicalizer(),
         provider=_codex_provider(evidence_dir),
+        prompt_template=Path(prompt_path).read_text(encoding="utf-8"),
+    )
+
+
+def build_authorized_x_daily_judgement_runtime(*, evidence_dir: Path, prompt_path: Path) -> XDailyJudgementRuntime:
+    return XDailyJudgementRuntime(
+        provider=_codex_provider(Path(evidence_dir) / "x-daily-judgements"),
         prompt_template=Path(prompt_path).read_text(encoding="utf-8"),
     )
 

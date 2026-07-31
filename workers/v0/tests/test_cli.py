@@ -29,6 +29,7 @@ class ScheduledWorker:
     def __init__(self) -> None:
         self.schedule_calls = 0
         self.run_calls = 0
+        self.judgement_calls = 0
 
     def schedule_tick(self) -> dict[str, object]:
         self.schedule_calls += 1
@@ -37,6 +38,10 @@ class ScheduledWorker:
     def run_once(self) -> RunOutcome:
         self.run_calls += 1
         return RunOutcome("no_task")
+
+    def run_x_daily_judgement_once(self, _runtime: object) -> RunOutcome:
+        self.judgement_calls += 1
+        return RunOutcome("succeeded", "judgement-run-1")
 
 
 class ScheduleFailingWorker(ScheduledWorker):
@@ -65,10 +70,11 @@ class WorkerCliTests(unittest.TestCase):
         worker = ScheduledWorker()
 
         with patch("builtins.print") as emit:
-            self.assertEqual(_run_scheduled(worker, once=True, poll_seconds=60), 0)
+            self.assertEqual(_run_scheduled(worker, once=True, poll_seconds=60, judgement_runtime=object()), 0)
 
         self.assertEqual(worker.schedule_calls, 1)
         self.assertEqual(worker.run_calls, 1)
+        self.assertEqual(worker.judgement_calls, 1)
         self.assertTrue(emit.call_args.kwargs["flush"])
 
     def test_scheduled_x_failure_uses_a_bounded_backoff_before_the_next_claim(self) -> None:
