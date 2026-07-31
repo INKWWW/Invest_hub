@@ -158,7 +158,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
 
   const sourceIds = sources.map((source) => source.id);
   let segmentQuery = supabase.from("x_daily_viewpoint_segments")
-    .select("id,source_id,natural_date,occurred_from_at,occurred_through_at,window_viewpoints,post_analysis_refs,evidence_refs,created_at")
+    .select("source_id,natural_date,occurred_from_at,occurred_through_at,window_viewpoints,post_analysis_refs")
     .in("source_id", sourceIds).order("natural_date", { ascending: false }).order("occurred_from_at");
   if (input.date) segmentQuery = segmentQuery.eq("natural_date", input.date);
   const { data: segments, error: segmentError } = await segmentQuery;
@@ -176,7 +176,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const canonicalIds = (canonicalRows ?? []).map((row) => row.id);
   const [{ data: analysisRows, error: analysisError }, { data: contextRows, error: contextError }] = canonicalIds.length
     ? await Promise.all([
-      supabase.from("x_post_analyses").select("canonical_message_id,analysis_version,blogger_viewpoint,arguments,quoted_post_viewpoint,uncertainties,evidence_refs").in("canonical_message_id", canonicalIds).eq("analysis_version", 1),
+      supabase.from("x_post_analyses").select("canonical_message_id,analysis_version,blogger_viewpoint,arguments,quoted_post_viewpoint,uncertainties").in("canonical_message_id", canonicalIds).eq("analysis_version", 1),
       supabase.from("x_post_contexts").select("canonical_message_id,post_url").in("canonical_message_id", canonicalIds),
     ])
     : [{ data: [], error: null }, { data: [], error: null }];
@@ -247,7 +247,6 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const current = latestVersionByBatch.get(version.batch_id);
     if (!current || version.revision > current.revision) latestVersionByBatch.set(version.batch_id, version);
   }
-  const displayNamesBySourceId = new Map((batchSources ?? []).map((row) => [row.source_id, row.source_display_name]));
   const batchSourcesByBatch = new Map<string, typeof batchSources>();
   for (const row of batchSources ?? []) batchSourcesByBatch.set(row.batch_id, [...(batchSourcesByBatch.get(row.batch_id) ?? []), row]);
   const batchesByDate = new Map<string, XReaderDate["judgement"]["batches"]>();
@@ -255,6 +254,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const version = latestVersionByBatch.get(batch.id);
     const output = object(version?.output);
     const batchRows = batchSourcesByBatch.get(batch.id) ?? [];
+    const displayNamesBySourceId = new Map(batchRows.map((row) => [row.source_id, row.source_display_name]));
     const judgement = {
       cutoffAt: batch.cutoff_at,
       coverageStatus: version?.coverage_status ?? "no_new_information" as const,

@@ -21,6 +21,11 @@ const days = [{
     segments: [{ occurredFromAt: "2099-01-02T11:00:00.000Z", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新博主观点"], uncertainties: [], analyses: [] }, {
       occurredFromAt: "2099-01-02T07:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["较早博主观点"], uncertainties: [], analyses: [],
     }],
+  }, {
+    source: { sourceKey: "third", displayName: "Third Author" }, status: "succeeded",
+    segments: [{ occurredFromAt: "2099-01-02T10:00:00.000Z", occurredThroughAt: "2099-01-02T11:00:00.000Z", viewpoints: ["第三位最新观点"], uncertainties: [], analyses: [] }, {
+      occurredFromAt: "2099-01-02T06:00:00.000Z", occurredThroughAt: "2099-01-02T07:00:00.000Z", viewpoints: ["第三位较早观点"], uncertainties: [], analyses: [],
+    }],
   }],
 }, {
   naturalDate: "2099-01-01",
@@ -39,10 +44,13 @@ describe("XReader", () => {
     expect(html.indexOf("当日判断总结")).toBeLessThan(html.indexOf("单个博主观点"));
     expect(html.indexOf("跨博主股票判断")).toBeLessThan(html.indexOf('<h3 class="x-reader-author">Second Author</h3>'));
     expect(html).toContain('class="x-reader-bloggers"');
+    expect(html.match(/class="x-reader-blogger"/g) ?? []).toHaveLength(2);
     expect(html).not.toContain('class="reader-source-card"');
     expect(html).toContain('<details class="x-reader-judgement" open="">');
     expect(html).toContain('<details class="x-reader-judgement">');
     expect(html.indexOf("最新博主观点")).toBeLessThan(html.indexOf("较早博主观点"));
+    expect(html.indexOf('<h3 class="x-reader-author">Second Author</h3>')).toBeLessThan(html.indexOf('<h3 class="x-reader-author">Third Author</h3>'));
+    expect(html.indexOf("第三位最新观点")).toBeLessThan(html.indexOf("第三位较早观点"));
     expect(html).toContain('<details class="x-reader-segment" open="">');
     expect(html).toContain('<details class="x-reader-segment">');
     expect(html).toContain('<option value="second">Second Author</option>');
