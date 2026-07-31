@@ -4,6 +4,8 @@
 
 **Plan status:** 已批准，实施中。真实 X 采集、远程 migration、部署和发布仍需在相应任务开始前取得独立明确授权。
 
+**2026-07-31 授权 amendment：** 用户已明确批准将终态 X 失败来源调度隔离作为本 Plan 的失败恢复补充，并批准其生产 migration、Worker 重启与线上验收。该 amendment 不改变来源配置、登录态、采集合同或历史数据。
+
 **Spec:** [V2 X 指定博主信息收集与阅读 Spec](../specs/2026-07-22-v2-x-information-collection-and-reader-design.md)（已批准）
 
 **Goal:** 在不影响既有 Discord 行为的前提下，为管理员指定的 X 博主建立独立、可恢复、可追溯的时间范围采集、每日中文摘要和安全阅读闭环。
