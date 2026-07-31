@@ -742,6 +742,8 @@ export interface Database {
           lease_expires_at: string | null;
           available_at: string;
           failure_class: string | null;
+          run_kind: "initial" | "regeneration";
+          requested_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -754,6 +756,8 @@ export interface Database {
           lease_expires_at?: string | null;
           available_at?: string;
           failure_class?: string | null;
+          run_kind?: "initial" | "regeneration";
+          requested_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -949,6 +953,10 @@ export interface Database {
       };
       fail_x_daily_judgement: {
         Args: { p_run_id: string; p_attempt: number; p_worker_id: string; p_failure_class: string };
+        Returns: Json;
+      };
+      regenerate_x_daily_judgement: {
+        Args: { p_batch_id: string; p_requested_by: string };
         Returns: Json;
       };
       get_window_daily_fact_context: {
