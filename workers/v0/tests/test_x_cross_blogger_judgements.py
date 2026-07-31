@@ -6,6 +6,7 @@ import unittest
 from invest_hub_worker import structured
 from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
 from invest_hub_worker import runtime
+from invest_hub_worker.worker import Worker
 
 
 def valid_output() -> dict[str, object]:
@@ -202,6 +203,47 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                 {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z", "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"}},
                 context_payload,
             )
+
+    def test_standard_worker_claim_completes_one_regeneration_without_touching_source_state(self) -> None:
+        class RegenerationProtocol:
+            def __init__(self) -> None:
+                self.run_kind = "regeneration"
+                self.source_tasks = {"source-a": "succeeded"}
+                self.coverage = {"source-a": "2099-01-01T08:00:00Z"}
+                self.completions: list[dict[str, object]] = []
+
+            def heartbeat(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+                return {"status": "idle"}
+
+            def claim_x_daily_judgement(self) -> dict[str, object] | None:
+                return {
+                    "run_id": "regeneration-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
+                    "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"},
+                }
+
+            def get_x_daily_judgement_context(self, run_id: str, attempt: int) -> dict[str, object]:
+                return {"run_id": run_id, "attempt": attempt, "prompt_version": "v2-x-cross-blogger-1", "sources": [], "excluded_sources": []}
+
+            def complete_x_daily_judgement(self, completion: dict[str, object]) -> dict[str, object]:
+                self.completions.append(completion)
+                return {"status": "succeeded"}
+
+            def fail_x_daily_judgement(self, _run_id: str, _attempt: int, _failure_class: str) -> dict[str, object]:
+                raise AssertionError("a successful regeneration must not report failure")
+
+        protocol = RegenerationProtocol()
+        source_tasks_before = dict(protocol.source_tasks)
+        coverage_before = dict(protocol.coverage)
+
+        outcome = Worker(protocol).run_x_daily_judgement_once(
+            lambda claim, _context: {"run_id": claim["run_id"], "attempt": claim["attempt"], "schema_version": "v2-x-cross-blogger"},
+        )
+
+        self.assertEqual(outcome.status, "succeeded")
+        self.assertEqual(protocol.run_kind, "regeneration")
+        self.assertEqual(protocol.completions, [{"run_id": "regeneration-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger"}])
+        self.assertEqual(protocol.source_tasks, source_tasks_before)
+        self.assertEqual(protocol.coverage, coverage_before)
 
 
 if __name__ == "__main__":

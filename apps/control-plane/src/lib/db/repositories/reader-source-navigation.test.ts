@@ -64,6 +64,20 @@ describe("X reader date projection", () => {
     for (const forbidden of ["analysis_ids", "evidence_post_ids", "analysis-2", "post-2", "provider", "task", "evidence_refs"]) expect(serialized).not.toContain(forbidden);
   });
 
+  it("projects revision two without mutating the retained revision-one database history", async () => {
+    const versionsBeforeRead = structuredClone(databaseMocks.rows.get("x_daily_judgement_versions"));
+
+    const result = await readXDay({ date: "2099-01-02" });
+
+    const regeneratedBatch = result[0]?.judgement.batches.find((batch) => batch.cutoffAt === "2099-01-02T12:00:00.000Z");
+    expect(regeneratedBatch).toMatchObject({ revision: 2 });
+    expect(databaseMocks.rows.get("x_daily_judgement_versions")).toEqual(versionsBeforeRead);
+    expect(databaseMocks.rows.get("x_daily_judgement_versions")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ batch_id: "batch-20", revision: 1 }),
+      expect.objectContaining({ batch_id: "batch-20", revision: 2 }),
+    ]));
+  });
+
   it("selects no unused internal evidence or segment identity fields", async () => {
     await readXDay();
 
