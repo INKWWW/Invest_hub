@@ -8,6 +8,8 @@
 
 **Goal:** 在不影响每来源 X 采集与 checkpoint 的前提下，为每个上海例行截止时刻生成一条可追溯、可修订的跨博主当日判断总结，并按“日期 → 判断总结 → 博主分块”安全展示。
 
+> **Amendment（用户确认 2026-08-01）：** 尚无成功版本时，Provider 失败只重试独立 judgement run，首次成功写入 revision 1。已成功批次的新版本必须由管理员显式、可审计的 regeneration 动作创建；该 run 成功后才追加 revision 2 或更高版本。具体实现和 Task 5 closure 见 [2026-08-01 regeneration plan](2026-08-01-x-daily-judgement-regeneration.md)。
+
 **Architecture:** 调度器在创建同一 `scheduled_window_key` 的 X 来源任务时，同时冻结一个 `x_collection_batches` 来源快照；每个来源仍独立完成现有 `x_sync` 范围。控制面只在批次结算后排入独立 `x_daily_judgement_runs` 工作，不让判断模型失败反向阻断范围完成或 coverage。X Worker 使用既有本地 Codex CLI Provider 对已持久化的窗口段和逐帖分析做严格结构化归纳；Reader 仅消费安全投影、展示最新批次和每位博主的最新窗口。
 
 **Tech Stack:** 现有 Supabase/Postgres/RLS/pgTAP、Next.js App Router + TypeScript、Python 3.11+ Worker、Codex CLI/Mock Provider、Vitest、Python `unittest`；不新增第三方依赖。
@@ -373,7 +375,7 @@ export type XReaderDate = {
 
 - [ ] **Step 1: Write failing cross-layer cases.**
 
-  Cover two sources agreeing on a stock, a third dissenting, a source failure that yields a partial judgement but advances only healthy-source coverage, a source with no new data, a judgement Provider retry that later produces revision 2, duplicate schedule ticks, stale completion rejection, date ordering, single-source filter explanation, ordinary-user safe JSON, and a 375px Reader layout assertion. Ensure fixture output includes a forbidden raw-content sentinel and assert it is absent from JSON/HTML.
+  Cover two sources agreeing on a stock, a third dissenting, a source failure that yields a partial judgement but advances only healthy-source coverage, a source with no new data, a Provider retry that later produces revision 1, an explicit administrator regeneration that later produces revision 2, duplicate schedule ticks, stale completion rejection, date ordering, single-source filter explanation, ordinary-user safe JSON, and a 375px Reader layout assertion. Ensure fixture output includes a forbidden raw-content sentinel and assert it is absent from JSON/HTML.
 
 - [ ] **Step 2: Run the new E2E test before its implementation is complete.**
 
