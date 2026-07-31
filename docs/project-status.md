@@ -48,6 +48,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [管理员来源创建简化设计](superpowers/specs/2026-07-25-admin-source-creation-simplification-design.md)
   - [X 阅读页全量筛选与管理员入口设计](superpowers/specs/2026-07-26-x-reader-all-filters-design.md)
   - [普通用户邀请码时长与掩码列表设计](superpowers/specs/2026-07-28-user-invite-duration-and-mask-design.md)
+  - [X 跨博主当日判断总结 Spec](superpowers/specs/2026-07-31-x-cross-blogger-daily-judgement-summary-design.md)
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)

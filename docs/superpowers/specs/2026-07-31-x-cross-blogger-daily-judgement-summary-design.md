@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：V2 受控生产试运行的阅读与理解能力增补
-- 状态：**待用户审阅；本文不授权实现、迁移、部署或真实采集。**
+- 状态：**已批准（用户确认 2026-07-31）；独立 implementation plan 待审阅批准。**
 - 日期：2026-07-31
 - 关联：[V2 X 指定博主信息收集与阅读 Spec](2026-07-22-v2-x-information-collection-and-reader-design.md)、[X 阅读页全量筛选与管理员入口设计](2026-07-26-x-reader-all-filters-design.md)、[项目状态](../../project-status.md)
 
