@@ -8,7 +8,7 @@ Last updated: 2026-08-01
 
 **X 终态失败来源调度隔离修复（2026-07-31）：** 用户已明确批准对应 Spec/Plan、实现与线上 migration，远端版本 `20260731084640` 已部署并验收。修复目标是防止不可重试的 `opencli_contract` 终态失败窗口被调度器每个 tick 重复创建；失败来源保持审计状态和未推进 coverage，其他来源继续独立调度。部署后 Worker 连续两个 tick 均隔离 1 个失败来源并调度其余 5 个来源；该修复不改变来源标识、登录态、采集合同或历史数据，V2 仍保持受控生产试运行，不宣称无人值守 SLA。
 
-**X 跨博主当日判断总结本地验收准备（2026-08-01）：** Task 1–4 已完成 batch、独立 judgement Worker 与安全 Reader 的本地实现。Task 5 已加入公开 synthetic E2E、脚本入口和受控生产清单，但**不得标记为完成或进入生产验收**：Spec §3/验收标准 6 要求 retry 成功为同一 batch 追加 revision 2，而当前实现的失败状态机在 retry 前不写 version、成功后又没有再次生成入口。该用例保持显式 blocked，须由用户先决定是否设计“成功 batch 显式再生成”的追加机制。生产 checklist 仅已准备；未执行远程 migration、部署、Worker 重启、真实 X/Provider 调用或生产页面验收。详见 [工程记录](engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md)。
+**X 跨博主当日判断 regeneration 本地验收（2026-08-01）：** 已批准的显式管理员 regeneration 已本地验证：同一 batch 的 revision 1 保留，管理员再生成创建独立 run，由既有 `claim_next_x_daily_judgement` Worker 路径完成后追加 revision 2，Reader 仅投影 revision 2。实际 `GET /api/reader/x` 的普通用户、过滤与 Reader-safe JSON 已由 Node route test 覆盖；Python E2E 只保留重复 tick/过期 lease 的公开调度状态，不再伪称生产 Reader/HTML 证明，也没有 blocked revision test。pgTAP 为 29 files / 416 tests 通过，Node 为 42 files / 194 tests 通过；全量 Worker discovery 仍受 worktree 缺少 virtualenv/`jsonschema` 依赖阻塞，默认 `npm run build` 仍因既有外部 `node_modules` symlink 被 Turbopack 拒绝，Webpack build 仅为补充证据。未执行 remote migration、部署、Worker 重启、真实 X/Provider 调用或生产页面验收。详见 [工程记录](engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md)。
 
 **Discord 采集状态（2026-07-22 决定）：** 个人账号的 Page Fetch、页面 UI 自动化、直接接口和导出器路线均不再进入生产；不启用 Discord 定时或手动采集。既有 Reader 与已持久化数据保持可用，但不构成持续采集能力。未来仅在频道管理员明确授权 Bot 后，才以新的独立 Spec/Plan 评估重新启动；详见 [Discord 采集探索结论](engineering-journal/2026-07-22-v1-1-discord-collection-exploration-decision.md)。本段优先于下文历史 Browser Bridge 受限描述。
 
