@@ -187,11 +187,13 @@ select is(
   'post-commit settlement reaches a queued judgement run'
 );
 update public.x_daily_judgement_runs
-set id = '00000000-0000-0000-0000-000000025051', status = 'leased', attempt = 1,
+set status = 'leased', attempt = 1,
     lease_owner = '00000000-0000-0000-0000-000000025002', lease_expires_at = timezone('utc', now()) + interval '10 minutes'
 where batch_id = '00000000-0000-0000-0000-000000025013' and status = 'queued';
 select throws_ok(
-  $$select public.complete_x_daily_judgement('00000000-0000-0000-0000-000000025051', 1, '00000000-0000-0000-0000-000000025002',
+  $$select public.complete_x_daily_judgement(
+    (select id from public.x_daily_judgement_runs where batch_id = '00000000-0000-0000-0000-000000025013'),
+    1, '00000000-0000-0000-0000-000000025002',
     '{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[{"statement":"safe","supporting_source_ids":["00000000-0000-0000-0000-000000025021"],"dissenting_source_ids":[],"analysis_ids":["safe-post@1"],"evidence_post_ids":["safe-post"],"uncertainties":[],"raw_x_content":"must-not-persist"}],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb)$$,
   '22023', 'invalid_x_daily_judgement_output', 'completion rejects nested raw content instead of persisting it'
 );
