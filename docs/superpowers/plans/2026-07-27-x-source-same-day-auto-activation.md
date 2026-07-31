@@ -72,3 +72,9 @@
 - Task 2 实现 Worker 边界及管理员安全状态。
 - Task 3 实现本机登录态 identity 和隔离重试。
 - Task 4 验证、部署、生产 Reader 验收和状态边界。
+
+## Task 5：终态失败来源调度隔离 amendment（2026-07-31）
+
+- [x] 在 `enqueue_due_x_tasks` 调度边界识别当前 coverage 起点对应的终态 `failed` X 窗口，并将来源加入安全 `deferred_source_ids`，不重复创建任务。
+- [x] 新增 pgTAP 回归，证明失败来源不复制、健康来源仍可调度、失败审计保留。
+- [x] 用户已明确批准本 amendment 的生产 migration、Worker 重启和线上验收；不删除历史任务、不修改来源标识或登录态。
