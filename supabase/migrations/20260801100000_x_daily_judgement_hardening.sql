@@ -11,7 +11,10 @@ as $$
   select p_value is not null
     and length(p_value) between 1 and p_max
     and p_value !~ '[[:cntrl:]]'
-    and p_value !~* '(^/|[\\/]|file:|local_|raw_|cookie|browser.?profile)'
+    and p_value !~* '^[[:space:]]*/'
+    and p_value !~* '^[[:space:]]*[A-Za-z]:[\\/]'
+    and p_value !~* '^[[:space:]]*file:'
+    and p_value !~* '^[[:space:]]*(local_evidence(_path)?|local_path|raw_x_content|raw_content|cookie|browser[_ -]?profile)[[:space:]:=/\\]'
 $$;
 
 create or replace function public.validate_x_daily_judgement_output(p_output jsonb)
@@ -226,13 +229,24 @@ declare v_created jsonb; v_settled jsonb; begin
   -- body through the renamed implementation installed below.
   v_created := public.ensure_due_x_collection_batches_core(p_worker_id, p_now);
   -- This runs only after a preceding source completion was committed.  It does
-  -- not share that transaction's source/task locks.
-  v_settled := public.dispatch_due_x_collection_batch_settlements(p_now);
-  return v_created || jsonb_build_object('settlements', v_settled->'batches');
+  -- not share that transaction's source/task locks.  Its failures must not
+  -- undo scheduler work already completed by this outer function body.
+  begin
+    v_settled := public.dispatch_due_x_collection_batch_settlements(p_now);
+  exception when others then
+    return v_created || jsonb_build_object(
+      'settlements', '[]'::jsonb,
+      'settlement_dispatch_failed', true
+    );
+  end;
+  return v_created || jsonb_build_object(
+    'settlements', coalesce(v_settled->'batches', '[]'::jsonb),
+    'settlement_dispatch_failed', false
+  );
 end;
 $$;
 
 revoke all on function public.dispatch_due_x_collection_batch_settlements(timestamptz), public.ensure_due_x_collection_batches_core(uuid, timestamptz)
-  from public, anon, authenticated;
+  from public, anon, authenticated, service_role;
 revoke all on function public.ensure_due_x_collection_batches(uuid, timestamptz) from public, anon, authenticated;
 grant execute on function public.dispatch_due_x_collection_batch_settlements(timestamptz), public.ensure_due_x_collection_batches(uuid, timestamptz) to service_role;
