@@ -20,7 +20,7 @@ function shanghaiNaturalDate(now = new Date()) {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
-export default async function XPage({ searchParams }: { searchParams?: Promise<XPageSearchParams> } = {}) {
+export default async function XPage({ searchParams }: { searchParams?: Promise<XPageSearchParams> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=%2Fx");
   const filters = await searchParams;

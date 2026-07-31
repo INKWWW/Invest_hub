@@ -131,9 +131,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .reader-day-card:first-child { border-top: 0; padding-top: 0; }
 
+.x-reader-judgement-section, .x-reader-bloggers { display: grid; gap: 0.85rem; }
+
+.x-reader-judgement-section { border-top: 1px solid #d5e0dd; padding-top: 1.15rem; }
+
+.x-reader-bloggers { border-top: 1px solid #d5e0dd; padding-top: 1.15rem; }
+
+.x-reader-blogger { display: grid; gap: 0.85rem; border-top: 1px solid #dce4e0; padding-top: 1rem; }
+
+.x-reader-blogger:first-of-type { border-top: 0; padding-top: 0; }
+
+.x-reader-judgement, .x-reader-segment { background: #f8faf6; border: 1px solid #dce4e0; padding: 0.85rem 1rem; }
+
 .reader-eyebrow { margin: 0 0 0.4rem; color: #547077; font-size: 0.86rem; font-weight: 700; }
 
-.reader-content h3.x-reader-date { display: flex; align-items: baseline; gap: 0.55rem; margin: 0; color: #315860; font-family: inherit; font-size: clamp(1rem, 2vw, 1.2rem); font-weight: 850; letter-spacing: -0.01em; }
+.reader-content h2.x-reader-date, .reader-content h3.x-reader-date { display: flex; align-items: baseline; gap: 0.55rem; margin: 0; color: #315860; font-family: inherit; font-size: clamp(1rem, 2vw, 1.2rem); font-weight: 850; letter-spacing: -0.01em; }
 .x-reader-date span { color: #6a7d80; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
 .x-reader-heading { margin: 0.3rem 0 0; color: #547077; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 

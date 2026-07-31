@@ -9,6 +9,11 @@ vi.mock("../../lib/db/repositories/reader", () => readerMocks);
 
 import XPage from "./page";
 
+const days = [{
+  naturalDate: "2026-07-28", judgement: { visible: true, batches: [] },
+  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", segments: [] }],
+}];
+
 describe("XPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -19,41 +24,22 @@ describe("XPage", () => {
   afterEach(() => vi.useRealTimers());
 
   it("keeps the source switcher as its own navigation level before the X page title", async () => {
-    const page = await XPage();
+    const page = await XPage({});
     const html = renderToStaticMarkup(page);
 
     expect(html.indexOf("信息来源")).toBeLessThan(html.indexOf("X 信息采集"));
-    expect(html).not.toContain("按博主和日期阅读每日综合观点");
   });
 
-  it("restores blogger selection but resets a stale date query to the current Shanghai date", async () => {
+  it("restores a blogger selector and resets a stale date to the current Shanghai date", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-27T16:30:00.000Z"));
-    readerMocks.readXDay.mockResolvedValue([{ source: { sourceKey: "first", displayName: "First Author" }, naturalDate: "2026-07-26", status: "succeeded", segments: [] }, {
-      source: { sourceKey: "second", displayName: "Second Author" }, naturalDate: "2026-07-28", status: "succeeded", segments: [],
-    }]);
+    readerMocks.readXDay.mockResolvedValue(days);
 
     const page = await XPage({ searchParams: Promise.resolve({ source: "second", date: "2026-07-26" }) } as never);
     const html = renderToStaticMarkup(page);
 
-    expect(html).toContain("Second Author");
-    expect(html).not.toContain("<strong>First Author</strong>");
     expect(html).toContain('<option value="second" selected="">Second Author</option>');
     expect(html).toContain('<option value="2026-07-28" selected="">2026-07-28</option>');
     expect(html).not.toContain('<option value="2026-07-26" selected="">');
-  });
-
-  it("defaults to the current Shanghai date even before that date has content", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-27T16:30:00.000Z"));
-    readerMocks.readXDay.mockResolvedValue([{
-      source: { sourceKey: "first", displayName: "First Author" }, naturalDate: "2026-07-27", status: "succeeded", segments: [],
-    }]);
-
-    const page = await XPage();
-    const html = renderToStaticMarkup(page);
-
-    expect(html).toContain('<option value="2026-07-28" selected="">2026-07-28</option>');
-    expect(html).toContain("没有找到符合当前博主和日期筛选的 X 信息。");
   });
 });

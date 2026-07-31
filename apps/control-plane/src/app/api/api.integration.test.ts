@@ -406,6 +406,29 @@ describe("v0 control-plane API authorization", () => {
     expect(readerMocks.readXDay).toHaveBeenCalledWith({ sourceKey: undefined, date: undefined });
   });
 
+  it("returns only the safe X date-reader DTO to an authenticated ordinary user", async () => {
+    readerMocks.readXDay.mockResolvedValue([{
+      naturalDate: "2099-01-01",
+      judgement: {
+        visible: true,
+        batches: [{
+          cutoffAt: "2099-01-01T12:00:00.000Z", coverageStatus: "partial", status: "succeeded", revision: 2,
+          stockViewpoints: [{ statement: "Synthetic judgement", supportingDisplayNames: ["Fixture source"], dissentingDisplayNames: [], uncertainties: [] }],
+          marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 1,
+        }],
+      },
+      bloggers: [],
+    }]);
+
+    const response = await getXReader(new Request("http://localhost/api/reader/x"));
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(200);
+    expect(body.days[0].judgement.batches[0]).toMatchObject({ excludedSourceCount: 1, revision: 2 });
+    for (const forbidden of ["analysis_ids", "evidence_post_ids", "task_id", "raw post", "provider", "/Users/"]) expect(serialized).not.toContain(forbidden);
+  });
+
   it("blocks ordinary users from changing rules, source bindings, and history scopes", async () => {
     const rule = await postAdminRule(jsonRequest("/api/admin/rules", {
       source_id: "source-1",

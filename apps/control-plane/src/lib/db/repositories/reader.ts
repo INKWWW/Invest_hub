@@ -15,26 +15,49 @@ export type ReaderDay = {
   batches: Array<{ presentation: SummaryPresentation }>;
 };
 
-export type XReaderDay = {
-  source: { sourceKey: string; displayName: string };
-  naturalDate: string;
-  status: ReaderStatus;
-  segments: Array<{
-    id: string;
-    occurredFromAt: string;
-    occurredThroughAt: string;
-    viewpoints: string[];
+export type ReaderJudgement = {
+  statement: string;
+  supportingDisplayNames: string[];
+  dissentingDisplayNames: string[];
+  uncertainties: string[];
+};
+
+type XReaderSegment = {
+  occurredFromAt: string;
+  occurredThroughAt: string;
+  viewpoints: string[];
+  uncertainties: string[];
+  analyses: Array<{
+    postLink: string;
+    bloggerViewpoint: string | null;
+    arguments: string[];
+    quotedPostViewpoint: string | null;
     uncertainties: string[];
-    analyses: Array<{
-      postId: string;
-      postLink: string;
-      bloggerViewpoint: string | null;
-      arguments: string[];
-      quotedPostViewpoint: string | null;
-      uncertainties: string[];
-      evidencePostIds: string[];
-    }>;
   }>;
+};
+
+export type XReaderBlogger = {
+  source: { sourceKey: string; displayName: string };
+  status: ReaderStatus;
+  segments: XReaderSegment[];
+};
+
+export type XReaderDate = {
+  naturalDate: string;
+  judgement: {
+    visible: boolean;
+    batches: Array<{
+      cutoffAt: string;
+      coverageStatus: "complete" | "partial" | "no_new_information";
+      status: "succeeded" | "judgement_pending" | "judgement_failed";
+      revision: number;
+      stockViewpoints: ReaderJudgement[];
+      marketIndustryViewpoints: ReaderJudgement[];
+      uncertainties: string[];
+      excludedSourceCount: number;
+    }>;
+  };
+  bloggers: XReaderBlogger[];
 };
 
 function readerStatus(task: { id: string; status: string } | undefined, noNewMessages: boolean, coverage: unknown): ReaderStatus {
@@ -101,8 +124,31 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
 }
 
+function object(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function judgementItems(value: unknown, displayNames: Map<string, string>): ReaderJudgement[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const judgement = object(item);
+    if (!judgement || typeof judgement.statement !== "string") return [];
+    return [{
+      statement: judgement.statement,
+      supportingDisplayNames: strings(judgement.supporting_source_ids).flatMap((sourceId) => displayNames.has(sourceId) ? [displayNames.get(sourceId)!] : []),
+      dissentingDisplayNames: strings(judgement.dissenting_source_ids).flatMap((sourceId) => displayNames.has(sourceId) ? [displayNames.get(sourceId)!] : []),
+      uncertainties: strings(judgement.uncertainties),
+    }];
+  });
+}
+
+function judgementStatus(status: string): "succeeded" | "judgement_pending" | "judgement_failed" {
+  if (status === "succeeded") return "succeeded";
+  return status === "judgement_failed" ? "judgement_failed" : "judgement_pending";
+}
+
 /** Reader-safe X projection: no raw body, cookie, local reference, or prompt. */
-export async function readXDay(input: { sourceKey?: string; date?: string } = {}): Promise<XReaderDay[]> {
+export async function readXDay(input: { sourceKey?: string; date?: string } = {}): Promise<XReaderDate[]> {
   const supabase = createSupabaseAdminClient();
   let sourceQuery = supabase.from("sources").select("id,source_key,display_name").eq("source_type", "x").eq("enabled", true).order("display_name", { ascending: true });
   if (input.sourceKey) sourceQuery = sourceQuery.eq("source_key", input.sourceKey);
@@ -117,10 +163,8 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   if (input.date) segmentQuery = segmentQuery.eq("natural_date", input.date);
   const { data: segments, error: segmentError } = await segmentQuery;
   if (segmentError) throw segmentError;
-  if (!segments?.length) return [];
-
   const requestedPostIds = new Set<string>();
-  for (const segment of segments) {
+  for (const segment of segments ?? []) {
     const refs = Array.isArray(segment.post_analysis_refs) ? segment.post_analysis_refs : [];
     for (const ref of refs) if (ref && typeof ref === "object" && "post_id" in ref && typeof (ref as Record<string, unknown>).post_id === "string") requestedPostIds.add((ref as Record<string, string>).post_id);
   }
@@ -146,18 +190,18 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const latestTaskBySource = new Map<string, { id: string; status: string }>();
   for (const task of taskRows ?? []) if (!latestTaskBySource.has(task.source_id)) latestTaskBySource.set(task.source_id, task);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const bloggersByDate = new Map<string, XReaderBlogger[]>();
   const groups = new Map<string, typeof segments>();
-  for (const segment of segments) {
+  for (const segment of segments ?? []) {
     const key = `${segment.source_id}:${segment.natural_date}`;
     groups.set(key, [...(groups.get(key) ?? []), segment]);
   }
-  return [...groups.entries()].map(([key, daySegments]) => {
+  for (const [, daySegments] of groups) {
     const source = sourceById.get(daySegments[0]!.source_id)!;
-    return {
+    const blogger = {
       source: { sourceKey: source.source_key, displayName: source.display_name },
-      naturalDate: daySegments[0]!.natural_date,
       status: readerStatus(latestTaskBySource.get(source.id), false, null),
-      segments: daySegments.map((segment) => {
+      segments: daySegments.sort((left, right) => right.occurred_through_at.localeCompare(left.occurred_through_at)).map((segment) => {
         const refs = Array.isArray(segment.post_analysis_refs) ? segment.post_analysis_refs : [];
         const analyses = refs.flatMap((ref) => {
           const postId = ref && typeof ref === "object" ? (ref as Record<string, unknown>).post_id : undefined;
@@ -167,13 +211,66 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
           const analysis = analysisByCanonicalId.get(canonical.id);
           const context = contextByCanonicalId.get(canonical.id);
           if (!analysis || !context) return [];
-          return [{ postId, postLink: context.post_url, bloggerViewpoint: analysis.blogger_viewpoint,
+          return [{ postLink: context.post_url, bloggerViewpoint: analysis.blogger_viewpoint,
             arguments: strings(analysis.arguments), quotedPostViewpoint: analysis.quoted_post_viewpoint,
-            uncertainties: strings(analysis.uncertainties), evidencePostIds: strings(analysis.evidence_refs) }];
+            uncertainties: strings(analysis.uncertainties) }];
         });
-        return { id: segment.id, occurredFromAt: segment.occurred_from_at, occurredThroughAt: segment.occurred_through_at,
+        return { occurredFromAt: segment.occurred_from_at, occurredThroughAt: segment.occurred_through_at,
           viewpoints: strings(segment.window_viewpoints), uncertainties: [], analyses };
       }),
     };
-  }).sort((left, right) => right.naturalDate.localeCompare(left.naturalDate) || left.source.displayName.localeCompare(right.source.displayName));
+    const naturalDate = daySegments[0]!.natural_date;
+    bloggersByDate.set(naturalDate, [...(bloggersByDate.get(naturalDate) ?? []), blogger]);
+  }
+
+  if (input.sourceKey) return [...bloggersByDate.entries()].map(([naturalDate, bloggers]) => ({
+    naturalDate,
+    judgement: { visible: false, batches: [] },
+    bloggers: bloggers.sort((left, right) => left.source.displayName.localeCompare(right.source.displayName)),
+  })).sort((left, right) => right.naturalDate.localeCompare(left.naturalDate));
+
+  let batchQuery = supabase.from("x_collection_batches").select("id,natural_date,cutoff_at,status").order("natural_date", { ascending: false }).order("cutoff_at", { ascending: false });
+  if (input.date) batchQuery = batchQuery.eq("natural_date", input.date);
+  const { data: batches, error: batchError } = await batchQuery;
+  if (batchError) throw batchError;
+  const batchIds = (batches ?? []).map((batch) => batch.id);
+  const [{ data: versions, error: versionError }, { data: batchSources, error: batchSourcesError }] = batchIds.length
+    ? await Promise.all([
+      supabase.from("x_daily_judgement_versions").select("batch_id,revision,coverage_status,output").in("batch_id", batchIds).order("revision", { ascending: false }),
+      supabase.from("x_collection_batch_sources").select("batch_id,source_id,source_display_name,settlement_status").in("batch_id", batchIds),
+    ])
+    : [{ data: [], error: null }, { data: [], error: null }];
+  if (versionError) throw versionError;
+  if (batchSourcesError) throw batchSourcesError;
+  const latestVersionByBatch = new Map<string, typeof versions extends Array<infer Row> ? Row : never>();
+  for (const version of versions ?? []) {
+    const current = latestVersionByBatch.get(version.batch_id);
+    if (!current || version.revision > current.revision) latestVersionByBatch.set(version.batch_id, version);
+  }
+  const displayNamesBySourceId = new Map((batchSources ?? []).map((row) => [row.source_id, row.source_display_name]));
+  const batchSourcesByBatch = new Map<string, typeof batchSources>();
+  for (const row of batchSources ?? []) batchSourcesByBatch.set(row.batch_id, [...(batchSourcesByBatch.get(row.batch_id) ?? []), row]);
+  const batchesByDate = new Map<string, XReaderDate["judgement"]["batches"]>();
+  for (const batch of batches ?? []) {
+    const version = latestVersionByBatch.get(batch.id);
+    const output = object(version?.output);
+    const batchRows = batchSourcesByBatch.get(batch.id) ?? [];
+    const judgement = {
+      cutoffAt: batch.cutoff_at,
+      coverageStatus: version?.coverage_status ?? "no_new_information" as const,
+      status: judgementStatus(batch.status),
+      revision: version?.revision ?? 0,
+      stockViewpoints: judgementItems(output?.stock_viewpoints, displayNamesBySourceId),
+      marketIndustryViewpoints: judgementItems(output?.market_industry_viewpoints, displayNamesBySourceId),
+      uncertainties: strings(output?.uncertainties),
+      excludedSourceCount: batchRows.filter((row) => row.settlement_status === "excluded").length,
+    };
+    batchesByDate.set(batch.natural_date, [...(batchesByDate.get(batch.natural_date) ?? []), judgement]);
+  }
+  const dates = new Set([...bloggersByDate.keys(), ...batchesByDate.keys()]);
+  return [...dates].map((naturalDate) => ({
+    naturalDate,
+    judgement: { visible: true, batches: (batchesByDate.get(naturalDate) ?? []).sort((left, right) => right.cutoffAt.localeCompare(left.cutoffAt)) },
+    bloggers: (bloggersByDate.get(naturalDate) ?? []).sort((left, right) => left.source.displayName.localeCompare(right.source.displayName)),
+  })).sort((left, right) => right.naturalDate.localeCompare(left.naturalDate));
 }
