@@ -30,6 +30,8 @@ class ProviderContext:
     allowed_source_ids: frozenset[str] = frozenset()
     allowed_analysis_ids: frozenset[str] = frozenset()
     allowed_post_ids: frozenset[str] = frozenset()
+    allowed_analysis_source_ids: tuple[tuple[str, str], ...] = ()
+    allowed_analysis_evidence_post_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.chunk_id.strip():

@@ -375,6 +375,22 @@ class WorkerProtocolTests(unittest.TestCase):
 
             self.assertEqual(len(transport.calls), 1)
 
+    def test_x_daily_judgement_completion_rejects_unsafe_model_telemetry_before_transport(self) -> None:
+        completion = {
+            "run_id": "judgement-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger", "provider": "codex_cli",
+            "model_reported": "C:\\private\\model", "prompt_version": "v2-x-cross-blogger-1", "stock_viewpoints": [],
+            "market_industry_viewpoints": [], "uncertainties": [],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            with self.assertRaisesRegex(ProtocolError, "invalid x daily judgement completion"):
+                protocol.complete_x_daily_judgement(completion)
+
+            self.assertEqual(len(transport.calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

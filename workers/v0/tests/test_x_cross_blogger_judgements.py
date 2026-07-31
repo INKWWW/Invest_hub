@@ -33,6 +33,8 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
             allowed_source_ids={"source-a", "source-b", "source-c"},
             allowed_analysis_ids={"post-a@1", "post-b@1", "post-c@1"},
             allowed_post_ids={"post-a", "post-b", "post-c"},
+            analysis_source_ids={"post-a@1": "source-a", "post-b@1": "source-b", "post-c@1": "source-c"},
+            analysis_evidence_post_ids={"post-a@1": {"post-a"}, "post-b@1": {"post-b"}, "post-c@1": {"post-c"}},
         )
 
     def test_accepts_agreement_disagreement_and_omitted_no_new_information_source(self) -> None:
@@ -69,6 +71,32 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         duplicate["stock_viewpoints"][0]["evidence_post_ids"] = ["post-a", "post-a"]
         with self.assertRaisesRegex(structured.SchemaError, "duplicate evidence"):
             self.parse(duplicate)
+
+    def test_rejects_cross_source_analysis_and_evidence_splicing(self) -> None:
+        spliced = valid_output()
+        spliced["stock_viewpoints"][0]["supporting_source_ids"] = ["source-a"]
+        spliced["stock_viewpoints"][0]["dissenting_source_ids"] = []
+        spliced["stock_viewpoints"][0]["analysis_ids"] = ["post-c@1"]
+        spliced["stock_viewpoints"][0]["evidence_post_ids"] = ["post-c"]
+
+        with self.assertRaisesRegex(structured.SchemaError, "source ownership"):
+            self.parse(spliced)
+
+    def test_rejects_opaque_analysis_ids_in_natural_language_fields(self) -> None:
+        statement = valid_output()
+        statement["stock_viewpoints"][0]["statement"] = "post-a@1 表示估值仍需观察。"
+        with self.assertRaisesRegex(structured.SchemaError, "opaque analysis ID"):
+            self.parse(statement)
+
+        item_uncertainty = valid_output()
+        item_uncertainty["stock_viewpoints"][0]["uncertainties"] = ["post-b@1 的上下文不足"]
+        with self.assertRaisesRegex(structured.SchemaError, "opaque analysis ID"):
+            self.parse(item_uncertainty)
+
+        global_uncertainty = valid_output()
+        global_uncertainty["uncertainties"] = ["post-c@1 的上下文不足"]
+        with self.assertRaisesRegex(structured.SchemaError, "opaque analysis ID"):
+            self.parse(global_uncertainty)
 
     def test_rejects_conflicting_sources_empty_evidence_and_imperative_recommendation(self) -> None:
         conflicting = valid_output()
@@ -146,6 +174,34 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         self.assertEqual(result["model_reported"], "gpt-fixture")
         self.assertNotIn("raw_ref", result)
         self.assertEqual(provider.context.operation, "v2_x_cross_blogger")
+
+    def test_runtime_rejects_unsafe_model_reported_before_completion(self) -> None:
+        class UnsafeTelemetryProvider:
+            def complete(self, _input_chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
+                return ProviderResponse(
+                    status="success", provider="codex_cli", model_reported="file:///private/evidence",
+                    prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
+                    raw_ref=None, parsed_output_ref=None, parsed_output=valid_output(),
+                )
+
+        context_payload = {
+            "run_id": "judgement-run-1", "attempt": 1, "prompt_version": "v2-x-cross-blogger-1",
+            "sources": [{"source_id": source_id, "display_name": source_id, "window_segments": [{
+                "id": source_id, "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
+                "viewpoints": [], "uncertainties": [], "analyses": [{
+                    "post_id": analysis_id, "blogger_viewpoint": None, "arguments": [], "quoted_post_viewpoint": None,
+                    "uncertainties": [], "evidence_post_ids": [post_id],
+                }],
+            }]} for source_id, analysis_id, post_id in (
+                ("source-a", "post-a@1", "post-a"), ("source-b", "post-b@1", "post-b"), ("source-c", "post-c@1", "post-c"),
+            )],
+            "excluded_sources": [],
+        }
+        with self.assertRaisesRegex(runtime.RuntimeExecutionError, "model telemetry"):
+            runtime.XDailyJudgementRuntime(provider=UnsafeTelemetryProvider(), prompt_template="private").execute(
+                {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z", "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"}},
+                context_payload,
+            )
 
 
 if __name__ == "__main__":

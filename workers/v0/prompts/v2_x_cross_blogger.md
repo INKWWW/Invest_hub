@@ -20,4 +20,6 @@
 }
 ```
 
-只能使用 included `sources`；`excluded_sources` 仅用于说明覆盖限制，绝不能作为支持或反对来源。每个判断必须附带至少一个不重复的 `evidence_post_ids`，不得让同一个来源同时位于支持和反对列表。没有可比较的新观点时，两个 viewpoint 数组保持为空，并在 `uncertainties` 说明原因。不得输出投资建议、买卖指令或仓位建议。
+只能使用 included `sources`；`excluded_sources` 仅用于说明覆盖限制，绝不能作为支持或反对来源。每个判断必须附带至少一个不重复的 `evidence_post_ids`，不得让同一个来源同时位于支持和反对列表。每个引用 source 必须拥有至少一项引用的 `analysis_ids`，每个 `evidence_post_ids` 必须属于至少一项引用 analysis；不得把 source-a 与 source-c 的 analysis/evidence 拼接为同一判断。没有可比较的新观点时，两个 viewpoint 数组保持为空，并在 `uncertainties` 说明原因。不得输出投资建议、买卖指令或仓位建议。
+
+`post@version` 是 opaque analysis ID：它只能原样出现在 `analysis_ids`，绝不能出现在 `statement`、任何 item 的 `uncertainties` 或顶层 `uncertainties`。例如不得输出“post-a@1 表示估值仍需观察”或“post-b@1 的上下文不足”；应以自然语言描述事实或不确定性，不复述内部 ID。

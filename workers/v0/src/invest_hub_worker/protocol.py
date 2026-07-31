@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 import urllib.error
 import urllib.request
@@ -415,10 +416,24 @@ def _validate_x_daily_judgement_completion(value: dict[str, Any]) -> None:
     if set(value) != required or value.get("schema_version") != "v2-x-cross-blogger" or value.get("provider") != "codex_cli" or value.get("prompt_version") != "v2-x-cross-blogger-1":
         raise ProtocolError("invalid x daily judgement completion")
     _validate_x_daily_judgement_identity(value.get("run_id"), value.get("attempt"), "completion")
-    if value.get("model_reported") is not None and not _non_empty_string(value.get("model_reported")) or not isinstance(value.get("stock_viewpoints"), list) or not isinstance(value.get("market_industry_viewpoints"), list) or not isinstance(value.get("uncertainties"), list):
+    if not _safe_model_reported(value.get("model_reported")) or not isinstance(value.get("stock_viewpoints"), list) or not isinstance(value.get("market_industry_viewpoints"), list) or not isinstance(value.get("uncertainties"), list):
         raise ProtocolError("invalid x daily judgement completion")
     for item in [*value["stock_viewpoints"], *value["market_industry_viewpoints"]]:
         if not isinstance(item, dict) or set(item) != {"statement", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"} or not _non_empty_string(item.get("statement")):
             raise ProtocolError("invalid x daily judgement completion")
         if not all(isinstance(item.get(key), list) and all(_non_empty_string(entry) for entry in item[key]) for key in ("supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties")):
             raise ProtocolError("invalid x daily judgement completion")
+
+
+def _safe_model_reported(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str) or not 1 <= len(value) <= 160 or any(ord(character) < 32 or ord(character) == 127 for character in value):
+        return False
+    stripped = value.lstrip()
+    return not (
+        stripped.startswith("/")
+        or bool(re.match(r"^[A-Za-z]:[\\/]", stripped))
+        or stripped.lower().startswith("file:")
+        or bool(re.match(r"^(local_evidence(_path)?|local_path|raw_x_content|raw_content|cookie|browser[_ -]?profile)[\s:=/\\]", stripped, re.IGNORECASE))
+    )
