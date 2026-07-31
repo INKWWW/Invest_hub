@@ -1,6 +1,6 @@
 begin;
 
-select plan(28);
+select plan(30);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values
@@ -40,9 +40,6 @@ insert into public.x_collection_batch_sources (batch_id, source_id, source_displ
 values
   ('00000000-0000-0000-0000-000000026020', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now())),
   ('00000000-0000-0000-0000-000000026026', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now()));
-insert into public.x_daily_judgement_runs (id, batch_id, status, attempt, run_kind, available_at)
-values ('00000000-0000-0000-0000-000000026040', '00000000-0000-0000-0000-000000026026', 'retryable_failed', 0, 'initial', timezone('utc', now()) + interval '1 hour');
-
 select has_column('public', 'x_daily_judgement_runs', 'run_kind', 'judgement runs distinguish initial and explicit regeneration work');
 select has_column('public', 'x_daily_judgement_runs', 'requested_by', 'regeneration runs preserve the requesting actor');
 set local role service_role;
@@ -88,16 +85,25 @@ select is(
   'completion leaves revision one byte-for-byte unchanged'
 );
 
-select is((select count(*)::text from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000026026'), '0', 'an initial retryable run starts without a version');
-update public.x_daily_judgement_runs
-set available_at = timezone('utc', now())
-where id = '00000000-0000-0000-0000-000000026040';
+insert into public.x_daily_judgement_runs (id, batch_id, status, attempt, run_kind, available_at)
+values ('00000000-0000-0000-0000-000000026040', '00000000-0000-0000-0000-000000026026', 'queued', 0, 'initial', timezone('utc', now()));
+select is((select count(*)::text from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000026026'), '0', 'a queued initial run starts without a version');
+create temporary table initial_claim as
+select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000026001', timezone('utc', now())) as payload;
+select is((select payload->>'attempt' from initial_claim), '1', 'normal Worker claims the queued initial run as attempt one');
+select is(
+  (select public.fail_x_daily_judgement(
+    (select (payload->>'run_id')::uuid from initial_claim), 1, '00000000-0000-0000-0000-000000026001', 'provider_failure'
+  )->>'status'),
+  'retryable_failed',
+  'provider failure makes the initial attempt retryable'
+);
 create temporary table initial_retry_claim as
 select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000026001', timezone('utc', now())) as payload;
-select is((select payload->>'attempt' from initial_retry_claim), '1', 'normal Worker claim leases the initial retryable run');
+select is((select payload->>'attempt' from initial_retry_claim), '2', 'normal Worker claims the retryable initial run as attempt two');
 select is(
   (select public.complete_x_daily_judgement(
-    (select (payload->>'run_id')::uuid from initial_retry_claim), 1, '00000000-0000-0000-0000-000000026001',
+    (select (payload->>'run_id')::uuid from initial_retry_claim), 2, '00000000-0000-0000-0000-000000026001',
     '{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb
   )->>'status'),
   'succeeded',
