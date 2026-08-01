@@ -15,10 +15,10 @@ Worker 边界由实际 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`t
 | 范围 | 命令 | 结果 |
 | --- | --- | --- |
 | 数据库生命周期 authority | V2 runner 内的 `supabase db reset`；`supabase test db` | reset 成功；32 files / 553 tests 通过，其中 judgement 026/027/028/029 直接验证真实 DB 状态转移。 |
-| judgement Worker 聚焦组 | V2 runner 显式运行 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`test_protocol.py`、`test_worker_recovery.py` | 54/54 通过；scheduled CLI telemetry 保留安全失败布尔值且不输出细节；没有 cross-blogger synthetic state-machine 或重复 discovery。 |
+| judgement Worker 聚焦组 | V2 runner 显式运行 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`test_protocol.py`、`test_worker_recovery.py` | 58/58 通过；scheduled CLI telemetry 保留安全失败布尔值且不输出细节；没有 cross-blogger synthetic state-machine 或重复 discovery。 |
 | final Node 边界 | V2 runner 中去重后的实际 route/repository/page/component 聚焦组 | 8 files / 38 tests 通过：Reader runtime whitelist、admin regeneration、revision history、all/source/date URL 恢复；Worker completion API 已由前置 control-plane 组的 `api.integration.test.ts` 覆盖。 |
 | 全量 Worker | `PYTHONPATH=workers/v0/src /Users/hanyuec/Desktop/Invest_hub/workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_*.py' -v` | 使用现有 main V0 virtualenv；161/161 通过。 |
-| V2 runner | `V2_PYTHON_BIN=/Users/hanyuec/Desktop/Invest_hub/workers/v0/.venv/bin/python bash scripts/v2/run-v2-e2e.sh` | 两个本地 OpenCLI 静态/fixture 门禁、数据库 32 files / 553 tests、judgement Worker 54/54、既有 V2 collection/recovery fixture 3/3、V1.1 16/16、control-plane 聚焦组 6 files / 120 tests、去重后的 final Node 聚焦组 8 files / 38 tests 通过；0 skipped。 |
+| V2 runner | `V2_PYTHON_BIN=/Users/hanyuec/Desktop/Invest_hub/workers/v0/.venv/bin/python bash scripts/v2/run-v2-e2e.sh` | 两个本地 OpenCLI 静态/fixture 门禁、数据库 32 files / 553 tests、judgement Worker 58/58、既有 V2 collection/recovery fixture 3/3、V1.1 16/16、control-plane 聚焦组 6 files / 120 tests、去重后的 final Node 聚焦组 8 files / 38 tests 通过；0 skipped。 |
 | 控制面测试与 lint | `npm test`；`npm run lint` | 42 files / 230 tests 通过；lint 通过。 |
 | 默认 build | `npm run build` | **未通过（exit 1）**：Next.js 16.2.10 Turbopack 报 `Symlink [project]/node_modules is invalid, it points out of the filesystem root`。本 worktree 的既有未跟踪 `node_modules` symlink 指向主工作区依赖目录；这是 plan-required 默认命令的环境失败，不能标记为 build 通过。 |
 | supplemental Webpack build | `npm run build -- --webpack` | 通过；Next.js 16.2.10 Webpack 完成 TypeScript 和 32 个页面的 production build。它只提供独立补充证据，不能替代默认 Turbopack build。 |
