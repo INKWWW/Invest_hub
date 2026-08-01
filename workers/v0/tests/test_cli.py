@@ -50,6 +50,17 @@ class ScheduleFailingWorker(ScheduledWorker):
         raise ProtocolError("schedule_tick_failed")
 
 
+class JudgementDispatchFailingWorker(ScheduledWorker):
+    def schedule_tick(self) -> dict[str, object]:
+        self.schedule_calls += 1
+        return {
+            "scheduled_at": "2099-01-01T00:00:00Z",
+            "tasks": [],
+            "judgement_dispatch_failed": True,
+            "private_dispatch_detail": "/private/dispatcher/error.json",
+        }
+
+
 class WorkerCliTests(unittest.TestCase):
     def test_run_once_requires_private_runtime_inputs_as_cli_arguments(self) -> None:
         parser = build_parser()
@@ -76,6 +87,17 @@ class WorkerCliTests(unittest.TestCase):
         self.assertEqual(worker.run_calls, 1)
         self.assertEqual(worker.judgement_calls, 1)
         self.assertTrue(emit.call_args.kwargs["flush"])
+
+    def test_scheduled_output_keeps_safe_judgement_dispatch_failure_without_details(self) -> None:
+        worker = JudgementDispatchFailingWorker()
+
+        with patch("builtins.print") as emit:
+            self.assertEqual(_run_scheduled(worker, once=True, poll_seconds=60), 0)
+
+        output = json.loads(emit.call_args.args[0])
+        self.assertEqual(output["judgement_dispatch_failed"], True)
+        self.assertNotIn("private_dispatch_detail", output)
+        self.assertNotIn("/private/dispatcher/error.json", json.dumps(output))
 
     def test_scheduled_x_failure_uses_a_bounded_backoff_before_the_next_claim(self) -> None:
         self.assertEqual(_scheduled_sleep_seconds(RunOutcome("recovering", "task-1"), 60), 300)

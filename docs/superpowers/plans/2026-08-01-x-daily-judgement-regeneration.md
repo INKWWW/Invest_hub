@@ -1,5 +1,7 @@
 # X 当日判断总结再生成 Implementation Plan
 
+> **状态：已批准（用户确认 2026-08-01）。**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在不把 Provider 失败伪装为 Reader 版本的前提下，使已成功 X 批次可由管理员显式再生成并追加 immutable revision，同时闭合 Task 5 的真实跨层验收缺口。
