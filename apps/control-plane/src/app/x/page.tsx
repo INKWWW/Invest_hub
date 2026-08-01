@@ -5,6 +5,7 @@ import { ReaderSourceNavigation } from "../../components/reader/ReaderSourceNavi
 import { XReader } from "../../components/reader/XReader";
 import { getCurrentUser } from "../../lib/auth/current-user";
 import { readXDay } from "../../lib/db/repositories/reader";
+import { isValidReaderNaturalDate } from "../../lib/reader-date";
 
 type XPageSearchParams = { source?: string | string[]; date?: string | string[] };
 
@@ -13,7 +14,7 @@ function singleValue(value: string | string[] | undefined) {
 }
 
 function legalNaturalDate(value: string | undefined) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+  return value && isValidReaderNaturalDate(value) ? value : undefined;
 }
 
 export default async function XPage({ searchParams }: { searchParams?: Promise<XPageSearchParams> }) {

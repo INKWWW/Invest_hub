@@ -39,17 +39,21 @@ describe("XPage", () => {
     expect(html).toContain("没有找到符合当前博主和日期筛选的 X 信息。");
   });
 
-  it("defaults to all dates and ignores a malformed date query", async () => {
+  it("defaults to all dates and ignores malformed or impossible date queries", async () => {
     readerMocks.readXDay.mockResolvedValue(days);
 
     const defaultPage = await XPage({});
     const malformedPage = await XPage({ searchParams: Promise.resolve({ date: "2026-7-28" }) } as never);
+    const impossiblePage = await XPage({ searchParams: Promise.resolve({ date: "2099-02-29" }) } as never);
     const defaultHtml = renderToStaticMarkup(defaultPage);
     const malformedHtml = renderToStaticMarkup(malformedPage);
+    const impossibleHtml = renderToStaticMarkup(impossiblePage);
 
     expect(defaultHtml).toContain('<option value="all" selected="">全部</option>');
     expect(defaultHtml).not.toContain('value="2026-08-01" selected=""');
     expect(malformedHtml).toContain('<option value="all" selected="">全部</option>');
     expect(malformedHtml).not.toContain('value="2026-7-28"');
+    expect(impossibleHtml).toContain('<option value="all" selected="">全部</option>');
+    expect(impossibleHtml).not.toContain('value="2099-02-29"');
   });
 });
