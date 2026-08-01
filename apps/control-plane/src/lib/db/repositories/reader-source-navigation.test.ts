@@ -160,6 +160,82 @@ describe("X reader date projection", () => {
     }
   });
 
+  it("bounds every high-cardinality X lookup while preserving merged content and ordering", async () => {
+    const count = 235;
+    const padded = (index: number) => String(index).padStart(3, "0");
+    databaseMocks.rows.set("sources", Array.from({ length: count }, (_, index) => ({
+      id: `wide-source-${index}`, source_key: `wide-${index}`, display_name: `Wide ${padded(index)}`,
+    })));
+    databaseMocks.rows.set("x_daily_viewpoint_segments", Array.from({ length: count }, (_, index) => ({
+      source_id: `wide-source-${index}`, natural_date: "2099-01-06",
+      occurred_from_at: `2099-01-06T10:00:00.${padded(index)}Z`,
+      occurred_through_at: `2099-01-06T10:00:00.${padded(index)}Z`,
+      window_viewpoints: [`segment-${index}`], post_analysis_refs: [{ post_id: `external-${index}` }],
+    })));
+    databaseMocks.rows.set("canonical_messages", Array.from({ length: count }, (_, index) => ({
+      id: `canonical-${index}`, source_id: `wide-source-${index}`, external_message_id: `external-${index}`,
+    })));
+    databaseMocks.rows.set("x_post_analyses", Array.from({ length: count }, (_, index) => ({
+      canonical_message_id: `canonical-${index}`, analysis_version: 1, blogger_viewpoint: `analysis-${index}`,
+      arguments: [`argument-${index}`], quoted_post_viewpoint: null, uncertainties: [],
+    })));
+    databaseMocks.rows.set("x_post_contexts", Array.from({ length: count }, (_, index) => ({
+      canonical_message_id: `canonical-${index}`, post_url: `https://x.test/post/${index}`,
+    })));
+    databaseMocks.rows.set("x_collection_batches", Array.from({ length: count }, (_, index) => ({
+      id: `wide-batch-${index}`, natural_date: "2099-01-06",
+      cutoff_at: `2099-01-06T12:00:00.${padded(index)}Z`, status: "succeeded",
+    })));
+    databaseMocks.rows.set("x_daily_judgement_versions", Array.from({ length: count }, (_, index) => ({
+      batch_id: `wide-batch-${index}`, revision: 1, coverage_status: "complete",
+      output: { stock_viewpoints: [{ statement: `judgement-${index}`, supporting_source_ids: [`wide-source-${index}`], dissenting_source_ids: [], uncertainties: [] }], market_industry_viewpoints: [], uncertainties: [] },
+    })));
+    databaseMocks.rows.set("x_collection_batch_sources", Array.from({ length: count }, (_, index) => ({
+      batch_id: `wide-batch-${index}`, source_id: `wide-source-${index}`, source_display_name: `Snapshot ${padded(index)}`,
+      x_sync_task_id: `wide-task-${index}`, settlement_status: "included",
+    })));
+    databaseMocks.rows.set("sync_tasks", Array.from({ length: count }, (_, index) => ({
+      id: `wide-task-${index}`, status: "succeeded",
+    })));
+    databaseMocks.rows.set("task_attempts", Array.from({ length: count }, (_, index) => ({
+      task_id: `wide-task-${index}`, result: { no_new_data: false }, updated_at: `2099-01-06T12:01:00.${padded(index)}Z`,
+    })));
+
+    const result = await readXDay();
+    const day = result[0];
+    const lookupKeys = [
+      "x_daily_viewpoint_segments:source_id",
+      "canonical_messages:source_id",
+      "canonical_messages:external_message_id",
+      "x_post_analyses:canonical_message_id",
+      "x_post_contexts:canonical_message_id",
+      "x_daily_judgement_versions:batch_id",
+      "x_collection_batch_sources:batch_id",
+      "sync_tasks:id",
+      "task_attempts:task_id",
+    ];
+
+    expect(day?.bloggers).toHaveLength(count);
+    expect(day?.bloggers[0]).toMatchObject({
+      source: { sourceKey: "wide-0", displayName: "Snapshot 000" },
+      segments: [{ viewpoints: ["segment-0"], analyses: [{ postLink: "https://x.test/post/0", bloggerViewpoint: "analysis-0" }] }],
+    });
+    expect(day?.bloggers[234]).toMatchObject({
+      source: { sourceKey: "wide-234", displayName: "Snapshot 234" },
+      segments: [{ viewpoints: ["segment-234"], analyses: [{ postLink: "https://x.test/post/234", bloggerViewpoint: "analysis-234" }] }],
+    });
+    expect(day?.judgement.batches).toHaveLength(count);
+    expect(day?.judgement.batches[0]).toMatchObject({ cutoffAt: "2099-01-06T12:00:00.234Z", stockViewpoints: [{ statement: "judgement-234", supportingDisplayNames: ["Snapshot 234"] }] });
+    expect(day?.judgement.batches[234]).toMatchObject({ cutoffAt: "2099-01-06T12:00:00.000Z", stockViewpoints: [{ statement: "judgement-0", supportingDisplayNames: ["Snapshot 000"] }] });
+    expect(databaseMocks.ins.every((lookup) => lookup.values.length <= 100)).toBe(true);
+    for (const key of lookupKeys) {
+      const [table, field] = key.split(":");
+      const lookups = databaseMocks.ins.filter((lookup) => lookup.table === table && lookup.field === field);
+      expect(lookups.length, key).toBeGreaterThan(1);
+      expect(new Set(lookups.flatMap((lookup) => lookup.values)).size, key).toBe(count);
+    }
+  });
+
   it("keeps the requested source's date placeholders while hiding cross-blogger judgement details", async () => {
     databaseMocks.rows.set("sources", [{ id: "source-a", source_key: "alpha", display_name: "Alpha", enabled: true }]);
     databaseMocks.rows.set("x_daily_viewpoint_segments", [
