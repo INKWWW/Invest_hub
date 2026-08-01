@@ -2,11 +2,34 @@ import { presentSummary, type SummaryPresentation } from "../../../components/re
 import { createSupabaseAdminClient } from "../supabase-server";
 
 const READER_QUERY_BATCH_SIZE = 100;
+const READER_QUERY_PAGE_SIZE = 1000;
+
+type ReaderQueryPage<Row> = { data: Row[] | null; error: unknown };
 
 function chunkValues<Value>(values: Value[], size: number): Value[][] {
   const chunks: Value[][] = [];
   for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
   return chunks;
+}
+
+async function readAllPages<Row>(buildPage: (from: number, to: number) => PromiseLike<ReaderQueryPage<Row>>): Promise<Row[]> {
+  const rows: Row[] = [];
+  for (let from = 0; ; from += READER_QUERY_PAGE_SIZE) {
+    const { data, error } = await buildPage(from, from + READER_QUERY_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < READER_QUERY_PAGE_SIZE) return rows;
+  }
+}
+
+async function readAllChunkPages<Chunk, Row>(
+  chunks: Chunk[],
+  buildPage: (chunk: Chunk, from: number, to: number) => PromiseLike<ReaderQueryPage<Row>>,
+): Promise<Row[]> {
+  const rows: Row[] = [];
+  for (const chunk of chunks) rows.push(...await readAllPages((from, to) => buildPage(chunk, from, to)));
+  return rows;
 }
 
 export type ReaderStatus = "processing" | "partial_failure" | "retryable_failed" | "failed" | "no_new_messages" | "succeeded";
@@ -198,90 +221,81 @@ function batchSourceReaderStatus(
 /** Reader-safe X projection: no raw body, cookie, local reference, or prompt. */
 export async function readXDay(input: { sourceKey?: string; date?: string } = {}): Promise<XReaderDate[]> {
   const supabase = createSupabaseAdminClient();
-  let sourceQuery = supabase.from("sources").select("id,source_key,display_name").eq("source_type", "x").order("display_name", { ascending: true });
-  if (input.sourceKey) sourceQuery = sourceQuery.eq("source_key", input.sourceKey);
-  const { data: sources, error: sourceError } = await sourceQuery;
-  if (sourceError) throw sourceError;
-  if (!sources?.length) return [];
+  const sources = await readAllPages((from, to) => {
+    let query = supabase.from("sources").select("id,source_key,display_name").eq("source_type", "x");
+    if (input.sourceKey) query = query.eq("source_key", input.sourceKey);
+    return query.order("display_name", { ascending: true }).order("id", { ascending: true }).range(from, to);
+  });
+  if (!sources.length) return [];
 
   const sourceIds = sources.map((source) => source.id);
   const sourceIdChunks = chunkValues(sourceIds, READER_QUERY_BATCH_SIZE);
   const sourceIdSet = new Set(sourceIds);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
-  const segmentResults = await Promise.all(sourceIdChunks.map((ids) => {
+  const segments = await readAllChunkPages(sourceIdChunks, (ids, from, to) => {
     let query = supabase.from("x_daily_viewpoint_segments")
       .select("source_id,natural_date,occurred_from_at,occurred_through_at,window_viewpoints,post_analysis_refs")
-      .in("source_id", ids).order("natural_date", { ascending: false }).order("occurred_from_at");
+      .in("source_id", ids);
     if (input.date) query = query.eq("natural_date", input.date);
-    return query;
-  }));
-  const segmentError = segmentResults.find((result) => result.error)?.error;
-  if (segmentError) throw segmentError;
-  const segments = segmentResults.flatMap((result) => result.data ?? []);
+    return query.order("natural_date", { ascending: false }).order("occurred_from_at", { ascending: true })
+      .order("source_id", { ascending: true }).order("id", { ascending: true }).range(from, to);
+  });
   const requestedPostIds = new Set<string>();
   for (const segment of segments) {
     const refs = Array.isArray(segment.post_analysis_refs) ? segment.post_analysis_refs : [];
     for (const ref of refs) if (ref && typeof ref === "object" && "post_id" in ref && typeof (ref as Record<string, unknown>).post_id === "string") requestedPostIds.add((ref as Record<string, string>).post_id);
   }
   const requestedPostIdChunks = chunkValues([...requestedPostIds], READER_QUERY_BATCH_SIZE);
-  const canonicalResults = await Promise.all(sourceIdChunks.flatMap((sourceChunk) => requestedPostIdChunks.map((postIdChunk) => (
+  const canonicalQueryChunks = sourceIdChunks.flatMap((sourceIds) => requestedPostIdChunks.map((postIds) => ({ sourceIds, postIds })));
+  const canonicalRows = await readAllChunkPages(canonicalQueryChunks, ({ sourceIds: ids, postIds }, from, to) => (
     supabase.from("canonical_messages").select("id,source_id,external_message_id")
-      .in("source_id", sourceChunk).in("external_message_id", postIdChunk)
-  ))));
-  const canonicalError = canonicalResults.find((result) => result.error)?.error;
-  if (canonicalError) throw canonicalError;
-  const canonicalRows = canonicalResults.flatMap((result) => result.data ?? []);
+      .in("source_id", ids).in("external_message_id", postIds)
+      .order("source_id", { ascending: true }).order("external_message_id", { ascending: true }).order("id", { ascending: true }).range(from, to)
+  ));
   const canonicalByExternalId = new Map(canonicalRows.map((row) => [`${row.source_id}:${row.external_message_id}`, row]));
   const canonicalIds = canonicalRows.map((row) => row.id);
   const canonicalIdChunks = chunkValues(canonicalIds, READER_QUERY_BATCH_SIZE);
-  const [analysisResults, contextResults] = await Promise.all([
-    Promise.all(canonicalIdChunks.map((ids) => supabase.from("x_post_analyses")
+  const [analysisRows, contextRows] = await Promise.all([
+    readAllChunkPages(canonicalIdChunks, (ids, from, to) => supabase.from("x_post_analyses")
       .select("canonical_message_id,analysis_version,blogger_viewpoint,arguments,quoted_post_viewpoint,uncertainties")
-      .in("canonical_message_id", ids).eq("analysis_version", 1))),
-    Promise.all(canonicalIdChunks.map((ids) => supabase.from("x_post_contexts").select("canonical_message_id,post_url").in("canonical_message_id", ids))),
+      .in("canonical_message_id", ids).eq("analysis_version", 1)
+      .order("canonical_message_id", { ascending: true }).order("analysis_version", { ascending: true }).range(from, to)),
+    readAllChunkPages(canonicalIdChunks, (ids, from, to) => supabase.from("x_post_contexts").select("canonical_message_id,post_url")
+      .in("canonical_message_id", ids).order("canonical_message_id", { ascending: true }).range(from, to)),
   ]);
-  const analysisError = analysisResults.find((result) => result.error)?.error;
-  const contextError = contextResults.find((result) => result.error)?.error;
-  if (analysisError) throw analysisError;
-  if (contextError) throw contextError;
-  const analysisRows = analysisResults.flatMap((result) => result.data ?? []);
-  const contextRows = contextResults.flatMap((result) => result.data ?? []);
   const analysisByCanonicalId = new Map(analysisRows.map((row) => [row.canonical_message_id, row]));
   const contextByCanonicalId = new Map(contextRows.map((row) => [row.canonical_message_id, row]));
 
-  let batchQuery = supabase.from("x_collection_batches").select("id,natural_date,cutoff_at,status").order("natural_date", { ascending: false }).order("cutoff_at", { ascending: false });
-  if (input.date) batchQuery = batchQuery.eq("natural_date", input.date);
-  const { data: batches, error: batchError } = await batchQuery;
-  if (batchError) throw batchError;
-  const orderedBatches = [...(batches ?? [])].sort((left, right) => right.cutoff_at.localeCompare(left.cutoff_at));
+  const batches = await readAllPages((from, to) => {
+    let query = supabase.from("x_collection_batches").select("id,natural_date,cutoff_at,status");
+    if (input.date) query = query.eq("natural_date", input.date);
+    return query.order("natural_date", { ascending: false }).order("cutoff_at", { ascending: false })
+      .order("id", { ascending: true }).range(from, to);
+  });
+  const orderedBatches = [...batches].sort((left, right) => right.cutoff_at.localeCompare(left.cutoff_at));
   const batchIds = orderedBatches.map((batch) => batch.id);
   const batchIdChunks = chunkValues(batchIds, READER_QUERY_BATCH_SIZE);
-  const [versionResults, batchSourceResults] = await Promise.all([
-    Promise.all(batchIdChunks.map((ids) => supabase.from("x_daily_judgement_versions").select("batch_id,revision,coverage_status,output").in("batch_id", ids).order("revision", { ascending: false }))),
-    Promise.all(batchIdChunks.map((ids) => supabase.from("x_collection_batch_sources").select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status").in("batch_id", ids))),
+  const [versions, allBatchSources] = await Promise.all([
+    readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_daily_judgement_versions")
+      .select("batch_id,revision,coverage_status,output").in("batch_id", ids)
+      .order("batch_id", { ascending: true }).order("revision", { ascending: false }).range(from, to)),
+    readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_collection_batch_sources")
+      .select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status").in("batch_id", ids)
+      .order("batch_id", { ascending: true }).order("source_id", { ascending: true }).range(from, to)),
   ]);
-  const versionError = versionResults.find((result) => result.error)?.error;
-  const batchSourcesError = batchSourceResults.find((result) => result.error)?.error;
-  if (versionError) throw versionError;
-  if (batchSourcesError) throw batchSourcesError;
-  const versions = versionResults.flatMap((result) => result.data ?? []);
-  const allBatchSources = batchSourceResults.flatMap((result) => result.data ?? []);
 
   const batchSources = allBatchSources.filter((row) => sourceIdSet.has(row.source_id));
   const batchSourcesByBatch = new Map<string, typeof batchSources>();
   for (const row of batchSources) batchSourcesByBatch.set(row.batch_id, [...(batchSourcesByBatch.get(row.batch_id) ?? []), row]);
   const taskIds = [...new Set(batchSources.flatMap((row) => typeof row.x_sync_task_id === "string" ? [row.x_sync_task_id] : []))];
   const taskIdChunks = chunkValues(taskIds, READER_QUERY_BATCH_SIZE);
-  const [taskResults, attemptResults] = await Promise.all([
-    Promise.all(taskIdChunks.map((ids) => supabase.from("sync_tasks").select("id,status").in("id", ids))),
-    Promise.all(taskIdChunks.map((ids) => supabase.from("task_attempts").select("task_id,result,updated_at").in("task_id", ids).order("updated_at", { ascending: false }))),
+  const [taskRows, attemptRows] = await Promise.all([
+    readAllChunkPages(taskIdChunks, (ids, from, to) => supabase.from("sync_tasks").select("id,status").in("id", ids)
+      .order("id", { ascending: true }).range(from, to)),
+    readAllChunkPages(taskIdChunks, (ids, from, to) => supabase.from("task_attempts").select("task_id,result,updated_at").in("task_id", ids)
+      .order("updated_at", { ascending: false }).order("task_id", { ascending: true })
+      .order("attempt", { ascending: false }).order("id", { ascending: true }).range(from, to)),
   ]);
-  const taskError = taskResults.find((result) => result.error)?.error;
-  const attemptError = attemptResults.find((result) => result.error)?.error;
-  if (taskError) throw taskError;
-  if (attemptError) throw attemptError;
-  const taskRows = taskResults.flatMap((result) => result.data ?? []);
-  const attemptRows = attemptResults.flatMap((result) => result.data ?? []);
   const taskIdSet = new Set(taskIds);
   const taskById = new Map(taskRows.filter((task) => taskIdSet.has(task.id)).map((task) => [task.id, task]));
   const attemptResultByTaskId = new Map<string, unknown>();
