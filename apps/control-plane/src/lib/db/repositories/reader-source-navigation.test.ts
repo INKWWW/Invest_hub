@@ -4,6 +4,7 @@ const databaseMocks = vi.hoisted(() => ({
   rows: new Map<string, unknown[]>(),
   filters: [] as Array<{ table: string; field: string; value: unknown }>,
   ins: [] as Array<{ table: string; field: string; values: unknown[] }>,
+  ranges: [] as Array<{ table: string; from: number; to: number }>,
   selects: [] as Array<{ table: string; columns: string }>,
 }));
 
@@ -11,16 +12,42 @@ vi.mock("../supabase-server", () => ({
   createSupabaseAdminClient: () => ({
     from(table: string) {
       const queryIns: Array<{ field: string; values: unknown[] }> = [];
+      const queryOrders: Array<{ field: string; ascending: boolean }> = [];
+      let queryRange: { from: number; to: number } | undefined;
       const query = {
         select: (columns: string) => { databaseMocks.selects.push({ table, columns }); return query; },
         eq: (field: string, value: unknown) => { databaseMocks.filters.push({ table, field, value }); return query; },
         in: (field: string, values: unknown[]) => { databaseMocks.ins.push({ table, field, values }); queryIns.push({ field, values }); return query; },
-        order: () => query,
+        order: (field: string, options?: { ascending?: boolean }) => {
+          const ascending = options?.ascending !== false;
+          queryOrders.push({ field, ascending });
+          return query;
+        },
+        range: (from: number, to: number) => {
+          databaseMocks.ranges.push({ table, from, to });
+          queryRange = { from, to };
+          return query;
+        },
         then: (resolve: (value: { data: unknown[]; error: null }) => unknown) => {
           const rows = (databaseMocks.rows.get(table) ?? []).filter((row) => queryIns.every(({ field, values }) => (
             row && typeof row === "object" && values.includes((row as Record<string, unknown>)[field])
-          )));
-          return resolve({ data: rows, error: null });
+          ))).sort((left, right) => {
+            if (!left || typeof left !== "object" || !right || typeof right !== "object") return 0;
+            for (const { field, ascending } of queryOrders) {
+              const leftValue = (left as Record<string, unknown>)[field];
+              const rightValue = (right as Record<string, unknown>)[field];
+              if (leftValue === rightValue) continue;
+              const comparison = leftValue === undefined ? -1 : rightValue === undefined ? 1
+                : typeof leftValue === "number" && typeof rightValue === "number" ? leftValue - rightValue
+                  : String(leftValue).localeCompare(String(rightValue));
+              return ascending ? comparison : -comparison;
+            }
+            return 0;
+          });
+          const from = queryRange?.from ?? 0;
+          const requestedTo = queryRange?.to ?? from + 999;
+          const cappedTo = Math.min(requestedTo, from + 999);
+          return resolve({ data: rows.slice(from, cappedTo + 1), error: null });
         },
       };
       return query;
@@ -35,6 +62,7 @@ describe("X reader date projection", () => {
     databaseMocks.rows.clear();
     databaseMocks.filters.length = 0;
     databaseMocks.ins.length = 0;
+    databaseMocks.ranges.length = 0;
     databaseMocks.selects.length = 0;
     databaseMocks.rows.set("sources", [
       { id: "source-a", source_key: "alpha", display_name: "Alpha", enabled: true },
@@ -234,6 +262,78 @@ describe("X reader date projection", () => {
       expect(lookups.length, key).toBeGreaterThan(1);
       expect(new Set(lookups.flatMap((lookup) => lookup.values)).size, key).toBe(count);
     }
+  });
+
+  it("paginates historical X rows without truncating the Reader projection", async () => {
+    const segmentCount = 1005;
+    const batchCount = 1005;
+    const sourceCount = 100;
+    const padded = (index: number) => String(index).padStart(4, "0");
+    const naturalDateForBatch = (index: number) => new Date(Date.UTC(2099, 11, 31) - Math.floor(index / 5) * 86_400_000).toISOString().slice(0, 10);
+    const cutoffHours = ["20", "16", "12", "08", "00"];
+    const sources = Array.from({ length: sourceCount }, (_, index) => ({
+      id: `paged-source-${padded(index)}`, source_key: `paged-${padded(index)}`, display_name: `Paged ${padded(index)}`,
+    }));
+    const batches = Array.from({ length: batchCount }, (_, index) => {
+      const naturalDate = naturalDateForBatch(index);
+      return {
+        id: `paged-batch-${padded(index)}`, natural_date: naturalDate,
+        cutoff_at: `${naturalDate}T${cutoffHours[index % 5]}:00:00+08:00`, status: "succeeded",
+      };
+    });
+    const batchSources = batches.flatMap((batch, batchIndex) => (
+      sources.slice(0, batchIndex < 11 ? sourceCount : 1).map((source, sourceIndex) => ({
+        batch_id: batch.id, source_id: source.id, source_display_name: `Snapshot ${padded(sourceIndex)}`,
+        x_sync_task_id: `paged-task-${padded(batchIndex)}-${padded(sourceIndex)}`, settlement_status: "excluded",
+      }))
+    ));
+    databaseMocks.rows.set("sources", sources);
+    databaseMocks.rows.set("x_daily_viewpoint_segments", Array.from({ length: segmentCount }, (_, index) => ({
+      id: `paged-segment-${padded(index)}`, source_id: "paged-source-0000", natural_date: "2099-12-31",
+      occurred_from_at: "2099-12-31T10:00:00.000Z", occurred_through_at: "2099-12-31T10:00:00.000Z",
+      window_viewpoints: [`segment-${padded(index)}`], post_analysis_refs: [],
+    })).reverse());
+    databaseMocks.rows.set("x_collection_batches", batches.reverse());
+    databaseMocks.rows.set("x_daily_judgement_versions", []);
+    databaseMocks.rows.set("x_collection_batch_sources", batchSources.reverse());
+    databaseMocks.rows.set("sync_tasks", batchSources.map((row) => ({ id: row.x_sync_task_id, status: "succeeded" })));
+    databaseMocks.rows.set("task_attempts", Array.from({ length: 1005 }, (_, index) => ({
+      id: `paged-attempt-${padded(index)}`, task_id: "paged-task-0000-0000", attempt: index + 1,
+      result: { no_new_data: index === 1004 },
+      updated_at: new Date(Date.UTC(2099, 11, 31, 20, 1) + index).toISOString(),
+    })).reverse());
+
+    const result = await readXDay();
+    const newestDay = result[0];
+    const oldestDay = result[result.length - 1];
+    const firstBlogger = newestDay?.bloggers.find((blogger) => blogger.source.sourceKey === "paged-0000");
+    const allJudgementBatches = result.flatMap((day) => day.judgement.batches);
+    const rangesFor = (table: string) => databaseMocks.ranges.filter((range) => range.table === table);
+
+    expect(result).toHaveLength(201);
+    expect(newestDay?.naturalDate).toBe("2099-12-31");
+    expect(oldestDay?.naturalDate).toBe("2099-06-14");
+    expect(newestDay?.bloggers).toHaveLength(100);
+    expect(oldestDay?.bloggers).toHaveLength(1);
+    expect(firstBlogger?.status).toBe("no_new_messages");
+    expect(firstBlogger?.segments).toHaveLength(segmentCount);
+    expect(firstBlogger?.segments[0]?.viewpoints).toEqual(["segment-0000"]);
+    expect(firstBlogger?.segments[1004]?.viewpoints).toEqual(["segment-1004"]);
+    expect(newestDay?.judgement.batches.map((batch) => batch.cutoffAt)).toEqual([
+      "2099-12-31T20:00:00+08:00", "2099-12-31T16:00:00+08:00", "2099-12-31T12:00:00+08:00",
+      "2099-12-31T08:00:00+08:00", "2099-12-31T00:00:00+08:00",
+    ]);
+    expect(oldestDay?.judgement.batches.map((batch) => batch.cutoffAt)).toEqual([
+      "2099-06-14T20:00:00+08:00", "2099-06-14T16:00:00+08:00", "2099-06-14T12:00:00+08:00",
+      "2099-06-14T08:00:00+08:00", "2099-06-14T00:00:00+08:00",
+    ]);
+    expect(allJudgementBatches).toHaveLength(batchCount);
+    expect(allJudgementBatches.reduce((total, batch) => total + batch.excludedSourceCount, 0)).toBe(2094);
+    for (const table of ["x_daily_viewpoint_segments", "x_collection_batches", "x_collection_batch_sources", "task_attempts"]) {
+      expect(rangesFor(table), table).toContainEqual({ table, from: 0, to: 999 });
+      expect(rangesFor(table), table).toContainEqual({ table, from: 1000, to: 1999 });
+    }
+    expect(databaseMocks.ranges.every(({ from, to }) => to - from + 1 === 1000)).toBe(true);
   });
 
   it("keeps the requested source's date placeholders while hiding cross-blogger judgement details", async () => {
