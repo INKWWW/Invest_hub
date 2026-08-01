@@ -1,6 +1,6 @@
 begin;
 
-select plan(37);
+select plan(39);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000028010', 'authenticated', 'authenticated', 'state-security-admin@example.invalid', 'not-a-secret', now());
@@ -11,11 +11,13 @@ values ('00000000-0000-0000-0000-000000028001', 'state-security-worker', 'state-
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values
   ('00000000-0000-0000-0000-000000028101', 'state-security-source-a', 'x', 'State source A', 'v2-state-security', '00000000-0000-0000-0000-000000028001'),
-  ('00000000-0000-0000-0000-000000028102', 'state-security-source-b', 'x', 'State source B', 'v2-state-security', '00000000-0000-0000-0000-000000028001');
+  ('00000000-0000-0000-0000-000000028102', 'state-security-source-b', 'x', 'State source B', 'v2-state-security', '00000000-0000-0000-0000-000000028001'),
+  ('00000000-0000-0000-0000-000000028103', 'state-security-source-no-new', 'x', 'State source no new', 'v2-state-security', '00000000-0000-0000-0000-000000028001');
 insert into public.x_source_profiles (source_id, requested_handle, account_id, display_name, resolution_status)
 values
   ('00000000-0000-0000-0000-000000028101', 'state_source_a', 'state_source_a', 'State source A', 'resolved'),
-  ('00000000-0000-0000-0000-000000028102', 'state_source_b', 'state_source_b', 'State source B', 'resolved');
+  ('00000000-0000-0000-0000-000000028102', 'state_source_b', 'state_source_b', 'State source B', 'resolved'),
+  ('00000000-0000-0000-0000-000000028103', 'state_source_no_new', 'state_source_no_new', 'State source no new', 'resolved');
 
 insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)
 values
@@ -141,7 +143,8 @@ insert into public.x_collection_batch_sources
   (batch_id, source_id, source_display_name, x_sync_task_id, settlement_status, settled_at)
 values
   ('00000000-0000-0000-0000-000000028207', '00000000-0000-0000-0000-000000028101', 'State source A', '00000000-0000-0000-0000-000000028301', 'included', now()),
-  ('00000000-0000-0000-0000-000000028207', '00000000-0000-0000-0000-000000028102', 'State source B', '00000000-0000-0000-0000-000000028302', 'included', now());
+  ('00000000-0000-0000-0000-000000028207', '00000000-0000-0000-0000-000000028102', 'State source B', '00000000-0000-0000-0000-000000028302', 'included', now()),
+  ('00000000-0000-0000-0000-000000028207', '00000000-0000-0000-0000-000000028103', 'State source no new', null, 'no_new_information', now());
 insert into public.canonical_messages (id, source_id, external_message_id, occurred_at, author_display, content)
 values
   ('00000000-0000-0000-0000-000000028501', '00000000-0000-0000-0000-000000028101', 'post-a', '2026-08-04T07:00:00Z', 'A', 'Synthetic A'),
@@ -166,6 +169,14 @@ insert into public.x_daily_judgement_runs
   (id, batch_id, status, attempt, lease_owner, lease_expires_at, available_at, run_kind)
 values ('00000000-0000-0000-0000-000000028407', '00000000-0000-0000-0000-000000028207', 'leased', 1,
   '00000000-0000-0000-0000-000000028001', now() + interval '1 hour', now(), 'initial');
+
+select is(
+  (select public.get_x_daily_judgement_context(
+    '00000000-0000-0000-0000-000000028407', 1, '00000000-0000-0000-0000-000000028001'
+  )->'excluded_sources'),
+  '[{"source_id":"00000000-0000-0000-0000-000000028103","display_name":"State source no new","reason":"no_new_information"}]'::jsonb,
+  'context exposes no-new frozen sources through the non-citable source catalog'
+);
 
 create function pg_temp.expect_completion_rejected(p_payload jsonb)
 returns void language plpgsql as $$
@@ -212,6 +223,10 @@ select throws_ok(
 select throws_ok(
   $$select pg_temp.expect_completion_rejected('{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[{"statement":"Synthetic","supporting_source_ids":["00000000-0000-0000-0000-000000028101"],"dissenting_source_ids":[],"analysis_ids":["post-a@1"],"evidence_post_ids":["post-a","quote-a"],"uncertainties":["quote-a needs context"]}],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb)$$,
   '22023', 'invalid_x_daily_judgement_evidence', 'DB completion rejects opaque evidence IDs embedded in uncertainties'
+);
+select throws_ok(
+  $$select pg_temp.expect_completion_rejected('{"schema_version":"v2-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v2-x-cross-blogger-1","stock_viewpoints":[{"statement":"Synthetic","supporting_source_ids":["00000000-0000-0000-0000-000000028101"],"dissenting_source_ids":[],"analysis_ids":["post-a@1"],"evidence_post_ids":["post-a","quote-a"],"uncertainties":[]}],"market_industry_viewpoints":[],"uncertainties":["00000000-0000-0000-0000-000000028103 has no new information"]}'::jsonb)$$,
+  '22023', 'invalid_x_daily_judgement_evidence', 'DB completion rejects a no-new frozen source ID embedded in uncertainty text'
 );
 
 select is(

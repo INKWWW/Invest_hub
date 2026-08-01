@@ -1197,7 +1197,7 @@ describe("v0 control-plane API authorization", () => {
       uncertainties: [],
     },
     {
-      name: "opaque excluded source ID in global uncertainty",
+      name: "opaque no-new frozen source ID in global uncertainty",
       item: {
         statement: "Synthetic statement",
         supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
@@ -1207,6 +1207,18 @@ describe("v0 control-plane API authorization", () => {
         uncertainties: [],
       },
       uncertainties: ["77777777-7777-4777-8777-777777777777 has no new information"],
+    },
+    {
+      name: "opaque no-new frozen source ID in item uncertainty",
+      item: {
+        statement: "Synthetic statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [],
+        analysis_ids: ["post-a@1"],
+        evidence_post_ids: ["post-a", "quote-a"],
+        uncertainties: ["77777777-7777-4777-8777-777777777777 needs context"],
+      },
+      uncertainties: [],
     },
     {
       name: "opaque evidence ID in uncertainty",
@@ -1270,7 +1282,7 @@ describe("v0 control-plane API authorization", () => {
       ],
       excluded_sources: [{
         source_id: "77777777-7777-4777-8777-777777777777",
-        display_name: "Excluded fixture researcher",
+        display_name: "No-new fixture researcher",
         reason: "no_new_information",
       }],
     });
