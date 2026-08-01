@@ -145,6 +145,33 @@ describe("GET /api/reader/x", () => {
     expect(body.days[0].judgement.batches[0].revisionHistory).toEqual([]);
   });
 
+  it("does not expose no-new coverage when the repository has no persisted revision", async () => {
+    const [day] = await readerMocks.readXDay();
+    readerMocks.readXDay.mockResolvedValue([{
+      ...day,
+      judgement: { visible: true, batches: [{
+        ...day.judgement.batches[0],
+        status: "judgement_pending",
+        revision: 0,
+        coverageStatus: "no_new_information",
+        stockViewpoints: [],
+        marketIndustryViewpoints: [],
+        uncertainties: [],
+        revisionHistory: [],
+      }] },
+    }]);
+
+    const response = await GET(new Request("http://localhost/api/reader/x"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.days[0].judgement.batches[0]).toMatchObject({
+      status: "judgement_pending",
+      revision: 0,
+      coverageStatus: null,
+    });
+  });
+
   it.each(["not-a-date", "2099-02-29", "2099-04-31", "0000-01-01"])("rejects invalid calendar date %s before reading X data", async (date) => {
     const response = await GET(new Request(`http://localhost/api/reader/x?date=${date}`));
 

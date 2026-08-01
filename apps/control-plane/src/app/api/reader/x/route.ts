@@ -8,6 +8,11 @@ function readerFilter(value: string | null) {
   return value && value !== "all" ? value : undefined;
 }
 
+function readerSafeCoverageStatus(value: unknown, revision: number) {
+  if (revision < 1) return null;
+  return value === "complete" || value === "partial" || value === "no_new_information" ? value : null;
+}
+
 /** Runtime JSON boundary: even a future repository DTO regression cannot expose internal fields. */
 function readerSafeXDays(days: XReaderDate[]) {
   return days.map((day) => ({
@@ -16,7 +21,7 @@ function readerSafeXDays(days: XReaderDate[]) {
       visible: day.judgement.visible,
       batches: day.judgement.batches.map((batch) => ({
         cutoffAt: batch.cutoffAt,
-        coverageStatus: batch.coverageStatus,
+        coverageStatus: readerSafeCoverageStatus(batch.coverageStatus, batch.revision),
         status: batch.status,
         revision: batch.revision,
         stockViewpoints: batch.stockViewpoints.map((viewpoint) => ({
@@ -35,7 +40,7 @@ function readerSafeXDays(days: XReaderDate[]) {
         excludedSourceCount: batch.excludedSourceCount,
         revisionHistory: (batch.revisionHistory ?? []).map((revision) => ({
           revision: revision.revision,
-          coverageStatus: revision.coverageStatus,
+          coverageStatus: readerSafeCoverageStatus(revision.coverageStatus, revision.revision),
           stockViewpoints: revision.stockViewpoints.map((viewpoint) => ({
             statement: viewpoint.statement,
             supportingDisplayNames: [...viewpoint.supportingDisplayNames],

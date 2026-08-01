@@ -1,6 +1,6 @@
 begin;
 
-select plan(57);
+select plan(65);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000029010', 'authenticated', 'authenticated', 'final-authority-admin@example.invalid', 'not-a-secret', now());
@@ -11,7 +11,8 @@ insert into public.workers (id, name, device_secret_hash, status, last_heartbeat
 values
   ('00000000-0000-0000-0000-000000029001', 'final-authority-fresh', 'final-authority-fresh-hash', 'online', '2026-07-31T16:00:00Z', array['x_sync']),
   ('00000000-0000-0000-0000-000000029002', 'final-authority-enrolled', 'final-authority-enrolled-hash', 'enrolled', '2026-07-31T16:00:00Z', array['x_sync']),
-  ('00000000-0000-0000-0000-000000029003', 'final-authority-stale', 'final-authority-stale-hash', 'online', '2026-07-31T15:58:00Z', array['x_sync']);
+  ('00000000-0000-0000-0000-000000029003', 'final-authority-stale', 'final-authority-stale-hash', 'online', '2026-07-31T15:58:00Z', array['x_sync']),
+  ('00000000-0000-0000-0000-000000029004', 'final-authority-unauthorized', 'final-authority-unauthorized-hash', 'online', '2026-07-31T16:00:00Z', array['x_sync']);
 
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values
@@ -204,6 +205,83 @@ select is(
    from public.x_daily_judgement_runs where id = '00000000-0000-0000-0000-000000029306'),
   'failed|schema_error|1|',
   'claim cleanup terminalizes a legacy lease without changing its attempt or retaining its owner'
+);
+
+insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)
+values ('00000000-0000-0000-0000-000000029207', '2026-08-03T16:00+08:00', '2026-08-03', '2026-08-03T08:00:00Z', '2026-08-03T10:00:00Z', 'succeeded');
+insert into public.x_collection_batch_sources (batch_id, source_id, source_display_name, settlement_status, settled_at)
+values ('00000000-0000-0000-0000-000000029207', '00000000-0000-0000-0000-000000029104', 'Final source B frozen', 'included', now());
+insert into public.x_daily_judgement_versions
+  (batch_id, revision, coverage_status, input_snapshot, output, provider, prompt_version, schema_version)
+values (
+  '00000000-0000-0000-0000-000000029207', 1, 'complete',
+  public.build_x_daily_judgement_input_snapshot('00000000-0000-0000-0000-000000029207'),
+  '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb,
+  'codex_cli', 'v2-x-cross-blogger-1', 'v2-x-cross-blogger'
+);
+insert into public.x_daily_judgement_runs
+  (id, batch_id, status, attempt, run_kind, requested_by, available_at)
+values (
+  '00000000-0000-0000-0000-000000029307', '00000000-0000-0000-0000-000000029207',
+  'queued', 0, 'regeneration', '00000000-0000-0000-0000-000000029010', now()
+);
+create temporary table archived_claim_before as
+select
+  (select to_jsonb(batch_source) from public.x_collection_batch_sources batch_source where batch_id = '00000000-0000-0000-0000-000000029207') as frozen_snapshot,
+  (select input_snapshot from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000029207') as judgement_input,
+  (select coverage_through_at from public.source_collection_coverage where source_id = '00000000-0000-0000-0000-000000029104') as coverage_through_at;
+update public.sources set enabled = false where id in (
+  'd0000000-0000-4000-8000-000000029101',
+  '00000000-0000-0000-0000-000000029104'
+);
+update public.x_source_profiles set enabled = false where source_id in (
+  'd0000000-0000-4000-8000-000000029101',
+  '00000000-0000-0000-0000-000000029104'
+);
+update public.workers set last_heartbeat_at = now() where id in (
+  '00000000-0000-0000-0000-000000029001',
+  '00000000-0000-0000-0000-000000029004'
+);
+select throws_ok(
+  $$select public.ensure_due_x_collection_batches('00000000-0000-0000-0000-000000029001', now())$$,
+  '42501', 'worker_not_authorized', 'new batch ensure still requires a current enabled and resolved source'
+);
+select throws_ok(
+  $$select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000029004', now())$$,
+  '42501', 'worker_not_authorized', 'an online fresh Worker without X authorization remains rejected'
+);
+select is((select status from public.x_daily_judgement_runs where id = '00000000-0000-0000-0000-000000029307'), 'queued', 'unauthorized rejection leaves the archived-source run queued');
+select lives_ok(
+  $$select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000029001', now())$$,
+  'an online fresh Worker can claim its frozen batch after source and profile archive'
+);
+select is(
+  (select status || '|' || lease_owner::text || '|' || attempt::text from public.x_daily_judgement_runs where id = '00000000-0000-0000-0000-000000029307'),
+  'leased|00000000-0000-0000-0000-000000029001|1',
+  'the archived-source queued run is leased only to its authorized Worker'
+);
+select is(
+  (select to_jsonb(batch_source) from public.x_collection_batch_sources batch_source where batch_id = '00000000-0000-0000-0000-000000029207'),
+  (select frozen_snapshot from archived_claim_before),
+  'claim after archive preserves the frozen batch-source snapshot'
+);
+select is(
+  (select input_snapshot from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000029207'),
+  (select judgement_input from archived_claim_before),
+  'claim after archive preserves the immutable judgement input'
+);
+select is(
+  (select coverage_through_at from public.source_collection_coverage where source_id = '00000000-0000-0000-0000-000000029104'),
+  (select coverage_through_at from archived_claim_before),
+  'claim after archive preserves source collection coverage'
+);
+update public.sources set enabled = true where id in (
+  'd0000000-0000-4000-8000-000000029101',
+  '00000000-0000-0000-0000-000000029104'
+);
+update public.x_source_profiles set enabled = true where source_id in (
+  'd0000000-0000-4000-8000-000000029101',
+  '00000000-0000-0000-0000-000000029104'
 );
 
 insert into public.x_collection_batches (id, scheduled_window_key, natural_date, cutoff_at, settlement_deadline_at, status)

@@ -78,14 +78,15 @@ describe("XReader", () => {
   it("keeps the latest cutoff open even when pending while failed states show no fabricated body", () => {
     const html = renderToStaticMarkup(<XReader days={[{
       naturalDate: "2099-01-03",
-      judgement: { visible: true, batches: [{ cutoffAt: "2099-01-03T12:00:00.000Z", coverageStatus: "no_new_information", status: "judgement_pending", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }, {
+      judgement: { visible: true, batches: [{ cutoffAt: "2099-01-03T12:00:00.000Z", coverageStatus: null, status: "judgement_pending", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }, {
         cutoffAt: "2099-01-03T08:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 1, stockViewpoints: [{ statement: "可见判断", supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }, {
-        cutoffAt: "2099-01-03T04:00:00.000Z", coverageStatus: "no_new_information", status: "judgement_failed", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }] },
+        cutoffAt: "2099-01-03T04:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }] },
       bloggers: [],
     }]} initialNaturalDate="2099-01-03" />);
 
     expect(html).toContain("当日判断仍在处理中。");
     expect(html).toContain("当日判断未能完成，稍后会重试。");
+    expect(html).not.toContain("本窗口没有新的可判断信息。");
     expect(html.indexOf('<details class="x-reader-judgement" open="">')).toBeLessThan(html.indexOf('<details class="x-reader-judgement">'));
     expect(html).toContain("可见判断");
   });
