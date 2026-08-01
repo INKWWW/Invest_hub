@@ -32,6 +32,23 @@ function readerSafeXDays(days: XReaderDate[]) {
         })),
         uncertainties: [...batch.uncertainties],
         excludedSourceCount: batch.excludedSourceCount,
+        revisionHistory: (batch.revisionHistory ?? []).map((revision) => ({
+          revision: revision.revision,
+          coverageStatus: revision.coverageStatus,
+          stockViewpoints: revision.stockViewpoints.map((viewpoint) => ({
+            statement: viewpoint.statement,
+            supportingDisplayNames: [...viewpoint.supportingDisplayNames],
+            dissentingDisplayNames: [...viewpoint.dissentingDisplayNames],
+            uncertainties: [...viewpoint.uncertainties],
+          })),
+          marketIndustryViewpoints: revision.marketIndustryViewpoints.map((viewpoint) => ({
+            statement: viewpoint.statement,
+            supportingDisplayNames: [...viewpoint.supportingDisplayNames],
+            dissentingDisplayNames: [...viewpoint.dissentingDisplayNames],
+            uncertainties: [...viewpoint.uncertainties],
+          })),
+          uncertainties: [...revision.uncertainties],
+        })),
       })),
     },
     bloggers: day.bloggers.map((blogger) => ({

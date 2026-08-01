@@ -46,6 +46,22 @@ describe("GET /api/reader/x", () => {
           marketIndustryViewpoints: [],
           uncertainties: [],
           excludedSourceCount: 0,
+          revisionHistory: [{
+            revision: 1,
+            coverageStatus: "partial",
+            stockViewpoints: [{
+              statement: "Safe prior revision.",
+              supportingDisplayNames: ["Alpha"],
+              dissentingDisplayNames: [],
+              uncertainties: ["Earlier uncertainty"],
+              analysis_ids: ["private-prior-analysis-id"],
+              raw_content: rawContentSentinel,
+            }],
+            marketIndustryViewpoints: [],
+            uncertainties: [],
+            provider: "must not escape",
+            input_snapshot: { raw_content: rawContentSentinel },
+          }],
         }],
       },
       bloggers: [{
@@ -80,12 +96,20 @@ describe("GET /api/reader/x", () => {
     expect(body).toEqual({ status: "ok", days: expect.arrayContaining([
       expect.objectContaining({
         naturalDate: "2099-01-02",
-        judgement: expect.objectContaining({ batches: [expect.objectContaining({ revision: 2, stockViewpoints: [expect.objectContaining({ statement: "Only the latest safe judgement is visible." })] })] }),
+        judgement: expect.objectContaining({ batches: [expect.objectContaining({
+          revision: 2,
+          stockViewpoints: [expect.objectContaining({ statement: "Only the latest safe judgement is visible." })],
+          revisionHistory: [expect.objectContaining({
+            revision: 1,
+            coverageStatus: "partial",
+            stockViewpoints: [expect.objectContaining({ statement: "Safe prior revision." })],
+          })],
+        })] }),
         bloggers: [expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, segments: [expect.objectContaining({ analyses: [expect.objectContaining({ postLink: "https://x.com/alpha/status/1" })] })] })],
       }),
     ]) });
     expect(readerMocks.readXDay).toHaveBeenCalledWith({ sourceKey: undefined, date: undefined });
-    for (const forbidden of [rawContentSentinel, localPathSentinel, "analysis_ids", "evidence_post_ids", "provider", "prompt", "task", "raw_content"]) {
+    for (const forbidden of [rawContentSentinel, localPathSentinel, "analysis_ids", "evidence_post_ids", "provider", "prompt", "task", "raw_content", "input_snapshot"]) {
       expect(serialized).not.toContain(forbidden);
     }
   });
@@ -105,6 +129,20 @@ describe("GET /api/reader/x", () => {
 
     expect(response.status).toBe(200);
     expect(readerMocks.readXDay).toHaveBeenCalledWith({ sourceKey: "alpha", date: "2099-01-02" });
+  });
+
+  it("normalizes an absent revision history to an empty safe list", async () => {
+    const [day] = await readerMocks.readXDay();
+    readerMocks.readXDay.mockResolvedValue([{
+      ...day,
+      judgement: { visible: true, batches: [{ ...day.judgement.batches[0], revisionHistory: undefined }] },
+    }]);
+
+    const response = await GET(new Request("http://localhost/api/reader/x"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.days[0].judgement.batches[0].revisionHistory).toEqual([]);
   });
 
   it("rejects an invalid date filter before reading X data", async () => {
