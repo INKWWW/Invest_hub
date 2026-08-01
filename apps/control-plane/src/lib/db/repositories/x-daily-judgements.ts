@@ -24,6 +24,7 @@ type XDailyJudgementAnalysis = {
 
 export type XDailyJudgementContext = {
   run_id: string;
+  batch_id: string;
   attempt: number;
   prompt_version: "v2-x-cross-blogger-1";
   sources: Array<{
@@ -123,7 +124,8 @@ function parseAnalysis(value: unknown): XDailyJudgementAnalysis | null {
 }
 
 function parseContext(value: unknown): XDailyJudgementContext | null {
-  if (!isObject(value) || typeof value.run_id !== "string" || typeof value.attempt !== "number" || !Number.isInteger(value.attempt)
+  if (!isObject(value) || typeof value.run_id !== "string" || typeof value.batch_id !== "string"
+    || typeof value.attempt !== "number" || !Number.isInteger(value.attempt)
     || value.attempt < 1 || value.prompt_version !== "v2-x-cross-blogger-1"
     || !Array.isArray(value.sources) || !Array.isArray(value.excluded_sources)) return null;
   const sources = value.sources.map((source) => {
@@ -154,6 +156,7 @@ function parseContext(value: unknown): XDailyJudgementContext | null {
   if (sources.some((source) => !source) || excludedSources.some((source) => !source)) return null;
   return {
     run_id: value.run_id,
+    batch_id: value.batch_id,
     attempt: value.attempt,
     prompt_version: value.prompt_version,
     sources: sources as XDailyJudgementContext["sources"],

@@ -31,8 +31,11 @@ insert into auth.users (id, aud, role, email, encrypted_password, email_confirme
 values ('00000000-0000-0000-0000-000000025001', 'authenticated', 'authenticated', 'task1-regression-admin@example.invalid', 'not-a-secret', now());
 insert into public.profiles (id, role, display_name)
 values ('00000000-0000-0000-0000-000000025001', 'admin', 'Task 1 regression admin');
-insert into public.workers (id, name, device_secret_hash, status, capabilities)
-values ('00000000-0000-0000-0000-000000025002', 'task1-regression-worker', 'task1-regression-worker-hash', 'online', array['x_sync']);
+insert into public.workers (id, name, device_secret_hash, status, capabilities, last_heartbeat_at)
+values (
+  '00000000-0000-0000-0000-000000025002', 'task1-regression-worker',
+  'task1-regression-worker-hash', 'online', array['x_sync'], '2026-07-26T00:00:00Z'
+);
 
 set local role service_role;
 select throws_ok(
@@ -218,6 +221,9 @@ $$;
 create trigger task1_inject_dispatch_failure
 before update on public.x_collection_batches
 for each row execute function public.task1_inject_dispatch_failure();
+update public.workers
+set last_heartbeat_at = '2026-07-26T08:00:00Z'
+where id = '00000000-0000-0000-0000-000000025002';
 create temporary table scheduler_dispatch_isolation as
 select public.ensure_due_x_collection_batches('00000000-0000-0000-0000-000000025002', '2026-07-26T08:01:00Z') as payload;
 select is(

@@ -61,6 +61,7 @@ V2_X_WINDOW_FIELDS = frozenset({"schema_version", "natural_date", "range_task_id
 V2_X_CROSS_BLOGGER_FIELDS = frozenset({"schema_version", "stock_viewpoints", "market_industry_viewpoints", "uncertainties"})
 V2_X_CROSS_BLOGGER_ITEM_FIELDS = frozenset({"statement", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"})
 _IMPERATIVE_INVESTMENT_RECOMMENDATION = re.compile(r"(?:系统\s*)?(?:建议|应当|应该|必须|请|立即).{0,24}(?:买入|卖出|加仓|减仓|建仓|清仓|抄底|追涨)")
+_STRONG_CONSENSUS_WORDING = re.compile(r"(?:共识|一致认为|共同认为|市场(?:已经|已)?确认)")
 
 
 def parse_v2_x_chunk_output(
@@ -141,6 +142,7 @@ def parse_v2_x_cross_blogger_output(
     analysis_source_ids: Mapping[str, str],
     analysis_evidence_post_ids: Mapping[str, set[str]],
     frozen_source_ids: set[str] | None = None,
+    opaque_context_ids: Mapping[str, set[str]] | None = None,
 ) -> dict[str, object]:
     """Validate the safe, cross-blogger completion sent to the control plane."""
 
@@ -162,9 +164,22 @@ def parse_v2_x_cross_blogger_output(
         evidence_ids = analysis_evidence_post_ids.get(analysis_id)
         if source_id not in allowed_source_ids or not isinstance(evidence_ids, set) or not evidence_ids or not evidence_ids <= allowed_post_ids:
             raise SchemaError("analysis", "analysis ownership catalog is invalid")
-    _reject_opaque_ids(payload["uncertainties"], allowed_analysis_ids, "analysis")
-    _reject_opaque_ids(payload["uncertainties"], opaque_source_ids, "source")
-    _reject_opaque_ids(payload["uncertainties"], allowed_post_ids, "evidence")
+    context_catalog = opaque_context_ids or {}
+    if not set(context_catalog) <= {"batch", "run", "segment"} or any(
+        not isinstance(opaque_ids, set) or not all(_non_empty_string(opaque_id) for opaque_id in opaque_ids)
+        for opaque_ids in context_catalog.values()
+    ):
+        raise SchemaError("context", "opaque context catalog is invalid")
+    opaque_catalogs = (
+        ("batch", context_catalog.get("batch", set())),
+        ("run", context_catalog.get("run", set())),
+        ("segment", context_catalog.get("segment", set())),
+        ("analysis", allowed_analysis_ids),
+        ("source", opaque_source_ids),
+        ("evidence", allowed_post_ids),
+    )
+    for opaque_kind, opaque_ids in opaque_catalogs:
+        _reject_opaque_ids(payload["uncertainties"], opaque_ids, opaque_kind)
 
     def normalized_items(values: list[object], category: str) -> list[dict[str, object]]:
         result: list[dict[str, object]] = []
@@ -177,11 +192,7 @@ def parse_v2_x_cross_blogger_output(
                 raise SchemaError("invalid_v2_x_cross_blogger_item", "statement must be a non-empty string")
             if _IMPERATIVE_INVESTMENT_RECOMMENDATION.search(statement):
                 raise SchemaError("invalid_v2_x_cross_blogger_item", "imperative system investment recommendation is not allowed")
-            for opaque_kind, opaque_ids in (
-                ("analysis", allowed_analysis_ids),
-                ("source", opaque_source_ids),
-                ("evidence", allowed_post_ids),
-            ):
+            for opaque_kind, opaque_ids in opaque_catalogs:
                 _reject_opaque_ids([statement], opaque_ids, opaque_kind)
             supporting = value["supporting_source_ids"]
             dissenting = value["dissenting_source_ids"]
@@ -191,6 +202,11 @@ def parse_v2_x_cross_blogger_output(
                 raise SchemaError("source", "unknown source")
             if set(supporting) & set(dissenting):
                 raise SchemaError("source", "source cannot be both supporting and dissenting")
+            if _STRONG_CONSENSUS_WORDING.search(statement) and (len(supporting) < 2 or dissenting):
+                raise SchemaError(
+                    "consensus",
+                    "strong consensus wording requires two independent supporting sources and no dissenting source",
+                )
             analyses = value["analysis_ids"]
             if not _non_empty_string_list(analyses) or len(set(analyses)) != len(analyses):
                 raise SchemaError("analysis", "analysis IDs must be unique and non-empty")
@@ -205,11 +221,7 @@ def parse_v2_x_cross_blogger_output(
                 raise SchemaError("evidence", "unknown evidence post")
             if not _string_list(value["uncertainties"]):
                 raise SchemaError("invalid_v2_x_cross_blogger_item", "uncertainties must be a string array")
-            for opaque_kind, opaque_ids in (
-                ("analysis", allowed_analysis_ids),
-                ("source", opaque_source_ids),
-                ("evidence", allowed_post_ids),
-            ):
+            for opaque_kind, opaque_ids in opaque_catalogs:
                 _reject_opaque_ids(value["uncertainties"], opaque_ids, opaque_kind)
             item_source_ids = set(supporting) | set(dissenting)
             analysis_sources = {analysis_source_ids[analysis_id] for analysis_id in analyses}
@@ -232,10 +244,12 @@ def parse_v2_x_cross_blogger_output(
 def _reject_opaque_ids(values: object, opaque_ids: set[str], opaque_kind: str) -> None:
     if not isinstance(values, list):
         raise SchemaError("invalid_v2_x_cross_blogger", "natural language fields must be string arrays")
+    canonical_opaque_ids = tuple(opaque_id.casefold() for opaque_id in opaque_ids)
     for value in values:
         if not isinstance(value, str):
             raise SchemaError("invalid_v2_x_cross_blogger", "natural language fields must be strings")
-        if any(opaque_id in value for opaque_id in opaque_ids):
+        canonical_value = value.casefold()
+        if any(opaque_id in canonical_value for opaque_id in canonical_opaque_ids):
             raise SchemaError(opaque_kind, f"opaque {opaque_kind} ID is not allowed in natural language")
 
 
