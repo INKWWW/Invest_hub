@@ -6,8 +6,11 @@ insert into auth.users (id, aud, role, email, encrypted_password, email_confirme
 values ('00000000-0000-0000-0000-000000028010', 'authenticated', 'authenticated', 'state-security-admin@example.invalid', 'not-a-secret', now());
 insert into public.profiles (id, role, display_name)
 values ('00000000-0000-0000-0000-000000028010', 'admin', 'State security admin');
-insert into public.workers (id, name, device_secret_hash, status, capabilities)
-values ('00000000-0000-0000-0000-000000028001', 'state-security-worker', 'state-security-worker-hash', 'online', array['x_sync']);
+insert into public.workers (id, name, device_secret_hash, status, capabilities, last_heartbeat_at)
+values (
+  '00000000-0000-0000-0000-000000028001', 'state-security-worker',
+  'state-security-worker-hash', 'online', array['x_sync'], timezone('utc', now())
+);
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values
   ('00000000-0000-0000-0000-000000028101', 'state-security-source-a', 'x', 'State source A', 'v2-state-security', '00000000-0000-0000-0000-000000028001'),

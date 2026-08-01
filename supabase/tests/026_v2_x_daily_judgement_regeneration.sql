@@ -10,8 +10,11 @@ insert into public.profiles (id, role, display_name)
 values
   ('00000000-0000-0000-0000-000000026010', 'admin', 'Regeneration admin'),
   ('00000000-0000-0000-0000-000000026011', 'user', 'Regeneration user');
-insert into public.workers (id, name, device_secret_hash, status, capabilities)
-values ('00000000-0000-0000-0000-000000026001', 'regeneration-worker', 'regeneration-worker-hash', 'online', array['x_sync']);
+insert into public.workers (id, name, device_secret_hash, status, capabilities, last_heartbeat_at)
+values (
+  '00000000-0000-0000-0000-000000026001', 'regeneration-worker',
+  'regeneration-worker-hash', 'online', array['x_sync'], timezone('utc', now())
+);
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values ('00000000-0000-0000-0000-000000026030', 'regeneration-excluded-source', 'x', 'Excluded regeneration source', 'v2-regeneration', '00000000-0000-0000-0000-000000026001');
 insert into public.x_source_profiles (source_id, requested_handle, account_id, display_name, resolution_status)
@@ -27,19 +30,26 @@ values
   ('00000000-0000-0000-0000-000000026025', '2026-08-02T12:00+08:00', '2026-08-02', '2026-08-02T04:00:00Z', '2026-08-02T06:00:00Z', 'succeeded'),
   ('00000000-0000-0000-0000-000000026026', '2026-08-02T16:00+08:00', '2026-08-02', '2026-08-02T08:00:00Z', '2026-08-02T10:00:00Z', 'judgement_pending');
 
-insert into public.x_daily_judgement_versions
-  (batch_id, revision, coverage_status, input_snapshot, output, provider, model_reported, prompt_version, schema_version)
-values
-  ('00000000-0000-0000-0000-000000026020', 1, 'no_new_information',
-    '{"sources":[]}'::jsonb, '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":["revision one"]}'::jsonb,
-    'codex_cli', 'fixture-model', 'v2-x-cross-blogger-1', 'v2-x-cross-blogger'),
-  ('00000000-0000-0000-0000-000000026025', 1, 'no_new_information',
-    '{"sources":[]}'::jsonb, '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb,
-    'codex_cli', null, 'v2-x-cross-blogger-1', 'v2-x-cross-blogger');
 insert into public.x_collection_batch_sources (batch_id, source_id, source_display_name, settlement_status, settled_at)
 values
   ('00000000-0000-0000-0000-000000026020', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now())),
+  ('00000000-0000-0000-0000-000000026025', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now())),
   ('00000000-0000-0000-0000-000000026026', '00000000-0000-0000-0000-000000026030', 'Excluded regeneration source', 'included', timezone('utc', now()));
+insert into public.x_daily_judgement_versions
+  (batch_id, revision, coverage_status, input_snapshot, output, provider, model_reported, prompt_version, schema_version)
+values
+  ('00000000-0000-0000-0000-000000026020', 1, 'complete',
+    '{"sources":[{"source_id":"00000000-0000-0000-0000-000000026030","display_name":"Excluded regeneration source","settlement_status":"included","segments":[]}]}'::jsonb,
+    '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":["revision one"]}'::jsonb,
+    'codex_cli', 'fixture-model', 'v2-x-cross-blogger-1', 'v2-x-cross-blogger'),
+  ('00000000-0000-0000-0000-000000026025', 1, 'complete',
+    '{"sources":[{"source_id":"00000000-0000-0000-0000-000000026030","display_name":"Excluded regeneration source","settlement_status":"included","segments":[]}]}'::jsonb,
+    '{"stock_viewpoints":[],"market_industry_viewpoints":[],"uncertainties":[]}'::jsonb,
+    'codex_cli', null, 'v2-x-cross-blogger-1', 'v2-x-cross-blogger');
+create temporary table regeneration_revision_one_before as
+select input_snapshot, output, provider, model_reported
+from public.x_daily_judgement_versions
+where batch_id = '00000000-0000-0000-0000-000000026020' and revision = 1;
 select has_column('public', 'x_daily_judgement_runs', 'run_kind', 'judgement runs distinguish initial and explicit regeneration work');
 select has_column('public', 'x_daily_judgement_runs', 'requested_by', 'regeneration runs preserve the requesting actor');
 set local role service_role;
@@ -61,7 +71,8 @@ select is((select count(*)::text from public.x_collection_batch_sources where ba
 select is(
   (select input_snapshot::text || '|' || output::text || '|' || provider || '|' || coalesce(model_reported, '')
    from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000026020' and revision = 1),
-  '{"sources": []}|{"uncertainties": ["revision one"], "stock_viewpoints": [], "market_industry_viewpoints": []}|codex_cli|fixture-model',
+  (select input_snapshot::text || '|' || output::text || '|' || provider || '|' || coalesce(model_reported, '')
+   from regeneration_revision_one_before),
   'queueing regeneration leaves revision one byte-for-byte unchanged'
 );
 
@@ -81,7 +92,8 @@ select is((select max(revision)::text from public.x_daily_judgement_versions whe
 select is(
   (select input_snapshot::text || '|' || output::text || '|' || provider || '|' || coalesce(model_reported, '')
    from public.x_daily_judgement_versions where batch_id = '00000000-0000-0000-0000-000000026020' and revision = 1),
-  '{"sources": []}|{"uncertainties": ["revision one"], "stock_viewpoints": [], "market_industry_viewpoints": []}|codex_cli|fixture-model',
+  (select input_snapshot::text || '|' || output::text || '|' || provider || '|' || coalesce(model_reported, '')
+   from regeneration_revision_one_before),
   'completion leaves revision one byte-for-byte unchanged'
 );
 

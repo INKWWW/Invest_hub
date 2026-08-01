@@ -40,6 +40,7 @@ describe("X daily judgement repository", () => {
     databaseMocks.rpc.mockResolvedValue({
       data: {
         run_id: claim.run_id,
+        batch_id: claim.batch.id,
         attempt: 1,
         prompt_version: "v2-x-cross-blogger-1",
         sources: [{
@@ -71,6 +72,7 @@ describe("X daily judgement repository", () => {
 
     expect(JSON.stringify(result)).not.toContain("canonical_messages");
     expect(JSON.stringify(result)).not.toContain("must never be accepted");
+    expect(result.batch_id).toBe(claim.batch.id);
     expect(result.sources[0]?.window_segments[0]?.analyses[0]?.evidence_post_ids).toEqual(["post-1"]);
   });
 

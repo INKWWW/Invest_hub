@@ -388,7 +388,7 @@ def _parse_x_daily_judgement_claim(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_x_daily_judgement_context(value: dict[str, Any], run_id: str, attempt: int) -> dict[str, Any]:
-    if set(value) != {"run_id", "attempt", "prompt_version", "sources", "excluded_sources"} or value.get("run_id") != run_id or value.get("attempt") != attempt or value.get("prompt_version") != "v2-x-cross-blogger-1":
+    if set(value) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or value.get("run_id") != run_id or not _non_empty_string(value.get("batch_id")) or value.get("attempt") != attempt or value.get("prompt_version") != "v2-x-cross-blogger-1":
         raise ProtocolError("invalid x daily judgement context")
     sources = value.get("sources")
     excluded = value.get("excluded_sources")

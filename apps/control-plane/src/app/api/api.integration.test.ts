@@ -1001,6 +1001,7 @@ describe("v0 control-plane API authorization", () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
       run_id: "11111111-1111-4111-8111-111111111111",
+      batch_id: "22222222-2222-4222-8222-222222222222",
       attempt: 1,
       prompt_version: "v2-x-cross-blogger-1",
       sources: [{ source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher", window_segments: [] }],
@@ -1022,6 +1023,7 @@ describe("v0 control-plane API authorization", () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
       run_id: "11111111-1111-4111-8111-111111111111",
+      batch_id: "22222222-2222-4222-8222-222222222222",
       attempt: 1,
       prompt_version: "v2-x-cross-blogger-1",
       sources: [{
@@ -1071,6 +1073,7 @@ describe("v0 control-plane API authorization", () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
       run_id: "11111111-1111-4111-8111-111111111111", attempt: 1,
+      batch_id: "22222222-2222-4222-8222-222222222222",
       prompt_version: "v2-x-cross-blogger-1",
       sources: [{
         source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher",
@@ -1244,10 +1247,73 @@ describe("v0 control-plane API authorization", () => {
       },
       uncertainties: ["post-a@1 needs more context"],
     },
+    ...[
+      ["batch", "abcdefab-cdef-4abc-8def-abcdefabcdef"],
+      ["run", "11111111-1111-4111-8111-111111111111"],
+      ["segment", "44444444-4444-4444-8444-444444444444"],
+    ].flatMap(([kind, opaqueId]) => ([
+      {
+        name: `opaque ${kind} ID in statement`,
+        item: {
+          statement: `${opaqueId} supports this statement`,
+          supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+          dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a", "quote-a"], uncertainties: [],
+        },
+        uncertainties: [],
+      },
+      {
+        name: `opaque ${kind} ID in item uncertainty`,
+        item: {
+          statement: "Synthetic statement",
+          supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+          dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a", "quote-a"],
+          uncertainties: [`${opaqueId} needs context`],
+        },
+        uncertainties: [],
+      },
+      {
+        name: `opaque ${kind} ID in global uncertainty`,
+        item: {
+          statement: "Synthetic statement",
+          supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+          dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a", "quote-a"], uncertainties: [],
+        },
+        uncertainties: [`${opaqueId} needs context`],
+      },
+    ])),
+    {
+      name: "uppercase variant of opaque batch UUID",
+      item: {
+        statement: "ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF supports this statement",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a", "quote-a"], uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "single-source strong consensus wording",
+      item: {
+        statement: "市场已确认估值见底。",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a", "quote-a"], uncertainties: [],
+      },
+      uncertainties: [],
+    },
+    {
+      name: "dissenting strong consensus wording",
+      item: {
+        statement: "多位博主一致认为估值见底。",
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+        dissenting_source_ids: ["55555555-5555-4555-8555-555555555555"],
+        analysis_ids: ["post-a@1", "post-b@1"], evidence_post_ids: ["post-a", "quote-a", "post-b"], uncertainties: [],
+      },
+      uncertainties: [],
+    },
   ])("rejects $name at the HTTP completion boundary", async ({ item, uncertainties }) => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
       run_id: "11111111-1111-4111-8111-111111111111",
+      batch_id: "abcdefab-cdef-4abc-8def-abcdefabcdef",
       attempt: 1,
       prompt_version: "v2-x-cross-blogger-1",
       sources: [
@@ -1307,6 +1373,41 @@ describe("v0 control-plane API authorization", () => {
     expect(xDailyJudgementMocks.completeXDailyJudgement).not.toHaveBeenCalled();
   });
 
+  it("rejects a legacy no-new context before DB completion", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
+      run_id: "11111111-1111-4111-8111-111111111111",
+      batch_id: "abcdefab-cdef-4abc-8def-abcdefabcdef",
+      attempt: 1,
+      prompt_version: "v2-x-cross-blogger-1",
+      sources: [],
+      excluded_sources: [{
+        source_id: "77777777-7777-4777-8777-777777777777",
+        display_name: "No-new fixture researcher",
+        reason: "no_new_information",
+      }],
+    });
+
+    const response = await postXDailyJudgementComplete(
+      jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {
+        run_id: "11111111-1111-4111-8111-111111111111",
+        attempt: 1,
+        schema_version: "v2-x-cross-blogger",
+        provider: "codex_cli",
+        model_reported: null,
+        prompt_version: "v2-x-cross-blogger-1",
+        stock_viewpoints: [],
+        market_industry_viewpoints: [],
+        uncertainties: [],
+      }),
+      { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_x_daily_judgement_completion" });
+    expect(xDailyJudgementMocks.completeXDailyJudgement).not.toHaveBeenCalled();
+  });
+
   it.each(["file:///private/worker/output.json", "x".repeat(161)])(
     "rejects unsafe or raw-output-sized model_reported metadata before any repository call",
     async (modelReported) => {
@@ -1328,6 +1429,14 @@ describe("v0 control-plane API authorization", () => {
 
   it("maps a stale X daily judgement attempt to 409 and only accepts bounded failure classes", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
+      run_id: "11111111-1111-4111-8111-111111111111",
+      batch_id: "abcdefab-cdef-4abc-8def-abcdefabcdef",
+      attempt: 1,
+      prompt_version: "v2-x-cross-blogger-1",
+      sources: [{ source_id: "source-a", display_name: "A", window_segments: [] }],
+      excluded_sources: [],
+    });
     xDailyJudgementMocks.completeXDailyJudgement.mockRejectedValue({ code: "PT409", message: "lease_mismatch" });
     const stale = await postXDailyJudgementComplete(
       jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {

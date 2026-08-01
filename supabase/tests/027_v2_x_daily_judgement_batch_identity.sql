@@ -56,12 +56,12 @@ select is(
   'the lock authority holds all protected legacy identity tables for the transaction'
 );
 
-insert into public.workers (id, name, device_secret_hash, status, capabilities)
+insert into public.workers (id, name, device_secret_hash, status, capabilities, last_heartbeat_at)
 values
-  ('00000000-0000-0000-0000-000000027001', 'batch-worker-a', 'batch-worker-a-hash', 'online', array['x_sync']),
-  ('00000000-0000-0000-0000-000000027002', 'batch-worker-b', 'batch-worker-b-hash', 'enrolled', array['x_sync']),
-  ('00000000-0000-0000-0000-000000027003', 'discord-only-worker', 'discord-only-worker-hash', 'online', array['discord_sync']),
-  ('00000000-0000-0000-0000-000000027004', 'unassigned-x-worker', 'unassigned-x-worker-hash', 'online', array['x_sync']);
+  ('00000000-0000-0000-0000-000000027001', 'batch-worker-a', 'batch-worker-a-hash', 'online', array['x_sync'], '2026-07-31T16:00:00Z'),
+  ('00000000-0000-0000-0000-000000027002', 'batch-worker-b', 'batch-worker-b-hash', 'enrolled', array['x_sync'], null),
+  ('00000000-0000-0000-0000-000000027003', 'discord-only-worker', 'discord-only-worker-hash', 'online', array['discord_sync'], '2026-07-31T16:00:00Z'),
+  ('00000000-0000-0000-0000-000000027004', 'unassigned-x-worker', 'unassigned-x-worker-hash', 'online', array['x_sync'], '2026-07-31T16:00:00Z');
 
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values
@@ -217,6 +217,9 @@ select is(
   'a partially covered batch with included evidence queues judgement work'
 );
 
+update public.workers
+set last_heartbeat_at = '2026-07-31T16:02:00Z'
+where id = '00000000-0000-0000-0000-000000027003';
 select throws_ok(
   $$select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000027003', '2026-08-01T00:03:00+08:00')$$,
   '42501', 'worker_not_authorized',
@@ -225,6 +228,9 @@ select throws_ok(
 update public.x_daily_judgement_runs
 set status = 'queued', attempt = 0, lease_owner = null, lease_expires_at = null
 where batch_id = (select id from public.x_collection_batches where scheduled_window_key = '2026-08-01T00:00+08:00');
+update public.workers
+set status = 'online', last_heartbeat_at = timezone('utc', now())
+where id = '00000000-0000-0000-0000-000000027002';
 create temporary table worker_b_claim as
 select public.claim_next_x_daily_judgement('00000000-0000-0000-0000-000000027002', timezone('utc', now())) as payload;
 select isnt((select payload->>'run_id' from worker_b_claim), null, 'an authorized X-capable Worker for another frozen source may claim the shared judgement');
@@ -368,6 +374,9 @@ where source_id in (
   '00000000-0000-0000-0000-000000027011',
   '00000000-0000-0000-0000-000000027012'
 );
+update public.workers
+set last_heartbeat_at = '2026-08-02T00:00:00Z'
+where id = '00000000-0000-0000-0000-000000027001';
 create temporary table legacy_batch_reuse as
 select public.ensure_due_x_collection_batches(
   '00000000-0000-0000-0000-000000027001',
@@ -388,6 +397,9 @@ select is(
   'judgement_failed',
   'a legacy-incomplete batch cannot remain succeeded or complete'
 );
+update public.workers
+set last_heartbeat_at = timezone('utc', now())
+where id = '00000000-0000-0000-0000-000000027001';
 select is(
   (select public.claim_next_x_daily_judgement(
     '00000000-0000-0000-0000-000000027001', timezone('utc', now())

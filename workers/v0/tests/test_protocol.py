@@ -329,7 +329,8 @@ class WorkerProtocolTests(unittest.TestCase):
             "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"},
         }
         context = {
-            "run_id": "judgement-run-1", "attempt": 1, "prompt_version": "v2-x-cross-blogger-1",
+            "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
+            "prompt_version": "v2-x-cross-blogger-1",
             "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
                 "id": "segment-1", "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
                 "viewpoints": ["观点"], "uncertainties": [], "analyses": [{
@@ -349,7 +350,9 @@ class WorkerProtocolTests(unittest.TestCase):
             protocol.enrol("one-time-enrolment-code")
 
             self.assertEqual(protocol.claim_x_daily_judgement()["run_id"], "judgement-run-1")
-            self.assertEqual(protocol.get_x_daily_judgement_context("judgement-run-1", 1)["sources"][0]["source_id"], "source-a")
+            parsed_context = protocol.get_x_daily_judgement_context("judgement-run-1", 1)
+            self.assertEqual(parsed_context["batch_id"], "batch-1")
+            self.assertEqual(parsed_context["sources"][0]["source_id"], "source-a")
             self.assertEqual(protocol.complete_x_daily_judgement(completion)["status"], "succeeded")
             self.assertEqual(protocol.fail_x_daily_judgement("judgement-run-1", 1, "provider_failure")["status"], "retryable_failed")
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/x-daily-judgements/claim"))

@@ -13,6 +13,7 @@ const completionKeys = [
   "run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version",
   "stock_viewpoints", "market_industry_viewpoints", "uncertainties",
 ].sort();
+const strongConsensusWording = /共识|一致认为|共同认为|市场(?:已经|已)?确认/u;
 
 function isStringArray(value: unknown, max = 500): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0 && item.length <= max);
@@ -27,7 +28,11 @@ function sameSet(left: Set<string>, right: Set<string>) {
 }
 
 function containsOpaqueId(values: string[], opaqueIds: Set<string>) {
-  return values.some((value) => [...opaqueIds].some((opaqueId) => value.includes(opaqueId)));
+  const canonicalOpaqueIds = [...opaqueIds].map((opaqueId) => opaqueId.toLowerCase());
+  return values.some((value) => {
+    const canonicalValue = value.toLowerCase();
+    return canonicalOpaqueIds.some((opaqueId) => canonicalValue.includes(opaqueId));
+  });
 }
 
 function isSafeModelReported(value: unknown): value is string | null {
@@ -65,6 +70,8 @@ function isCompletion(value: unknown): value is XDailyJudgementCompletion {
 }
 
 function referencesFrozenContext(completion: XDailyJudgementCompletion, judgementContext: XDailyJudgementContext): boolean {
+  if (completion.run_id !== judgementContext.run_id || completion.attempt !== judgementContext.attempt) return false;
+  if (judgementContext.sources.length === 0) return false;
   const sourceIds = new Set(judgementContext.sources.map((source) => source.source_id));
   if (sourceIds.size !== judgementContext.sources.length) return false;
   const excludedSourceIds = new Set(judgementContext.excluded_sources.map((source) => source.source_id));
@@ -73,8 +80,11 @@ function referencesFrozenContext(completion: XDailyJudgementCompletion, judgemen
   const analysisSourceIds = new Map<string, string>();
   const analysisEvidencePostIds = new Map<string, Set<string>>();
   const evidencePostIds = new Set<string>();
+  const segmentIds = new Set<string>();
   for (const source of judgementContext.sources) {
     for (const segment of source.window_segments) {
+      if (segmentIds.has(segment.id)) return false;
+      segmentIds.add(segment.id);
       for (const analysis of segment.analyses) {
         if (analysisSourceIds.has(analysis.post_id) || analysis.evidence_post_ids.length === 0
           || !isUnique(analysis.evidence_post_ids)) return false;
@@ -86,7 +96,10 @@ function referencesFrozenContext(completion: XDailyJudgementCompletion, judgemen
     }
   }
   const analysisIds = new Set(analysisSourceIds.keys());
-  const opaqueIds = new Set([...sourceIds, ...excludedSourceIds, ...analysisIds, ...evidencePostIds]);
+  const opaqueIds = new Set([
+    judgementContext.batch_id, judgementContext.run_id, ...segmentIds,
+    ...sourceIds, ...excludedSourceIds, ...analysisIds, ...evidencePostIds,
+  ]);
   if (containsOpaqueId(completion.uncertainties, opaqueIds)) return false;
 
   return [...completion.stock_viewpoints, ...completion.market_industry_viewpoints].every((item) => {
@@ -94,6 +107,8 @@ function referencesFrozenContext(completion: XDailyJudgementCompletion, judgemen
       || !isUnique(item.analysis_ids) || !isUnique(item.evidence_post_ids)
       || item.analysis_ids.length === 0 || item.evidence_post_ids.length === 0
       || item.supporting_source_ids.some((id) => item.dissenting_source_ids.includes(id))
+      || (strongConsensusWording.test(item.statement)
+        && (item.supporting_source_ids.length < 2 || item.dissenting_source_ids.length > 0))
       || containsOpaqueId([item.statement, ...item.uncertainties], opaqueIds)) return false;
 
     const itemSourceIds = new Set([...item.supporting_source_ids, ...item.dissenting_source_ids]);

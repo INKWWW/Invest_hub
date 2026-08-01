@@ -2,8 +2,11 @@ begin;
 
 select plan(6);
 
-insert into public.workers (id, name, device_secret_hash, status, capabilities)
-values ('00000000-0000-0000-0000-000000023001', 'terminal-failure-scheduler-worker', 'terminal-failure-scheduler-hash', 'online', array['x_sync']);
+insert into public.workers (id, name, device_secret_hash, status, capabilities, last_heartbeat_at)
+values (
+  '00000000-0000-0000-0000-000000023001', 'terminal-failure-scheduler-worker',
+  'terminal-failure-scheduler-hash', 'online', array['x_sync'], '2026-07-24T04:00:00Z'
+);
 
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values

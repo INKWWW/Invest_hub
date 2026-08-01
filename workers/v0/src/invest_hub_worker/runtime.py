@@ -50,6 +50,12 @@ class XDailyJudgementRuntime:
         attempt = claim.get("attempt")
         if not isinstance(run_id, str) or not run_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
             raise RuntimeExecutionError("schema_error", "daily judgement claim is invalid")
+        batch = claim.get("batch")
+        if not isinstance(batch, Mapping) or not isinstance(batch.get("id"), str) or not batch.get("id"):
+            raise RuntimeExecutionError("schema_error", "daily judgement claim is invalid")
+        batch_id = str(batch["id"])
+        if batch.get("coverage_status") == "no_new_information":
+            raise RuntimeExecutionError("schema_error", "daily judgement no-new claim cannot invoke Provider")
         try:
             (
                 allowed_source_ids,
@@ -58,9 +64,12 @@ class XDailyJudgementRuntime:
                 analysis_source_ids,
                 analysis_evidence_post_ids,
                 frozen_source_ids,
-            ) = self._validate_context(context, run_id, attempt)
+                segment_ids,
+            ) = self._validate_context(context, run_id, batch_id, attempt)
         except (TypeError, ValueError) as exc:
             raise RuntimeExecutionError("schema_error", "daily judgement context is invalid") from exc
+        if not allowed_source_ids:
+            raise RuntimeExecutionError("schema_error", "daily judgement context has no included source")
         provider_context = ProviderContext(
             chunk_id=run_id,
             prompt_version="v2-x-cross-blogger-1",
@@ -93,6 +102,7 @@ class XDailyJudgementRuntime:
                 analysis_source_ids=analysis_source_ids,
                 analysis_evidence_post_ids=analysis_evidence_post_ids,
                 frozen_source_ids=frozen_source_ids,
+                opaque_context_ids={"batch": {batch_id}, "run": {run_id}, "segment": segment_ids},
             )
         except SchemaError as exc:
             raise RuntimeExecutionError("schema_error", "cross-blogger judgement failed evidence validation") from exc
@@ -110,10 +120,12 @@ class XDailyJudgementRuntime:
 
     @staticmethod
     def _validate_context(
-        context: Mapping[str, object], run_id: str, attempt: int
-    ) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]], set[str]]:
-        if set(context) != {"run_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") != "v2-x-cross-blogger-1":
+        context: Mapping[str, object], run_id: str, batch_id: str, attempt: int
+    ) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]], set[str], set[str]]:
+        if set(context) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") != "v2-x-cross-blogger-1":
             raise ValueError("context identity is invalid")
+        if context.get("batch_id") != batch_id:
+            raise ValueError("context batch identity is invalid")
         sources = context.get("sources")
         excluded_sources = context.get("excluded_sources")
         if not isinstance(sources, list) or not isinstance(excluded_sources, list):
@@ -123,6 +135,7 @@ class XDailyJudgementRuntime:
         post_ids: set[str] = set()
         analysis_source_ids: dict[str, str] = {}
         analysis_evidence_post_ids: dict[str, set[str]] = {}
+        segment_ids: set[str] = set()
         for source in sources:
             if not isinstance(source, Mapping) or set(source) != {"source_id", "display_name", "window_segments"}:
                 raise ValueError("source is invalid")
@@ -136,6 +149,10 @@ class XDailyJudgementRuntime:
             for segment in segments:
                 if not isinstance(segment, Mapping) or set(segment) != {"id", "occurred_from_at", "occurred_through_at", "viewpoints", "uncertainties", "analyses"} or not isinstance(segment.get("analyses"), list):
                     raise ValueError("segment is invalid")
+                segment_id = segment.get("id")
+                if not isinstance(segment_id, str) or not segment_id or segment_id in segment_ids:
+                    raise ValueError("segment identity is invalid")
+                segment_ids.add(segment_id)
                 for analysis in segment["analyses"]:
                     if not isinstance(analysis, Mapping):
                         raise ValueError("analysis is invalid")
@@ -158,7 +175,7 @@ class XDailyJudgementRuntime:
             excluded_ids.add(source_id)
         if source_ids & excluded_ids:
             raise ValueError("source cannot be included and excluded")
-        return source_ids, analysis_ids, post_ids, analysis_source_ids, analysis_evidence_post_ids, source_ids | excluded_ids
+        return source_ids, analysis_ids, post_ids, analysis_source_ids, analysis_evidence_post_ids, source_ids | excluded_ids, segment_ids
 
 
 def _safe_model_reported(value: object) -> bool:
