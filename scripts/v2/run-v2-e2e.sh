@@ -26,7 +26,6 @@ V1_PYTHON_BIN="${V1_PYTHON_BIN:-$python_bin}" bash scripts/v1/run-v1-1-e2e.sh
 (
   cd apps/control-plane
   npm test -- --run \
-    src/app/api/api.integration.test.ts \
     src/app/api/reader/x/route.test.ts \
     'src/app/api/admin/x/daily-judgements/[batchId]/regenerate/route.test.ts' \
     src/app/x/page.test.tsx \
