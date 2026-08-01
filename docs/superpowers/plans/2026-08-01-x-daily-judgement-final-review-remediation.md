@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Plan status:** **已批准（用户确认 2026-08-01 并要求执行）**。本 Plan 仅授权本地代码、migration、测试与治理记录修复；remote migration、部署、Worker 重启、真实 X/OpenCLI/Browser/Codex 调用和生产验收仍须另行明确授权。
+
 **Goal:** 闭合最终整分支审查确认的 Worker 授权、无新增 regeneration、opaque ID、共识语义、可观测性与治理真值缺口。
 
 **Architecture:** 数据库、HTTP 与 Worker parser 继续是同一 judgement authority 的三道防线；无输入批次不进入 Provider；所有模型上下文身份在展示文本中禁用。运行日志只增加安全 boolean，治理文件补齐用户已批准的 regeneration Plan，不执行任何生产动作。

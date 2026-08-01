@@ -136,6 +136,39 @@ describe("X reader date projection", () => {
     for (const forbidden of ["analysis_ids", "evidence_post_ids", "analysis-2", "post-2", "provider", "task-a-20", "task-global-latest", "evidence_refs"]) expect(serialized).not.toContain(forbidden);
   });
 
+  it("publishes judgement coverage only when a persisted version proves it", async () => {
+    databaseMocks.rows.set("x_daily_viewpoint_segments", []);
+    databaseMocks.rows.set("x_collection_batches", [
+      { id: "batch-pending", natural_date: "2099-01-01", cutoff_at: "2099-01-01T12:00:00.000Z", status: "judgement_pending" },
+      { id: "batch-failed", natural_date: "2099-01-01", cutoff_at: "2099-01-01T08:00:00.000Z", status: "judgement_failed" },
+      { id: "batch-no-new", natural_date: "2099-01-01", cutoff_at: "2099-01-01T04:00:00.000Z", status: "succeeded" },
+    ]);
+    databaseMocks.rows.set("x_daily_judgement_versions", [{
+      batch_id: "batch-no-new", revision: 1, coverage_status: "no_new_information",
+      output: { stock_viewpoints: [], market_industry_viewpoints: [], uncertainties: [] },
+    }]);
+    databaseMocks.rows.set("x_collection_batch_sources", [
+      { batch_id: "batch-pending", source_id: "source-a", source_display_name: "Alpha", x_sync_task_id: "task-pending", settlement_status: "pending" },
+      { batch_id: "batch-failed", source_id: "source-a", source_display_name: "Alpha", x_sync_task_id: "task-failed", settlement_status: "excluded" },
+      { batch_id: "batch-no-new", source_id: "source-a", source_display_name: "Alpha", x_sync_task_id: "task-no-new", settlement_status: "no_new_information" },
+    ]);
+    databaseMocks.rows.set("sync_tasks", [
+      { id: "task-pending", status: "queued" },
+      { id: "task-failed", status: "failed" },
+      { id: "task-no-new", status: "succeeded" },
+    ]);
+    databaseMocks.rows.set("task_attempts", [{ task_id: "task-no-new", result: { no_new_data: true }, updated_at: "2099-01-01T04:01:00.000Z" }]);
+
+    const result = await readXDay();
+    const batches = result[0]?.judgement.batches ?? [];
+
+    expect(batches.map(({ status, revision, coverageStatus }) => ({ status, revision, coverageStatus }))).toEqual([
+      { status: "judgement_pending", revision: 0, coverageStatus: null },
+      { status: "judgement_failed", revision: 0, coverageStatus: null },
+      { status: "succeeded", revision: 1, coverageStatus: "no_new_information" },
+    ]);
+  });
+
   it("selects no unused internal evidence or segment identity fields", async () => {
     await readXDay();
 

@@ -33,7 +33,12 @@ function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches
   </details>)}</div>;
 }
 
-function JudgementRevision({ revision, excludedSourceCount }: { revision: XReaderJudgementRevision; excludedSourceCount: number }) {
+function JudgementRevision({ revision, excludedSourceCount }: {
+  revision: Omit<XReaderJudgementRevision, "coverageStatus"> & {
+    coverageStatus: XReaderJudgementRevision["coverageStatus"] | null;
+  };
+  excludedSourceCount: number;
+}) {
   return <div className="x-reader-revision-content">
     {revision.stockViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`stock-${judgementIndex}`} judgement={judgement} />)}
     {revision.marketIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} />)}

@@ -87,7 +87,7 @@ export type XReaderDate = {
     visible: boolean;
     batches: Array<{
       cutoffAt: string;
-      coverageStatus: "complete" | "partial" | "no_new_information";
+      coverageStatus: XReaderJudgementRevision["coverageStatus"] | null;
       status: "succeeded" | "judgement_pending" | "judgement_failed";
       revision: number;
       stockViewpoints: ReaderJudgement[];
@@ -322,7 +322,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const displayNamesBySourceId = new Map(batchRows.map((row) => [row.source_id, row.source_display_name]));
     const current = currentVersion ? judgementRevision(currentVersion, displayNamesBySourceId) : {
       revision: 0,
-      coverageStatus: "no_new_information" as const,
+      coverageStatus: null,
       stockViewpoints: [],
       marketIndustryViewpoints: [],
       uncertainties: [],
