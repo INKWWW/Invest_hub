@@ -17,6 +17,7 @@ supabase db reset
 supabase test db
 python_bin="${V2_PYTHON_BIN:-$repo_root/workers/v0/.venv/bin/python}"
 PYTHONPATH="workers/v0/src" "$python_bin" -m unittest \
+  workers/v0/tests/test_cli.py \
   workers/v0/tests/test_x_cross_blogger_judgements.py \
   workers/v0/tests/test_protocol.py \
   workers/v0/tests/test_worker_recovery.py \

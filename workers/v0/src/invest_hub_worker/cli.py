@@ -309,6 +309,7 @@ def _run_scheduled(
         scheduled_at = tick.get("scheduled_at") if isinstance(tick.get("scheduled_at"), str) else None
         tasks = tick.get("tasks")
         deferred_sources = tick.get("deferred_source_ids")
+        judgement_dispatch_failed = tick.get("judgement_dispatch_failed") is True
         print(json.dumps({
             "status": outcome.status,
             "task_id": outcome.task_id,
@@ -317,6 +318,7 @@ def _run_scheduled(
             "scheduled_at": scheduled_at,
             "scheduled_task_count": len(tasks) if isinstance(tasks, list) else None,
             "deferred_source_count": len(deferred_sources) if isinstance(deferred_sources, list) else None,
+            "judgement_dispatch_failed": judgement_dispatch_failed,
         }, sort_keys=True), flush=True)
         if once:
             return 0 if outcome.status in {"succeeded", "no_task"} else 1
