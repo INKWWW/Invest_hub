@@ -4,9 +4,9 @@
 
 ## 当前结论
 
-已批准的初始 Implementation Plan 和最终边界修复 Implementation Plan 均已完成本地确定性验收。批次会冻结截止时刻的全部 enabled/resolved X 来源；00:00 上海 cutoff 归属前一自然日；落后来源保留在快照中并形成 `partial`，不会被隐藏。租约最多三次，initial 终态失败使 batch 进入 `judgement_failed`，regeneration 终态失败则保留既有 succeeded batch 和 immutable revision。同一 batch 的 revision 1 保持不可改写，管理员再生成经既有 `claim_next_x_daily_judgement` Worker 路径领取并完成后追加 revision 2，Reader 投影 revision 2 并保留安全的历史版本。
+已批准的初始 Implementation Plan 和最终边界修复 Implementation Plan 的本地确定性 gate 已执行。数据库生命周期结论只以真实 pgTAP 为 authority：`026_v2_x_daily_judgement_completion_lease.sql`、`026_v2_x_daily_judgement_regeneration.sql`、`027_v2_x_daily_judgement_batch_identity.sql` 和 `028_v2_x_daily_judgement_state_security.sql` 直接验证 00:00 上海 cutoff 归属前一自然日、完整冻结 enabled/resolved 来源、落后来源保留为 `partial`、租约三次上限、initial/regeneration 终态失败区别，以及 immutable revision 1 → 2。仓库不再保留模拟这些数据库状态转移的 cross-blogger Python state-machine。
 
-实际 `GET /api/reader/x` handler 在 `NextResponse.json` 前建立 runtime whitelist，只复制 `XReaderDate` 的 Reader-safe 字段；route test 向 `readXDay` mock 注入 raw sentinel、provider、prompt、task、内部 ID 和本地路径，证明这些字段不会因未来 repository DTO 回归而泄露。V2 runner 直接运行实际 Node route、repository、page 和 component tests，覆盖 Reader safe output、管理员 regeneration、revision history，以及 all/source/date URL hydration 与双向恢复。Python acceptance 只验证公开的本地批次/租约/版本状态，实际 Worker contract 由完整 Worker unittest 验证；synthetic fixture 不被当作 Reader route 或 HTML 的生产证明。
+Worker 边界由实际 `test_x_cross_blogger_judgements.py`、`test_protocol.py` 和 `test_worker_recovery.py` 验证，覆盖结构化证据关系、管理员 regeneration 走标准 claim/complete、协议安全字段和失败不影响来源 coverage。实际 `GET /api/reader/x` handler 在 `NextResponse.json` 前建立 runtime whitelist，只复制 `XReaderDate` 的 Reader-safe 字段；Node route test 向 `readXDay` mock 注入 raw sentinel、provider、prompt、task、内部 ID 和本地路径，证明这些字段不会因未来 repository DTO 回归而泄露。V2 runner 直接运行实际 Node route、repository、page 和 component tests，覆盖 Reader safe output、管理员 regeneration、revision history，以及 all/source/date URL hydration 与双向恢复。
 
 这只是本地验证，不代表 remote migration、控制面部署、Worker 重启、真实 X/OpenCLI/Browser 读取、真实 Codex CLI 调用或生产页面验收已经执行。没有新增 Worker 命令，也没有自动再生成调度循环。
 
@@ -14,10 +14,11 @@
 
 | 范围 | 命令 | 结果 |
 | --- | --- | --- |
-| pgTAP | `supabase db reset`；`supabase test db` | reset 成功；31 files / 496 tests 通过。 |
+| 数据库生命周期 authority | V2 runner 内的 `supabase db reset`；`supabase test db` | reset 成功；31 files / 496 tests 通过，其中 judgement 026/027/028 直接验证真实 DB 状态转移。 |
+| judgement Worker 聚焦组 | V2 runner 显式运行 `test_x_cross_blogger_judgements.py`、`test_protocol.py`、`test_worker_recovery.py` | 42/42 通过；没有 cross-blogger synthetic state-machine 或重复 discovery。 |
 | final Node 边界 | V2 runner 中的实际 route/repository/page/component 聚焦组 | 9 files / 122 tests 通过：Worker completion API、Reader runtime whitelist、admin regeneration、revision history、all/source/date URL 恢复。 |
 | 全量 Worker | `PYTHONPATH=workers/v0/src /Users/hanyuec/Desktop/Invest_hub/workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_*.py' -v` | 使用现有 main V0 virtualenv；156/156 通过。 |
-| V2 runner | `V2_PYTHON_BIN=/Users/hanyuec/Desktop/Invest_hub/workers/v0/.venv/bin/python bash scripts/v2/run-v2-e2e.sh` | 两个本地 OpenCLI 静态/fixture 门禁通过；V2 8/8、V1.1 16/16、既有 control-plane 聚焦组 6 files / 107 tests、final Node 聚焦组 9 files / 122 tests 通过；0 skipped。 |
+| V2 runner | `V2_PYTHON_BIN=/Users/hanyuec/Desktop/Invest_hub/workers/v0/.venv/bin/python bash scripts/v2/run-v2-e2e.sh` | 两个本地 OpenCLI 静态/fixture 门禁、数据库 31 files / 496 tests、judgement Worker 42/42、既有 V2 collection/recovery fixture 3/3、V1.1 16/16、control-plane 聚焦组 6 files / 107 tests、final Node 聚焦组 9 files / 122 tests 通过；0 skipped。 |
 | 控制面测试与 lint | `npm test`；`npm run lint` | 42 files / 217 tests 通过；lint 通过。 |
 | 默认 build | `npm run build` | **未通过（exit 1）**：Next.js 16.2.10 Turbopack 报 `Symlink [project]/node_modules is invalid, it points out of the filesystem root`。本 worktree 的既有未跟踪 `node_modules` symlink 指向主工作区依赖目录；这是 plan-required 默认命令的环境失败，不能标记为 build 通过。 |
 | supplemental Webpack build | `npm run build -- --webpack` | 通过；Next.js 16.2.10 Webpack 完成 TypeScript 和 32 个页面的 production build。它只提供独立补充证据，不能替代默认 Turbopack build。 |
