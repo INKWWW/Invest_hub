@@ -205,6 +205,35 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         self.assertNotIn("raw_ref", result)
         self.assertEqual(provider.context.operation, "v2_x_cross_blogger")
 
+    def test_runtime_rejects_no_new_source_id_from_context_catalog_in_uncertainty(self) -> None:
+        class NoNewOpaqueProvider:
+            def complete(self, input_chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
+                if input_chunk:
+                    raise AssertionError("a no-new-only context must not fabricate included source input")
+                return ProviderResponse(
+                    status="success", provider="codex_cli", model_reported="gpt-fixture",
+                    prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
+                    raw_ref=None, parsed_output_ref=None, parsed_output={
+                        "schema_version": "v2-x-cross-blogger",
+                        "stock_viewpoints": [],
+                        "market_industry_viewpoints": [],
+                        "uncertainties": ["source-no-new 本窗口没有新增信息"],
+                    },
+                )
+
+        context_payload = {
+            "run_id": "judgement-run-1", "attempt": 1, "prompt_version": "v2-x-cross-blogger-1",
+            "sources": [],
+            "excluded_sources": [{
+                "source_id": "source-no-new", "display_name": "No new", "reason": "no_new_information",
+            }],
+        }
+        with self.assertRaisesRegex(runtime.RuntimeExecutionError, "evidence validation"):
+            runtime.XDailyJudgementRuntime(provider=NoNewOpaqueProvider(), prompt_template="private").execute(
+                {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z", "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "no_new_information"}},
+                context_payload,
+            )
+
     def test_runtime_rejects_unsafe_model_reported_before_completion(self) -> None:
         class UnsafeTelemetryProvider:
             def complete(self, _input_chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
