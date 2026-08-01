@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const authMocks = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 const readerMocks = vi.hoisted(() => ({ readXDay: vi.fn() }));
@@ -21,8 +21,6 @@ describe("XPage", () => {
     readerMocks.readXDay.mockResolvedValue([]);
   });
 
-  afterEach(() => vi.useRealTimers());
-
   it("keeps the source switcher as its own navigation level before the X page title", async () => {
     const page = await XPage({});
     const html = renderToStaticMarkup(page);
@@ -30,16 +28,28 @@ describe("XPage", () => {
     expect(html.indexOf("信息来源")).toBeLessThan(html.indexOf("X 信息采集"));
   });
 
-  it("restores a blogger selector and resets a stale date to the current Shanghai date", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-27T16:30:00.000Z"));
+  it("hydrates a valid shared date even when that date currently has no content", async () => {
     readerMocks.readXDay.mockResolvedValue(days);
 
     const page = await XPage({ searchParams: Promise.resolve({ source: "second", date: "2026-07-26" }) } as never);
     const html = renderToStaticMarkup(page);
 
     expect(html).toContain('<option value="second" selected="">Second Author</option>');
-    expect(html).toContain('<option value="2026-07-28" selected="">2026-07-28</option>');
-    expect(html).not.toContain('<option value="2026-07-26" selected="">');
+    expect(html).toContain('<option value="2026-07-26" selected="">2026-07-26</option>');
+    expect(html).toContain("没有找到符合当前博主和日期筛选的 X 信息。");
+  });
+
+  it("defaults to all dates and ignores a malformed date query", async () => {
+    readerMocks.readXDay.mockResolvedValue(days);
+
+    const defaultPage = await XPage({});
+    const malformedPage = await XPage({ searchParams: Promise.resolve({ date: "2026-7-28" }) } as never);
+    const defaultHtml = renderToStaticMarkup(defaultPage);
+    const malformedHtml = renderToStaticMarkup(malformedPage);
+
+    expect(defaultHtml).toContain('<option value="all" selected="">全部</option>');
+    expect(defaultHtml).not.toContain('value="2026-08-01" selected=""');
+    expect(malformedHtml).toContain('<option value="all" selected="">全部</option>');
+    expect(malformedHtml).not.toContain('value="2026-7-28"');
   });
 });

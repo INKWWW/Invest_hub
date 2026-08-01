@@ -42,6 +42,14 @@ export type XReaderBlogger = {
   segments: XReaderSegment[];
 };
 
+export type XReaderJudgementRevision = {
+  revision: number;
+  coverageStatus: "complete" | "partial" | "no_new_information";
+  stockViewpoints: ReaderJudgement[];
+  marketIndustryViewpoints: ReaderJudgement[];
+  uncertainties: string[];
+};
+
 export type XReaderDate = {
   naturalDate: string;
   judgement: {
@@ -55,6 +63,7 @@ export type XReaderDate = {
       marketIndustryViewpoints: ReaderJudgement[];
       uncertainties: string[];
       excludedSourceCount: number;
+      revisionHistory: XReaderJudgementRevision[];
     }>;
   };
   bloggers: XReaderBlogger[];
@@ -147,16 +156,49 @@ function judgementStatus(status: string): "succeeded" | "judgement_pending" | "j
   return status === "judgement_failed" ? "judgement_failed" : "judgement_pending";
 }
 
+function judgementRevision(
+  version: { revision: number; coverage_status: "complete" | "partial" | "no_new_information"; output: unknown },
+  displayNames: Map<string, string>,
+): XReaderJudgementRevision {
+  const output = object(version.output);
+  return {
+    revision: version.revision,
+    coverageStatus: version.coverage_status,
+    stockViewpoints: judgementItems(output?.stock_viewpoints, displayNames),
+    marketIndustryViewpoints: judgementItems(output?.market_industry_viewpoints, displayNames),
+    uncertainties: strings(output?.uncertainties),
+  };
+}
+
+function batchSourceReaderStatus(
+  batchSource: { settlement_status: string },
+  task: { id: string; status: string } | undefined,
+  attemptResult: unknown,
+): ReaderStatus {
+  const result = object(attemptResult);
+  const noNewMessages = batchSource.settlement_status === "no_new_information" || result?.no_new_data === true;
+  if (noNewMessages) return "no_new_messages";
+  if (batchSource.settlement_status === "excluded") {
+    if (task?.status === "failed" || task?.status === "cancelled") return "failed";
+    if (task?.status === "retryable_failed") return "retryable_failed";
+    return "partial_failure";
+  }
+  if (batchSource.settlement_status === "pending" && !task) return "processing";
+  return readerStatus(task, false, result);
+}
+
 /** Reader-safe X projection: no raw body, cookie, local reference, or prompt. */
 export async function readXDay(input: { sourceKey?: string; date?: string } = {}): Promise<XReaderDate[]> {
   const supabase = createSupabaseAdminClient();
-  let sourceQuery = supabase.from("sources").select("id,source_key,display_name").eq("source_type", "x").eq("enabled", true).order("display_name", { ascending: true });
+  let sourceQuery = supabase.from("sources").select("id,source_key,display_name").eq("source_type", "x").order("display_name", { ascending: true });
   if (input.sourceKey) sourceQuery = sourceQuery.eq("source_key", input.sourceKey);
   const { data: sources, error: sourceError } = await sourceQuery;
   if (sourceError) throw sourceError;
   if (!sources?.length) return [];
 
   const sourceIds = sources.map((source) => source.id);
+  const sourceIdSet = new Set(sourceIds);
+  const sourceById = new Map(sources.map((source) => [source.id, source]));
   let segmentQuery = supabase.from("x_daily_viewpoint_segments")
     .select("source_id,natural_date,occurred_from_at,occurred_through_at,window_viewpoints,post_analysis_refs")
     .in("source_id", sourceIds).order("natural_date", { ascending: false }).order("occurred_from_at");
@@ -172,7 +214,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     ? await supabase.from("canonical_messages").select("id,source_id,external_message_id").in("source_id", sourceIds).in("external_message_id", [...requestedPostIds])
     : { data: [], error: null };
   if (canonicalError) throw canonicalError;
-  const canonicalByExternalId = new Map((canonicalRows ?? []).map((row) => [row.external_message_id, row]));
+  const canonicalByExternalId = new Map((canonicalRows ?? []).map((row) => [`${row.source_id}:${row.external_message_id}`, row]));
   const canonicalIds = (canonicalRows ?? []).map((row) => row.id);
   const [{ data: analysisRows, error: analysisError }, { data: contextRows, error: contextError }] = canonicalIds.length
     ? await Promise.all([
@@ -185,28 +227,110 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const analysisByCanonicalId = new Map((analysisRows ?? []).map((row) => [row.canonical_message_id, row]));
   const contextByCanonicalId = new Map((contextRows ?? []).map((row) => [row.canonical_message_id, row]));
 
-  const { data: taskRows, error: taskError } = await supabase.from("sync_tasks").select("id,source_id,status,updated_at").eq("task_type", "x_sync").in("source_id", sourceIds).order("updated_at", { ascending: false });
+  let batchQuery = supabase.from("x_collection_batches").select("id,natural_date,cutoff_at,status").order("natural_date", { ascending: false }).order("cutoff_at", { ascending: false });
+  if (input.date) batchQuery = batchQuery.eq("natural_date", input.date);
+  const { data: batches, error: batchError } = await batchQuery;
+  if (batchError) throw batchError;
+  const orderedBatches = [...(batches ?? [])].sort((left, right) => right.cutoff_at.localeCompare(left.cutoff_at));
+  const batchIds = orderedBatches.map((batch) => batch.id);
+  const [{ data: versions, error: versionError }, { data: allBatchSources, error: batchSourcesError }] = batchIds.length
+    ? await Promise.all([
+      supabase.from("x_daily_judgement_versions").select("batch_id,revision,coverage_status,output").in("batch_id", batchIds).order("revision", { ascending: false }),
+      supabase.from("x_collection_batch_sources").select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status").in("batch_id", batchIds),
+    ])
+    : [{ data: [], error: null }, { data: [], error: null }];
+  if (versionError) throw versionError;
+  if (batchSourcesError) throw batchSourcesError;
+
+  const batchSources = (allBatchSources ?? []).filter((row) => sourceIdSet.has(row.source_id));
+  const batchSourcesByBatch = new Map<string, typeof batchSources>();
+  for (const row of batchSources) batchSourcesByBatch.set(row.batch_id, [...(batchSourcesByBatch.get(row.batch_id) ?? []), row]);
+  const taskIds = [...new Set(batchSources.flatMap((row) => typeof row.x_sync_task_id === "string" ? [row.x_sync_task_id] : []))];
+  const [{ data: taskRows, error: taskError }, { data: attemptRows, error: attemptError }] = taskIds.length
+    ? await Promise.all([
+      supabase.from("sync_tasks").select("id,status").in("id", taskIds),
+      supabase.from("task_attempts").select("task_id,result,updated_at").in("task_id", taskIds).order("updated_at", { ascending: false }),
+    ])
+    : [{ data: [], error: null }, { data: [], error: null }];
   if (taskError) throw taskError;
-  const latestTaskBySource = new Map<string, { id: string; status: string }>();
-  for (const task of taskRows ?? []) if (!latestTaskBySource.has(task.source_id)) latestTaskBySource.set(task.source_id, task);
-  const sourceById = new Map(sources.map((source) => [source.id, source]));
-  const bloggersByDate = new Map<string, XReaderBlogger[]>();
-  const groups = new Map<string, typeof segments>();
-  for (const segment of segments ?? []) {
-    const key = `${segment.source_id}:${segment.natural_date}`;
-    groups.set(key, [...(groups.get(key) ?? []), segment]);
+  if (attemptError) throw attemptError;
+  const taskIdSet = new Set(taskIds);
+  const taskById = new Map((taskRows ?? []).filter((task) => taskIdSet.has(task.id)).map((task) => [task.id, task]));
+  const attemptResultByTaskId = new Map<string, unknown>();
+  for (const attempt of attemptRows ?? []) {
+    if (taskIdSet.has(attempt.task_id) && !attemptResultByTaskId.has(attempt.task_id)) attemptResultByTaskId.set(attempt.task_id, attempt.result);
   }
-  for (const [, daySegments] of groups) {
-    const source = sourceById.get(daySegments[0]!.source_id)!;
-    const blogger = {
-      source: { sourceKey: source.source_key, displayName: source.display_name },
-      status: readerStatus(latestTaskBySource.get(source.id), false, null),
-      segments: daySegments.sort((left, right) => right.occurred_through_at.localeCompare(left.occurred_through_at)).map((segment) => {
+
+  const segmentGroups = new Map<string, NonNullable<typeof segments>>();
+  for (const segment of segments ?? []) {
+    if (!sourceIdSet.has(segment.source_id)) continue;
+    const key = `${segment.source_id}:${segment.natural_date}`;
+    segmentGroups.set(key, [...(segmentGroups.get(key) ?? []), segment]);
+  }
+
+  const versionsByBatch = new Map<string, NonNullable<typeof versions>>();
+  for (const version of versions ?? []) {
+    versionsByBatch.set(version.batch_id, [...(versionsByBatch.get(version.batch_id) ?? []), version]);
+  }
+  const batchesByDate = new Map<string, XReaderDate["judgement"]["batches"]>();
+  for (const batch of orderedBatches) {
+    const batchVersions = [...(versionsByBatch.get(batch.id) ?? [])].sort((left, right) => right.revision - left.revision);
+    const currentVersion = batchVersions[0];
+    const batchRows = batchSourcesByBatch.get(batch.id) ?? [];
+    const displayNamesBySourceId = new Map(batchRows.map((row) => [row.source_id, row.source_display_name]));
+    const current = currentVersion ? judgementRevision(currentVersion, displayNamesBySourceId) : {
+      revision: 0,
+      coverageStatus: "no_new_information" as const,
+      stockViewpoints: [],
+      marketIndustryViewpoints: [],
+      uncertainties: [],
+    };
+    const judgement: XReaderDate["judgement"]["batches"][number] = {
+      cutoffAt: batch.cutoff_at,
+      status: judgementStatus(batch.status),
+      excludedSourceCount: batchRows.filter((row) => row.settlement_status === "excluded").length,
+      ...current,
+      revisionHistory: batchVersions.slice(1).map((version) => judgementRevision(version, displayNamesBySourceId)),
+    };
+    batchesByDate.set(batch.natural_date, [...(batchesByDate.get(batch.natural_date) ?? []), judgement]);
+  }
+
+  const latestBatchSourceByDateAndSource = new Map<string, typeof batchSources[number]>();
+  for (const batch of orderedBatches) {
+    for (const batchSource of batchSourcesByBatch.get(batch.id) ?? []) {
+      const key = `${batch.natural_date}:${batchSource.source_id}`;
+      if (!latestBatchSourceByDateAndSource.has(key)) latestBatchSourceByDateAndSource.set(key, batchSource);
+    }
+  }
+  const sourceIdsByDate = new Map<string, Set<string>>();
+  for (const key of segmentGroups.keys()) {
+    const separator = key.indexOf(":");
+    const sourceId = key.slice(0, separator);
+    const naturalDate = key.slice(separator + 1);
+    sourceIdsByDate.set(naturalDate, new Set([...(sourceIdsByDate.get(naturalDate) ?? []), sourceId]));
+  }
+  for (const key of latestBatchSourceByDateAndSource.keys()) {
+    const separator = key.indexOf(":");
+    const naturalDate = key.slice(0, separator);
+    const sourceId = key.slice(separator + 1);
+    sourceIdsByDate.set(naturalDate, new Set([...(sourceIdsByDate.get(naturalDate) ?? []), sourceId]));
+  }
+
+  const bloggersByDate = new Map<string, XReaderBlogger[]>();
+  for (const [naturalDate, dateSourceIds] of sourceIdsByDate) {
+    const bloggers = [...dateSourceIds].flatMap((sourceId) => {
+      const source = sourceById.get(sourceId);
+      if (!source) return [];
+      const batchSource = latestBatchSourceByDateAndSource.get(`${naturalDate}:${sourceId}`);
+      const taskId = typeof batchSource?.x_sync_task_id === "string" ? batchSource.x_sync_task_id : undefined;
+      const daySegments = [...(segmentGroups.get(`${sourceId}:${naturalDate}`) ?? [])]
+        .sort((left, right) => right.occurred_through_at.localeCompare(left.occurred_through_at));
+      const projectedSegments = daySegments.map((segment) => {
         const refs = Array.isArray(segment.post_analysis_refs) ? segment.post_analysis_refs : [];
         const analyses = refs.flatMap((ref) => {
           const postId = ref && typeof ref === "object" ? (ref as Record<string, unknown>).post_id : undefined;
           if (typeof postId !== "string") return [];
-          const canonical = canonicalByExternalId.get(postId);
+          const canonical = canonicalByExternalId.get(`${sourceId}:${postId}`);
           if (!canonical) return [];
           const analysis = analysisByCanonicalId.get(canonical.id);
           const context = contextByCanonicalId.get(canonical.id);
@@ -217,60 +341,27 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
         });
         return { occurredFromAt: segment.occurred_from_at, occurredThroughAt: segment.occurred_through_at,
           viewpoints: strings(segment.window_viewpoints), uncertainties: [], analyses };
-      }),
-    };
-    const naturalDate = daySegments[0]!.natural_date;
-    bloggersByDate.set(naturalDate, [...(bloggersByDate.get(naturalDate) ?? []), blogger]);
+      });
+      return [{
+        source: { sourceKey: source.source_key, displayName: batchSource?.source_display_name ?? source.display_name },
+        status: batchSource
+          ? batchSourceReaderStatus(batchSource, taskId ? taskById.get(taskId) : undefined, taskId ? attemptResultByTaskId.get(taskId) : undefined)
+          : "succeeded" as const,
+        segments: projectedSegments,
+      }];
+    }).sort((left, right) => left.source.displayName.localeCompare(right.source.displayName));
+    bloggersByDate.set(naturalDate, bloggers);
   }
 
-  if (input.sourceKey) return [...bloggersByDate.entries()].map(([naturalDate, bloggers]) => ({
-    naturalDate,
-    judgement: { visible: false, batches: [] },
-    bloggers: bloggers.sort((left, right) => left.source.displayName.localeCompare(right.source.displayName)),
-  })).sort((left, right) => right.naturalDate.localeCompare(left.naturalDate));
-
-  let batchQuery = supabase.from("x_collection_batches").select("id,natural_date,cutoff_at,status").order("natural_date", { ascending: false }).order("cutoff_at", { ascending: false });
-  if (input.date) batchQuery = batchQuery.eq("natural_date", input.date);
-  const { data: batches, error: batchError } = await batchQuery;
-  if (batchError) throw batchError;
-  const batchIds = (batches ?? []).map((batch) => batch.id);
-  const [{ data: versions, error: versionError }, { data: batchSources, error: batchSourcesError }] = batchIds.length
-    ? await Promise.all([
-      supabase.from("x_daily_judgement_versions").select("batch_id,revision,coverage_status,output").in("batch_id", batchIds).order("revision", { ascending: false }),
-      supabase.from("x_collection_batch_sources").select("batch_id,source_id,source_display_name,settlement_status").in("batch_id", batchIds),
-    ])
-    : [{ data: [], error: null }, { data: [], error: null }];
-  if (versionError) throw versionError;
-  if (batchSourcesError) throw batchSourcesError;
-  const latestVersionByBatch = new Map<string, typeof versions extends Array<infer Row> ? Row : never>();
-  for (const version of versions ?? []) {
-    const current = latestVersionByBatch.get(version.batch_id);
-    if (!current || version.revision > current.revision) latestVersionByBatch.set(version.batch_id, version);
-  }
-  const batchSourcesByBatch = new Map<string, typeof batchSources>();
-  for (const row of batchSources ?? []) batchSourcesByBatch.set(row.batch_id, [...(batchSourcesByBatch.get(row.batch_id) ?? []), row]);
-  const batchesByDate = new Map<string, XReaderDate["judgement"]["batches"]>();
-  for (const batch of batches ?? []) {
-    const version = latestVersionByBatch.get(batch.id);
-    const output = object(version?.output);
-    const batchRows = batchSourcesByBatch.get(batch.id) ?? [];
-    const displayNamesBySourceId = new Map(batchRows.map((row) => [row.source_id, row.source_display_name]));
-    const judgement = {
-      cutoffAt: batch.cutoff_at,
-      coverageStatus: version?.coverage_status ?? "no_new_information" as const,
-      status: judgementStatus(batch.status),
-      revision: version?.revision ?? 0,
-      stockViewpoints: judgementItems(output?.stock_viewpoints, displayNamesBySourceId),
-      marketIndustryViewpoints: judgementItems(output?.market_industry_viewpoints, displayNamesBySourceId),
-      uncertainties: strings(output?.uncertainties),
-      excludedSourceCount: batchRows.filter((row) => row.settlement_status === "excluded").length,
-    };
-    batchesByDate.set(batch.natural_date, [...(batchesByDate.get(batch.natural_date) ?? []), judgement]);
-  }
-  const dates = new Set([...bloggersByDate.keys(), ...batchesByDate.keys()]);
+  const dates = new Set([
+    ...bloggersByDate.keys(),
+    ...(input.sourceKey ? [] : batchesByDate.keys()),
+  ]);
   return [...dates].map((naturalDate) => ({
     naturalDate,
-    judgement: { visible: true, batches: (batchesByDate.get(naturalDate) ?? []).sort((left, right) => right.cutoffAt.localeCompare(left.cutoffAt)) },
+    judgement: input.sourceKey
+      ? { visible: false, batches: [] }
+      : { visible: true, batches: (batchesByDate.get(naturalDate) ?? []).sort((left, right) => right.cutoffAt.localeCompare(left.cutoffAt)) },
     bloggers: (bloggersByDate.get(naturalDate) ?? []).sort((left, right) => left.source.displayName.localeCompare(right.source.displayName)),
   })).sort((left, right) => right.naturalDate.localeCompare(left.naturalDate));
 }

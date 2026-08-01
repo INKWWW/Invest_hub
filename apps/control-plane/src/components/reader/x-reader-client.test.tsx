@@ -32,15 +32,18 @@ function elements(node: unknown, type: string): Element[] {
 const days = [{
   naturalDate: "2099-01-02", judgement: { visible: true, batches: [] },
   bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", segments: [] }],
+}, {
+  naturalDate: "2099-01-01", judgement: { visible: true, batches: [] },
+  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", segments: [] }],
 }];
 
 describe("XReader client selectors", () => {
   const replaceState = vi.fn();
 
-  function renderClient() {
+  function renderClient(initialSourceKey?: string, initialNaturalDate?: string) {
     hooks.cursor = 0;
     hooks.effects = [];
-    const tree = XReader({ days });
+    const tree = XReader({ days, initialSourceKey, initialNaturalDate });
     hooks.effects.forEach((effect) => effect());
     return tree;
   }
@@ -54,18 +57,29 @@ describe("XReader client selectors", () => {
     });
   });
 
-  it("applies source and date onChange values while preserving the existing source URL semantics", () => {
-    let tree = renderClient();
+  it("retains date when source changes and retains source when date changes", () => {
+    let tree = renderClient(undefined, "2099-01-02");
     const [source, date] = elements(tree, "select");
     source?.props?.onChange?.({ target: { value: "second" } });
 
-    tree = renderClient();
+    tree = renderClient(undefined, "2099-01-02");
     expect(elements(tree, "select")[0]?.props?.value).toBe("second");
-    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second");
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second&date=2099-01-02");
 
-    elements(tree, "select")[1]?.props?.onChange?.({ target: { value: "2099-01-02" } });
-    tree = renderClient();
-    expect(elements(tree, "select")[1]?.props?.value).toBe("2099-01-02");
-    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second");
+    elements(tree, "select")[1]?.props?.onChange?.({ target: { value: "2099-01-01" } });
+    tree = renderClient(undefined, "2099-01-02");
+    expect(elements(tree, "select")[1]?.props?.value).toBe("2099-01-01");
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second&date=2099-01-01");
+  });
+
+  it("uses one normalized URL update and removes only selectors set to all", () => {
+    renderClient("second", "2099-01-02");
+
+    expect(replaceState).toHaveBeenCalledTimes(1);
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second&date=2099-01-02");
+
+    hooks.state = ["all", "all"];
+    renderClient("second", "2099-01-02");
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x");
   });
 });
