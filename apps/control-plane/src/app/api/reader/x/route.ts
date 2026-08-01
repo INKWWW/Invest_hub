@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "../../../../lib/auth/current-user";
 import { readXDay, type XReaderDate } from "../../../../lib/db/repositories/reader";
+import { isValidReaderNaturalDate } from "../../../../lib/reader-date";
 
 function readerFilter(value: string | null) {
   return value && value !== "all" ? value : undefined;
@@ -76,7 +77,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const sourceKey = readerFilter(searchParams.get("source"));
   const date = readerFilter(searchParams.get("date"));
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: "invalid_reader_query" }, { status: 422 });
+  if (date && !isValidReaderNaturalDate(date)) return NextResponse.json({ error: "invalid_reader_query" }, { status: 422 });
   try {
     return NextResponse.json({ status: "ok", days: readerSafeXDays(await readXDay({ sourceKey, date })) });
   } catch {

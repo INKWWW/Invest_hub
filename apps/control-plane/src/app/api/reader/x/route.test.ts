@@ -145,8 +145,8 @@ describe("GET /api/reader/x", () => {
     expect(body.days[0].judgement.batches[0].revisionHistory).toEqual([]);
   });
 
-  it("rejects an invalid date filter before reading X data", async () => {
-    const response = await GET(new Request("http://localhost/api/reader/x?date=not-a-date"));
+  it.each(["not-a-date", "2099-02-29", "2099-04-31", "0000-01-01"])("rejects invalid calendar date %s before reading X data", async (date) => {
+    const response = await GET(new Request(`http://localhost/api/reader/x?date=${date}`));
 
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({ error: "invalid_reader_query" });

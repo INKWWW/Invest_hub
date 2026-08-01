@@ -1,6 +1,14 @@
 import { presentSummary, type SummaryPresentation } from "../../../components/reader/reader-presentation";
 import { createSupabaseAdminClient } from "../supabase-server";
 
+const TASK_LOOKUP_BATCH_SIZE = 100;
+
+function chunkValues<Value>(values: Value[], size: number): Value[][] {
+  const chunks: Value[][] = [];
+  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
+  return chunks;
+}
+
 export type ReaderStatus = "processing" | "partial_failure" | "retryable_failed" | "failed" | "no_new_messages" | "succeeded";
 
 export type ReaderDay = {
@@ -246,18 +254,21 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const batchSourcesByBatch = new Map<string, typeof batchSources>();
   for (const row of batchSources) batchSourcesByBatch.set(row.batch_id, [...(batchSourcesByBatch.get(row.batch_id) ?? []), row]);
   const taskIds = [...new Set(batchSources.flatMap((row) => typeof row.x_sync_task_id === "string" ? [row.x_sync_task_id] : []))];
-  const [{ data: taskRows, error: taskError }, { data: attemptRows, error: attemptError }] = taskIds.length
-    ? await Promise.all([
-      supabase.from("sync_tasks").select("id,status").in("id", taskIds),
-      supabase.from("task_attempts").select("task_id,result,updated_at").in("task_id", taskIds).order("updated_at", { ascending: false }),
-    ])
-    : [{ data: [], error: null }, { data: [], error: null }];
+  const taskIdChunks = chunkValues(taskIds, TASK_LOOKUP_BATCH_SIZE);
+  const [taskResults, attemptResults] = await Promise.all([
+    Promise.all(taskIdChunks.map((ids) => supabase.from("sync_tasks").select("id,status").in("id", ids))),
+    Promise.all(taskIdChunks.map((ids) => supabase.from("task_attempts").select("task_id,result,updated_at").in("task_id", ids).order("updated_at", { ascending: false }))),
+  ]);
+  const taskError = taskResults.find((result) => result.error)?.error;
+  const attemptError = attemptResults.find((result) => result.error)?.error;
   if (taskError) throw taskError;
   if (attemptError) throw attemptError;
+  const taskRows = taskResults.flatMap((result) => result.data ?? []);
+  const attemptRows = attemptResults.flatMap((result) => result.data ?? []);
   const taskIdSet = new Set(taskIds);
-  const taskById = new Map((taskRows ?? []).filter((task) => taskIdSet.has(task.id)).map((task) => [task.id, task]));
+  const taskById = new Map(taskRows.filter((task) => taskIdSet.has(task.id)).map((task) => [task.id, task]));
   const attemptResultByTaskId = new Map<string, unknown>();
-  for (const attempt of attemptRows ?? []) {
+  for (const attempt of attemptRows) {
     if (taskIdSet.has(attempt.task_id) && !attemptResultByTaskId.has(attempt.task_id)) attemptResultByTaskId.set(attempt.task_id, attempt.result);
   }
 

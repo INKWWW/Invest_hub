@@ -10,12 +10,18 @@ const databaseMocks = vi.hoisted(() => ({
 vi.mock("../supabase-server", () => ({
   createSupabaseAdminClient: () => ({
     from(table: string) {
+      const queryIns: Array<{ field: string; values: unknown[] }> = [];
       const query = {
         select: (columns: string) => { databaseMocks.selects.push({ table, columns }); return query; },
         eq: (field: string, value: unknown) => { databaseMocks.filters.push({ table, field, value }); return query; },
-        in: (field: string, values: unknown[]) => { databaseMocks.ins.push({ table, field, values }); return query; },
+        in: (field: string, values: unknown[]) => { databaseMocks.ins.push({ table, field, values }); queryIns.push({ field, values }); return query; },
         order: () => query,
-        then: (resolve: (value: { data: unknown[]; error: null }) => unknown) => resolve({ data: databaseMocks.rows.get(table) ?? [], error: null }),
+        then: (resolve: (value: { data: unknown[]; error: null }) => unknown) => {
+          const rows = (databaseMocks.rows.get(table) ?? []).filter((row) => queryIns.every(({ field, values }) => (
+            row && typeof row === "object" && values.includes((row as Record<string, unknown>)[field])
+          )));
+          return resolve({ data: rows, error: null });
+        },
       };
       return query;
     },
@@ -111,6 +117,47 @@ describe("X reader date projection", () => {
     expect(databaseMocks.selects).toContainEqual({ table: "sync_tasks", columns: "id,status" });
     expect(databaseMocks.selects).toContainEqual({ table: "task_attempts", columns: "task_id,result,updated_at" });
     expect(databaseMocks.ins).toContainEqual(expect.objectContaining({ table: "sync_tasks", field: "id", values: expect.arrayContaining(["task-a-20", "task-b-20"]) }));
+  });
+
+  it("bounds every snapshot task lookup and merges statuses across hundreds of task IDs", async () => {
+    const count = 235;
+    databaseMocks.rows.set("sources", Array.from({ length: count }, (_, index) => ({
+      id: `bulk-source-${index}`, source_key: `bulk-${index}`, display_name: `Bulk ${index}`,
+    })));
+    databaseMocks.rows.set("x_daily_viewpoint_segments", []);
+    databaseMocks.rows.set("x_collection_batches", [{
+      id: "bulk-batch", natural_date: "2099-01-05", cutoff_at: "2099-01-05T12:00:00.000Z", status: "judgement_pending",
+    }]);
+    databaseMocks.rows.set("x_daily_judgement_versions", []);
+    databaseMocks.rows.set("x_collection_batch_sources", Array.from({ length: count }, (_, index) => ({
+      batch_id: "bulk-batch", source_id: `bulk-source-${index}`, source_display_name: `Bulk ${index}`,
+      x_sync_task_id: `bulk-task-${index}`, settlement_status: "pending",
+    })));
+    databaseMocks.rows.set("sync_tasks", Array.from({ length: count }, (_, index) => ({
+      id: `bulk-task-${index}`,
+      status: index === 0 || index === 234 ? "succeeded" : index === 101 ? "failed" : "queued",
+    })));
+    databaseMocks.rows.set("task_attempts", [{
+      task_id: "bulk-task-0", result: { no_new_data: true }, updated_at: "2099-01-05T12:01:00.000Z",
+    }]);
+
+    const result = await readXDay();
+    const bloggers = result[0]?.bloggers ?? [];
+    const statusFor = (sourceKey: string) => bloggers.find((blogger) => blogger.source.sourceKey === sourceKey)?.status;
+    const taskLookups = databaseMocks.ins.filter((lookup) => lookup.table === "sync_tasks" && lookup.field === "id");
+    const attemptLookups = databaseMocks.ins.filter((lookup) => lookup.table === "task_attempts" && lookup.field === "task_id");
+
+    expect(bloggers).toHaveLength(235);
+    expect(statusFor("bulk-0")).toBe("no_new_messages");
+    expect(statusFor("bulk-101")).toBe("failed");
+    expect(statusFor("bulk-234")).toBe("succeeded");
+    for (const lookups of [taskLookups, attemptLookups]) {
+      expect(lookups.length).toBeGreaterThan(1);
+      expect(lookups.every((lookup) => lookup.values.length <= 100)).toBe(true);
+      const taskIds = lookups.flatMap((lookup) => lookup.values);
+      expect(taskIds).toHaveLength(count);
+      expect(new Set(taskIds).size).toBe(count);
+    }
   });
 
   it("keeps the requested source's date placeholders while hiding cross-blogger judgement details", async () => {
