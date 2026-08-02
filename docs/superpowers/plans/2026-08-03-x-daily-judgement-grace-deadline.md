@@ -228,7 +228,7 @@ Deploy the exact `main` commit to the already linked Control Plane Vercel projec
 **Interfaces:**
 - Produces: `includedSourceCount` 与 `noNewSourceCount` 两个 Reader-safe number，和既有 `excludedSourceCount` 一起只描述 batch 的 settlement 覆盖。
 
-- [ ] **Step 1: Write and run the failing Reader component assertion**
+- [x] **Step 1: Write and run the failing Reader component assertion**
 
 Add a successful judgement fixture with `includedSourceCount: 4`、`noNewSourceCount: 2`、`excludedSourceCount: 1`. Assert the rendered HTML contains “输入覆盖：4 位博主观点已纳入，2 位无新增信息，1 位未纳入。” and “下方主题仅列出直接支持或反对该主题的博主。” Then run:
 
@@ -239,11 +239,11 @@ npm test -- src/components/reader/x-reader.test.tsx
 
 Expected: FAIL because the count fields and copy do not exist.
 
-- [ ] **Step 2: Implement the smallest safe projection and rendering change**
+- [x] **Step 2: Implement the smallest safe projection and rendering change**
 
 Count `included` and `no_new_information` rows in the existing private `x_collection_batch_sources` result. Add those numbers only to `XReaderDate["judgement"]["batches"]`; render the coverage sentence before the judgement revision only for `succeeded` batches. Do not add source identities, task IDs, exclusion codes, raw content, Provider or Prompt to the Reader DTO.
 
-- [ ] **Step 3: Verify, record and publish**
+- [x] **Step 3: Verify, record and publish**
 
 Run the focused Reader tests, full control-plane test suite, lint, redaction check and `git diff --check`. Commit, push `main`, deploy the Control Plane, and verify the authenticated production `/x` page shows the coverage copy without internal fields.
 

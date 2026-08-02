@@ -28,6 +28,8 @@ control-plane 目录被精确链接到 Vercel 项目 `invest-hub-v1-control-plan
 
 控制面 production deployment `dpl_6FSB8fZgQok6JpZUHweZQvjYKhwB` 为 Ready，稳定入口仍为 `https://invest-hub-v0-control-plane.vercel.app/x`；匿名请求继续重定向登录页，`com.investhub.x-worker` check-only 为 loaded。已认证生产 Reader 的只读验收确认日期、当日判断总结、单个博主观点顺序保持正确；历史超时 batch 显示“采集超时，未形成判断”，展开后显示未纳入来源与结算截止前未完成采集的说明，页面不存在内部排除字段。当天存在较晚窗口的博主卡按最新窗口投影，未出现可单独展示的超时卡；该卡的专用提示已由组件测试覆盖。没有手工创建采集任务、调用 Provider 或回写历史数据。
 
+同日后续最小 Reader 发布 `dpl_4tk1xe5KcHBNeF2Dud9D4HCAD7Cv` 在每个已完成的 judgement batch 顶部增加输入覆盖说明：已纳入观点数、无新增数、未纳入数，并明确下方主题只列出直接支持或反对该主题的博主。已认证 production `/x` 在“全部日期”视图中确认该说明存在、判断区正常加载、内部排除字段未显示；未创建任务、调用 Provider 或改变任何历史 judgement。
+
 ## 本地验证结果
 
 | 范围 | 命令 | 结果 |
