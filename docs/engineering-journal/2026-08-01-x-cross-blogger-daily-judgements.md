@@ -12,6 +12,8 @@ Worker 边界由实际 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`t
 
 这只是本地验证，不代表 remote migration、控制面部署、Worker 重启、真实 X/OpenCLI/Browser 读取、真实 Codex CLI 调用或生产页面验收已经执行。没有新增 Worker 命令，也没有自动再生成调度循环。
 
+2026-08-02 的 production preflight 发现远端 history 已记录 `20260731084640`，但仓库缺少同版本文件，故 `supabase db push --linked --dry-run` 正确拒绝继续。该版本在 2026-07-31 工程记录中已被确认是终态失败来源隔离修复，且已只读确认远端 `public.enqueue_due_x_tasks` 保留 `deferred_source_ids`。本次只新增同版本的本地历史 marker：它只执行 `select 1`，不重放 DDL，空库再由 `20260731100000_x_defer_terminal_failed_sources.sql` 提供最终 `create or replace function` 定义。对账 pgTAP 3/3 与该函数的既有终态失败隔离回归 6/6 已在本地通过；禁止 `migration repair`、`db pull`、Dashboard SQL 或推测性历史 SQL。此时 marker 尚未进入远端，因此尚未重试 remote dry-run，也没有执行新的 remote migration、Vercel deploy、Worker restart、真实 X/Codex 调用或 authenticated `/x` 验收。
+
 ## 本地验证结果
 
 | 范围 | 命令 | 结果 |
@@ -31,7 +33,7 @@ Worker 边界由实际 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`t
 | 项目 | 执行前必须确认/操作 | 当前状态 |
 | --- | --- | --- |
 | 目标 Supabase project/ref | 通过生产 control-plane 的 server-only binding 做只读、脱敏核对；不得从历史 Vercel 项目名或域名推断。 | 未确认，未读取 Sensitive value。 |
-| additive migrations | 按顺序核对并仅在明确授权后应用 `20260801090000_x_cross_blogger_daily_judgements.sql`、`20260801100000_x_daily_judgement_hardening.sql`、`20260801120000_x_daily_judgement_worker_protocol.sql`、`20260801130000_x_daily_judgement_completion_lease_and_metadata.sql`、`20260801140000_x_daily_judgement_regeneration.sql`、`20260801150000_x_daily_judgement_batch_identity.sql`、`20260801160000_x_daily_judgement_state_security.sql`、`20260801170000_x_daily_judgement_final_authority.sql`、`20260801180000_x_daily_judgement_frozen_claim_authority.sql`。 | 未应用。 |
+| additive migrations | 先确认远端已匹配本地历史 marker `20260731084640_x_defer_terminal_failed_sources_historical_marker.sql`，再按顺序仅应用 `20260731100000_x_defer_terminal_failed_sources.sql`、`20260801090000_x_cross_blogger_daily_judgements.sql`、`20260801100000_x_daily_judgement_hardening.sql`、`20260801120000_x_daily_judgement_worker_protocol.sql`、`20260801130000_x_daily_judgement_completion_lease_and_metadata.sql`、`20260801140000_x_daily_judgement_regeneration.sql`、`20260801150000_x_daily_judgement_batch_identity.sql`、`20260801160000_x_daily_judgement_state_security.sql`、`20260801170000_x_daily_judgement_final_authority.sql`、`20260801180000_x_daily_judgement_frozen_claim_authority.sql`。 | remote marker 已存在；其余十条未应用。 |
 | rollback switch | 停止新的 judgement claiming，并回退 Reader projection 到前一已验证 control-plane release；保留 immutable batches/runs/versions，绝不删除或改写既有 X task、coverage、segment、analysis 或 checkpoint。 | 仅有步骤，未执行。 |
 | X Worker | 服务名 `com.investhub.x-worker`；只在单独授权后重启或使其领取新 judgement。 | 未重启。 |
 | revision 1 → 2 | 在生产中先确认已成功且有 revision 1 的 batch；管理员显式 regenerate 后，由正常 Worker claim 领取，并验证 revision 1 保留、revision 2 成为 Reader 投影。 | 未执行。 |

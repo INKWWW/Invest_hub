@@ -39,9 +39,10 @@ select ok(exists (
 select ok(exists (
   select 1 from supabase_migrations.schema_migrations where version = '20260731100000'
 ), 'the canonical scheduler migration follows the marker');
-select like(
-  pg_get_functiondef('public.enqueue_due_x_tasks(uuid,timestamp with time zone)'::regprocedure),
-  '%deferred_source_ids%',
+select ok(
+  position(
+    'deferred_source_ids' in pg_get_functiondef('public.enqueue_due_x_tasks(uuid,timestamp with time zone)'::regprocedure)
+  ) > 0,
   'the canonical scheduler definition preserves terminal-failure isolation output'
 );
 select * from finish();
@@ -50,7 +51,7 @@ rollback;
 
 - [ ] **Step 2: 在 marker 不存在时执行该测试，确认它因缺少 `20260731084640` 而失败。**
 
-Run: `supabase db reset --yes && supabase test db --file supabase/tests/030_v2_x_migration_history_reconciliation.sql`
+Run: `supabase db reset --yes && supabase test db supabase/tests/030_v2_x_migration_history_reconciliation.sql`
 
 Expected: the first assertion fails because the local migration history has no `20260731084640` version.
 
@@ -65,7 +66,7 @@ select 1;
 
 - [ ] **Step 4: 重置本地数据库并运行对账与既有隔离测试。**
 
-Run: `supabase db reset --yes && supabase test db --file supabase/tests/030_v2_x_migration_history_reconciliation.sql && supabase test db --file supabase/tests/023_v2_x_terminal_failure_scheduler.sql && supabase migration list --local`
+Run: `supabase db reset --yes && supabase test db supabase/tests/030_v2_x_migration_history_reconciliation.sql && supabase test db supabase/tests/023_v2_x_terminal_failure_scheduler.sql && supabase migration list --local`
 
 Expected: two pgTAP files pass; local history lists both `20260731084640` and `20260731100000`.
 
@@ -90,7 +91,7 @@ git commit -m "fix(v2): reconcile X migration history"
 
 - [ ] **Step 2: 运行最小本地 gate。**
 
-Run: `supabase db reset --yes && supabase test db --file supabase/tests/030_v2_x_migration_history_reconciliation.sql && supabase test db --file supabase/tests/023_v2_x_terminal_failure_scheduler.sql && bash scripts/v0/redact-check.sh && git diff --check`
+Run: `supabase db reset --yes && supabase test db supabase/tests/030_v2_x_migration_history_reconciliation.sql && supabase test db supabase/tests/023_v2_x_terminal_failure_scheduler.sql && bash scripts/v0/redact-check.sh && git diff --check`
 
 Expected: all commands exit 0; no secret, raw content or ignored `node_modules` path is staged.
 

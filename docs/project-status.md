@@ -1,12 +1,14 @@
 # Project Status
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
 
 ## Current phase
 
 **V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、真实持久化范围闭环、X 专用本机常驻 Worker 的实际自动窗口完成，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：自动增量链路已验证，但真实关系类别与可恢复失败恢复仍未完整覆盖，因此不得标记为“V2 X 正式可用”或无人值守 SLA。**
 
 **X 终态失败来源调度隔离修复（2026-07-31）：** 用户已明确批准对应 Spec/Plan、实现与线上 migration，远端版本 `20260731084640` 已部署并验收。修复目标是防止不可重试的 `opencli_contract` 终态失败窗口被调度器每个 tick 重复创建；失败来源保持审计状态和未推进 coverage，其他来源继续独立调度。部署后 Worker 连续两个 tick 均隔离 1 个失败来源并调度其余 5 个来源；该修复不改变来源标识、登录态、采集合同或历史数据，V2 仍保持受控生产试运行，不宣称无人值守 SLA。
+
+**X migration history 本地对账（2026-08-02）：** 远端 history 中已有的 `20260731084640` 是上述终态失败来源隔离修复，但该版本此前缺少本地文件，因而安全阻止了 judgement migrations 的 `db push`。已新增无副作用的本地历史 marker；它只执行 `select 1`，不重放或改变 schema，空库随后由已有的 `20260731100000` 定义最终调度函数。新的对账 pgTAP 3/3 与终态失败隔离回归 6/6 已通过，本地 migration history 同时包含两个版本。禁止使用 `migration repair`、`db pull` 或推测性 SQL；尚未执行新的 remote migration、Vercel deploy、Worker restart、真实 X/Codex 调用或 authenticated `/x` 验收，必须先在同一待发布 commit 上重新执行 remote dry-run。
 
 **X 跨博主当日判断最终边界本地验收（2026-08-01）：** [初始](superpowers/plans/2026-07-31-x-cross-blogger-daily-judgement-summary.md)、[再生成](superpowers/plans/2026-08-01-x-daily-judgement-regeneration.md)、[最终边界修复](superpowers/plans/2026-08-01-x-daily-judgement-final-remediation.md)和[最终审查修复](superpowers/plans/2026-08-01-x-daily-judgement-final-review-remediation.md)四个 Implementation Plan 均已批准，本地确定性 gate 已全部执行。Reader 仅在存在持久化 judgement version 时公开 `coverageStatus`；collecting/pending/failed 且无 version 时为 `null`，不会伪装成 `no_new_information`。新批次 ensure 仍要求当前 enabled/resolved 来源；已冻结批次的 claim 则按 batch snapshot 中的 X 来源授权及 Worker online、fresh heartbeat、`x_sync` capability 判断，来源或 profile 归档不会使既有队列失联。DB 生命周期只由真实 judgement pgTAP 026/027/028/029 验证，包括 00:00 前一上海自然日、完整来源快照、落后来源 partial、三次租约上限、initial/regeneration 终态区别和 immutable revision 1 → 2；不使用 Python state imitation 证明数据库行为。真实 Worker 聚焦组 58 tests 验证 schema/runtime/protocol/recovery，以及 scheduled CLI 将安全的 `judgement_dispatch_failed` 布尔 telemetry 保留在输出中而不输出调度详情；前置 control-plane 组的实际 `api.integration.test.ts` 覆盖 Worker completion API，去重后的 final Node 组为 8 files / 40 tests，验证 Reader safe output、revision history 与 all/source/date URL 恢复。当前本地证据为 pgTAP 32 files / 561 tests、全量 Worker 161 tests、控制面 42 files / 232 tests 全通过，lint 通过；默认 `npm run build` 仍以 exit 1 失败，因为既有外部 `node_modules` symlink 被 Turbopack 拒绝，独立 `npm run build -- --webpack` 通过 32 个页面，但只算 supplemental evidence。未执行 remote migration、部署、Worker 重启、真实 X/OpenCLI/Browser/Codex 调用或生产页面验收。详见 [工程记录](engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md)。
 
@@ -51,6 +53,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [X 阅读页全量筛选与管理员入口设计](superpowers/specs/2026-07-26-x-reader-all-filters-design.md)
   - [普通用户邀请码时长与掩码列表设计](superpowers/specs/2026-07-28-user-invite-duration-and-mask-design.md)
   - [X 跨博主当日判断总结 Spec](superpowers/specs/2026-07-31-x-cross-blogger-daily-judgement-summary-design.md)
+  - [X 生产 Migration 历史对账设计](superpowers/specs/2026-08-02-x-migration-history-reconciliation-design.md)（用户确认 2026-08-02）
 - Approved implementation plan：
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
@@ -68,6 +71,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [X 跨博主当日判断总结计划](superpowers/plans/2026-07-31-x-cross-blogger-daily-judgement-summary.md)（用户确认 2026-07-31）
   - [X 当日判断总结再生成计划](superpowers/plans/2026-08-01-x-daily-judgement-regeneration.md)（用户确认 2026-08-01）
   - [X 当日判断总结最终边界修复计划](superpowers/plans/2026-08-01-x-daily-judgement-final-remediation.md)（用户确认 2026-08-01）
+  - [X 生产 Migration 历史对账计划](superpowers/plans/2026-08-02-x-migration-history-reconciliation.md)（用户确认 2026-08-02）
 - V0 implementation status：已完成确定性实现、远程持久化、隔离预览部署、核心工作节点 HTTPS、远程角色/恢复和真实有界单页验收，结论为通过；真实内容仍只保留在仓库外受保护目录。
 - V1 implementation status：代码、本地确定性验收、专用部署、真实双来源 history/增量/checkpoint、失败隔离/恢复、普通用户阅读与视觉、真实质量抽检和部署日志审阅均已完成；结论为 V1 Discord 正式可用 MVP。
 - V1.1 implementation status：Spec 及其[独立 implementation plan](superpowers/plans/2026-07-22-v1.1-discord-windowed-collection-and-insight.md) 已于 2026-07-22 获用户批准。Task 1（完整时间窗、覆盖水位与数据库契约）完成于 `58df9ae`；Task 2（控制面初始化、作者配置与手动更新）完成于 `2541229`；Task 3（Worker 逐页持久化与范围回执）完成于 `e5079dc`；Task 4（按时间边界、无页数成功条件的 Active Adapter/runtime）完成于 `6903897`；Task 5（00:00、08:00、16:00、20:50 上海窗口、无限制补窗与 launchd 模板）完成于 `facba3d`；Task 6（两层事实/日累计作者与话题摘要）完成于 `3346889`，并由 `605ae87` 修复日累计输出只能引用已验证事实单元的证据边界；Task 7（安全作者配置界面、管理员手动更新入口、内容优先 `/discord` 阅读页）完成于 `55ad3fe`；Task 8 的本地确定性验收完成。其后用户批准作者 selector 修订：管理员可直接输入显示名/用户名，已观察作者仅作快捷建议；任务逐页持久化后，受租约保护的服务端解析唯一 stable ID，零候选 pending、多候选 ambiguous，且绝不返回原文。该修订已应用专用 V1 数据库并部署到专用 V1 生产项目（Vercel Ready、正式域名已关联）；本地验证为 11 个 pgTAP 文件/186 项、18 个控制面测试文件/79 项、Worker 82 项以及 lint/production build 全部通过。随后管理员可录入已确认的重点作者，再进行真实 Discord 正常窗口/手动范围、作者配置生效、普通用户真实生产审阅和 launchd 安装。真实内容、来源身份、凭据与私有 Prompt 继续不进入 Git。
