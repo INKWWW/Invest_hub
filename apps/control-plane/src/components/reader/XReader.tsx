@@ -24,6 +24,7 @@ function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches
   return <div className="x-reader-judgements">{batches.map((batch, index) => <details className="x-reader-judgement" key={batch.cutoffAt} open={index === 0}>
     <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(batch.cutoffAt))} · {batch.status === "succeeded" ? batch.coverageStatus === "partial" && batch.timedOutSourceCount > 0 && !batch.stockViewpoints.length && !batch.marketIndustryViewpoints.length ? "采集超时，未形成判断" : "已更新" : batch.status === "judgement_pending" ? "判断处理中" : "判断失败"}</summary>
     {batch.status === "succeeded" ? <div className="reader-section">
+      <p>输入覆盖：{batch.includedSourceCount} 位博主观点已纳入，{batch.noNewSourceCount} 位无新增信息，{batch.excludedSourceCount} 位未纳入。下方主题仅列出直接支持或反对该主题的博主。</p>
       <JudgementRevision revision={batch} excludedSourceCount={batch.excludedSourceCount} timedOutSourceCount={batch.timedOutSourceCount} />
       {batch.revisionHistory.map((revision) => <details className="x-reader-revision" key={revision.revision}>
         <summary>修订版本 {revision.revision}</summary>

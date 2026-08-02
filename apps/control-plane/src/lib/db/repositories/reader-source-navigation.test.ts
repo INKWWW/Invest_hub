@@ -120,7 +120,8 @@ describe("X reader date projection", () => {
       stockViewpoints: [{ statement: "latest", supportingDisplayNames: ["Beta"], dissentingDisplayNames: ["Alpha"] }],
       revisionHistory: [{ revision: 1, coverageStatus: "complete", stockViewpoints: [{ statement: "stale", supportingDisplayNames: ["Alpha"] }] }],
     });
-    expect(result[0]?.judgement.batches[1]).toMatchObject({ coverageStatus: "partial", excludedSourceCount: 1, timedOutSourceCount: 1, stockViewpoints: [{ statement: "sixteen", supportingDisplayNames: ["Alpha at sixteen"] }] });
+    expect(result[0]?.judgement.batches[0]).toMatchObject({ coverageStatus: "complete", includedSourceCount: 1, noNewSourceCount: 1 });
+    expect(result[0]?.judgement.batches[1]).toMatchObject({ coverageStatus: "partial", includedSourceCount: 1, noNewSourceCount: 0, excludedSourceCount: 1, timedOutSourceCount: 1, stockViewpoints: [{ statement: "sixteen", supportingDisplayNames: ["Alpha at sixteen"] }] });
     expect(result[1]?.judgement.batches.map((batch) => batch.status)).toEqual(["judgement_pending", "judgement_failed"]);
     expect(result[0]?.bloggers).toEqual(expect.arrayContaining([
       expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "succeeded" }),

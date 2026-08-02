@@ -24,6 +24,8 @@ Reader 对新旧数据均保持安全展示。当一个 judgement batch 的最�
 
 其他 partial 原因（例如 `source_behind_cutoff`、`coverage_not_initialized`、terminal failure）继续沿用现有“覆盖不完整”安全提示，不把它们误称为超时。筛选、日期排序、博主分块、判断版本历史和原始内容回溯均不变。
 
+每个已完成的 judgement batch 还在正文顶部显示一行输入覆盖说明：“输入覆盖：X 位博主观点已纳入，Y 位无新增信息，Z 位未纳入。下方主题仅列出直接支持或反对该主题的博主。”它说明模型输入覆盖，不代表所有已纳入博主都必须出现在某一条主题的支持/反对名单中。该行只使用已有的 settlement 状态计数，不暴露来源 ID、任务 ID、排除代码、原文、Provider 或 Prompt。
+
 ## 数据与安全边界
 
 新增一个数据库 helper，根据不可变的 `natural_date` 计算上海次日 01:00 的 timestamptz。调度器调用以 transaction-local 标记触发的 batch 插入时，将 helper 的结果写入既有的不可变 `settlement_deadline_at` 字段；手工或历史写入保持其显式值，不改表结构、RLS、RPC 权限、Worker 协议、OpenCLI 合同、Provider、Prompt 或来源配置。
@@ -37,6 +39,7 @@ Reader 对新旧数据均保持安全展示。当一个 judgement batch 的最�
 3. 无 included 来源的 batch 不创建 Provider run；已有空 version 的事实含义和 immutable 规则不变。
 4. Reader 仅在实际存在超时排除原因时显示“采集超时，未形成判断”与对应博主说明；其他 partial 情形不改变文案。
 5. 现有 X judgement、Reader、Worker、pgTAP 与脱敏回归保持通过；新增 migration 在空本地数据库可重放。
+6. 已完成 judgement 的 Reader 显示安全的 included/no-new/excluded 数量，并明确主题署名只代表直接支持或反对该主题的博主。
 
 ## 非目标
 
