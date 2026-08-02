@@ -22,28 +22,29 @@ function validOrAll(value: string | undefined, values: string[]) {
 function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches"] }) {
   if (!batches.length) return <p className="summary-empty">本时段没有形成新的跨博主判断。</p>;
   return <div className="x-reader-judgements">{batches.map((batch, index) => <details className="x-reader-judgement" key={batch.cutoffAt} open={index === 0}>
-    <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(batch.cutoffAt))} · {batch.status === "succeeded" ? "已更新" : batch.status === "judgement_pending" ? "判断处理中" : "判断失败"}</summary>
+    <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(batch.cutoffAt))} · {batch.status === "succeeded" ? batch.coverageStatus === "partial" && batch.timedOutSourceCount > 0 && !batch.stockViewpoints.length && !batch.marketIndustryViewpoints.length ? "采集超时，未形成判断" : "已更新" : batch.status === "judgement_pending" ? "判断处理中" : "判断失败"}</summary>
     {batch.status === "succeeded" ? <div className="reader-section">
-      <JudgementRevision revision={batch} excludedSourceCount={batch.excludedSourceCount} />
+      <JudgementRevision revision={batch} excludedSourceCount={batch.excludedSourceCount} timedOutSourceCount={batch.timedOutSourceCount} />
       {batch.revisionHistory.map((revision) => <details className="x-reader-revision" key={revision.revision}>
         <summary>修订版本 {revision.revision}</summary>
-        <JudgementRevision revision={revision} excludedSourceCount={batch.excludedSourceCount} />
+        <JudgementRevision revision={revision} excludedSourceCount={batch.excludedSourceCount} timedOutSourceCount={batch.timedOutSourceCount} />
       </details>)}
     </div> : <p className="summary-empty">{batch.status === "judgement_pending" ? "当日判断仍在处理中。" : "当日判断未能完成，稍后会重试。"}</p>}
   </details>)}</div>;
 }
 
-function JudgementRevision({ revision, excludedSourceCount }: {
+function JudgementRevision({ revision, excludedSourceCount, timedOutSourceCount }: {
   revision: Omit<XReaderJudgementRevision, "coverageStatus"> & {
     coverageStatus: XReaderJudgementRevision["coverageStatus"] | null;
   };
   excludedSourceCount: number;
+  timedOutSourceCount: number;
 }) {
   return <div className="x-reader-revision-content">
     {revision.stockViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`stock-${judgementIndex}`} judgement={judgement} />)}
     {revision.marketIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} />)}
     {!revision.stockViewpoints.length && !revision.marketIndustryViewpoints.length ? <p className="summary-empty">本窗口没有形成新的跨博主判断。</p> : null}
-    {revision.coverageStatus === "partial" ? <p className="topic-uncertainty">本次判断未纳入 {excludedSourceCount} 位博主的完整信息。</p> : null}
+    {revision.coverageStatus === "partial" ? <p className="topic-uncertainty">本次判断未纳入 {excludedSourceCount} 位博主的完整信息。{timedOutSourceCount > 0 ? `其中 ${timedOutSourceCount} 位因采集未在结算截止前完成。` : ""}</p> : null}
     {revision.coverageStatus === "no_new_information" ? <p className="summary-empty">本窗口没有新的可判断信息。</p> : null}
     {revision.uncertainties.length ? <p className="topic-uncertainty">不确定性：{revision.uncertainties.join("；")}</p> : null}
   </div>;
@@ -60,8 +61,8 @@ function JudgementCard({ judgement }: { judgement: ReaderJudgement }) {
 function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
   return <section className="x-reader-blogger">
     <h3 className="x-reader-author">{blogger.source.displayName}</h3>
-    <ReaderStatus status={blogger.status} asOf={blogger.segments[0]?.occurredThroughAt} />
-    {!blogger.segments.length ? <p className="summary-empty">{blogger.status === "partial_failure" ? "本批次未纳入该博主的完整信息。" : "本批次没有可展示的博主观点。"}</p> : null}
+    {blogger.timedOut ? <div className="reader-status" data-status="partial_failure"><p role="status">采集超时：本机未在结算时间前完成采集。</p></div> : <ReaderStatus status={blogger.status} asOf={blogger.segments[0]?.occurredThroughAt} />}
+    {!blogger.segments.length ? <p className="summary-empty">{blogger.timedOut ? "本批次未纳入该博主的完整信息。" : blogger.status === "partial_failure" ? "本批次未纳入该博主的完整信息。" : "本批次没有可展示的博主观点。"}</p> : null}
     {blogger.segments.map((segment, index) => <details className="x-reader-segment" key={segment.occurredThroughAt} open={index === 0}>
       <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(segment.occurredThroughAt))} · 博主观点</summary>
       {segment.viewpoints.length ? <ul className="x-viewpoints">{segment.viewpoints.map((viewpoint, viewpointIndex) => <li key={viewpointIndex}>{viewpoint}</li>)}</ul> : <p className="summary-empty">本窗口没有形成新的博主观点。</p>}

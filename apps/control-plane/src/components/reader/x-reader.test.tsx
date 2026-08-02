@@ -10,7 +10,7 @@ const days = [{
     batches: [{
       cutoffAt: "2099-01-02T12:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 2,
       stockViewpoints: [{ statement: "跨博主股票判断", supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: [] }],
-      marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0,
+      marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, timedOutSourceCount: 0,
       revisionHistory: [{
         revision: 1, coverageStatus: "partial",
         stockViewpoints: [{ statement: "较早修订判断", supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: ["旧不确定性"] }],
@@ -18,17 +18,17 @@ const days = [{
       }],
     }, {
       cutoffAt: "2099-01-02T08:00:00.000Z", coverageStatus: "partial", status: "succeeded", revision: 1,
-      stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: ["覆盖未完整"], excludedSourceCount: 1,
+      stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: ["覆盖未完整"], excludedSourceCount: 1, timedOutSourceCount: 1,
       revisionHistory: [],
     }],
   },
   bloggers: [{
-    source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded",
+    source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false,
     segments: [{ occurredFromAt: "2099-01-02T11:00:00.000Z", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新博主观点"], uncertainties: [], analyses: [] }, {
       occurredFromAt: "2099-01-02T07:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["较早博主观点"], uncertainties: [], analyses: [],
     }],
   }, {
-    source: { sourceKey: "third", displayName: "Third Author" }, status: "succeeded",
+    source: { sourceKey: "third", displayName: "Third Author" }, status: "succeeded", timedOut: false,
     segments: [{ occurredFromAt: "2099-01-02T10:00:00.000Z", occurredThroughAt: "2099-01-02T11:00:00.000Z", viewpoints: ["第三位最新观点"], uncertainties: [], analyses: [] }, {
       occurredFromAt: "2099-01-02T06:00:00.000Z", occurredThroughAt: "2099-01-02T07:00:00.000Z", viewpoints: ["第三位较早观点"], uncertainties: [], analyses: [],
     }],
@@ -37,7 +37,7 @@ const days = [{
   naturalDate: "2099-01-01",
   judgement: { visible: true, batches: [] },
   bloggers: [{
-    source: { sourceKey: "first", displayName: "First Author" }, status: "succeeded",
+    source: { sourceKey: "first", displayName: "First Author" }, status: "succeeded", timedOut: false,
     segments: [{ occurredFromAt: "2099-01-01T12:00:00.000Z", occurredThroughAt: "2099-01-01T12:00:00.000Z", viewpoints: ["首位博主观点"], uncertainties: [], analyses: [] }],
   }],
 }];
@@ -57,6 +57,8 @@ describe("XReader", () => {
     expect(html).toContain('<details class="x-reader-revision">');
     expect(html).toContain("较早修订判断");
     expect(html).toContain("修订版本 1");
+    expect(html).toContain("采集超时，未形成判断");
+    expect(html).toContain("其中 1 位因采集未在结算截止前完成。");
     expect(html.indexOf("最新博主观点")).toBeLessThan(html.indexOf("较早博主观点"));
     expect(html.indexOf('<h3 class="x-reader-author">Second Author</h3>')).toBeLessThan(html.indexOf('<h3 class="x-reader-author">Third Author</h3>'));
     expect(html.indexOf("第三位最新观点")).toBeLessThan(html.indexOf("第三位较早观点"));
@@ -78,9 +80,9 @@ describe("XReader", () => {
   it("keeps the latest cutoff open even when pending while failed states show no fabricated body", () => {
     const html = renderToStaticMarkup(<XReader days={[{
       naturalDate: "2099-01-03",
-      judgement: { visible: true, batches: [{ cutoffAt: "2099-01-03T12:00:00.000Z", coverageStatus: null, status: "judgement_pending", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }, {
-        cutoffAt: "2099-01-03T08:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 1, stockViewpoints: [{ statement: "可见判断", supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }, {
-        cutoffAt: "2099-01-03T04:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, revisionHistory: [] }] },
+      judgement: { visible: true, batches: [{ cutoffAt: "2099-01-03T12:00:00.000Z", coverageStatus: null, status: "judgement_pending", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }, {
+        cutoffAt: "2099-01-03T08:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 1, stockViewpoints: [{ statement: "可见判断", supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }, {
+        cutoffAt: "2099-01-03T04:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }] },
       bloggers: [],
     }]} initialNaturalDate="2099-01-03" />);
 
@@ -94,16 +96,18 @@ describe("XReader", () => {
   it("renders batch-derived no-new, pending, failed, and excluded blogger placeholders", () => {
     const html = renderToStaticMarkup(<XReader days={[{
       naturalDate: "2099-01-04", judgement: { visible: true, batches: [] },
-      bloggers: [{ source: { sourceKey: "no-new", displayName: "No New" }, status: "no_new_messages", segments: [] },
-        { source: { sourceKey: "pending", displayName: "Pending" }, status: "processing", segments: [] },
-        { source: { sourceKey: "failed", displayName: "Failed" }, status: "failed", segments: [] },
-        { source: { sourceKey: "excluded", displayName: "Excluded" }, status: "partial_failure", segments: [] }],
+      bloggers: [{ source: { sourceKey: "no-new", displayName: "No New" }, status: "no_new_messages", timedOut: false, segments: [] },
+        { source: { sourceKey: "pending", displayName: "Pending" }, status: "processing", timedOut: false, segments: [] },
+        { source: { sourceKey: "failed", displayName: "Failed" }, status: "failed", timedOut: false, segments: [] },
+        { source: { sourceKey: "excluded", displayName: "Excluded" }, status: "partial_failure", timedOut: true, segments: [] }],
     }]} />);
 
     expect(html).toContain("已核实：截至当前时间没有新增消息。");
     expect(html).toContain("处理中：最新内容仍在整理");
     expect(html).toContain("更新失败：保留上次可用摘要");
+    expect(html).toContain("采集超时：本机未在结算时间前完成采集。");
     expect(html).toContain("本批次未纳入该博主的完整信息。");
+    expect(html).not.toContain("覆盖不完整：当前摘要可能未包含该时段的全部内容。");
   });
 
   it("does not render internal evidence, task, raw-content, provider, or local fields", () => {

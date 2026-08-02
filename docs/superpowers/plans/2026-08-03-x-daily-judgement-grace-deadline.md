@@ -23,14 +23,14 @@
 ### Task 1: 数据库宽限期与不可变结算回归
 
 **Files:**
-- Create: `supabase/migrations/20260803090000_x_daily_judgement_grace_deadline.sql`
+- Create: `supabase/migrations/20260802160849_x_daily_judgement_grace_deadline.sql`
 - Create: `supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql`
 
 **Interfaces:**
 - Consumes: `public.x_collection_batch_logical_date(timestamptz)`, `public.ensure_due_x_collection_batches(uuid,timestamptz)`, `public.settle_x_collection_batch(uuid,timestamptz)`.
 - Produces: `public.x_collection_batch_settlement_deadline(date) returns timestamptz`; new batches persist the helper result in the existing `settlement_deadline_at` column.
 
-- [ ] **Step 1: Create the migration shell and write the failing pgTAP contract**
+- [x] **Step 1: Create the migration shell and write the failing pgTAP contract**
 
 Run:
 
@@ -52,20 +52,20 @@ select is(
 );
 ```
 
-Include an 20:00 due batch and next-day 00:00 due batch. Assert both have the prior day’s next-day 01:00 deadline, a successful source with a persisted matching day segment remains `pending` at 00:59:59 then becomes `included` and queues exactly one judgement run, while an unfinished source at 01:00 is excluded with `settlement_deadline_exceeded` and creates no Provider run.
+Include an 20:00 due batch and next-day 00:00 due batch. Assert both have the prior day’s next-day 01:00 deadline, a successful source with a persisted matching day segment becomes `judgement_pending` at 00:59:59 and queues exactly one judgement run, while an unfinished source at 01:00 is excluded with `settlement_deadline_exceeded` and creates no Provider run.
 
-- [ ] **Step 2: Run the focused pgTAP file and verify it fails for the absent helper**
+- [x] **Step 2: Run the focused pgTAP file and verify it fails for the absent helper**
 
 Run:
 
 ```bash
 supabase db reset --yes
-supabase test db supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql
+supabase test db --local supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql
 ```
 
 Expected: FAIL because `public.x_collection_batch_settlement_deadline(date)` does not exist. Do not accept a fixture, syntax, or Docker bootstrap failure as the red result.
 
-- [ ] **Step 3: Implement the minimal helper and batch-creation substitution**
+- [x] **Step 3: Implement the minimal helper and batch-creation substitution**
 
 In the generated migration, define only:
 
@@ -81,17 +81,17 @@ as $$
 $$;
 ```
 
-Recreate `public.ensure_due_x_collection_batches_dispatch_core(uuid,timestamptz)` from its current definition, changing only the new batch value from `v_window.end_at + interval '2 hours'` to `public.x_collection_batch_settlement_deadline(public.x_collection_batch_logical_date(v_window.end_at))`. Retain its ownership authorization, frozen source snapshot, task creation, conflict isolation, return shape, and grants. Revoke public/anon/authenticated execution of the new helper and grant only `service_role`, matching the existing internal helper boundary.
+Use a `before insert` trigger on `public.x_collection_batches` to replace the legacy supplied deadline with `public.x_collection_batch_settlement_deadline(new.natural_date)` only when the scheduler wrapper sets a transaction-local flag. Rename the existing dispatch implementation to a private legacy core and introduce a same-signature `security definer` wrapper that sets that flag before delegating; recreate the existing authorization wrapper so cached function plans resolve that new dispatcher. This preserves manual/history inserts with their explicit immutable deadline while keeping the scheduler’s authorization, frozen source snapshot, task creation, conflict isolation and return shape unchanged. Revoke public/anon/authenticated execution of the helper, trigger function and dispatch core; grant only `service_role` on the helper.
 
-- [ ] **Step 4: Run focused DB tests and verify the contract is green**
+- [x] **Step 4: Run focused DB tests and verify the contract is green**
 
 Run:
 
 ```bash
 supabase db reset --yes
-supabase test db supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql
-supabase test db supabase/tests/027_v2_x_daily_judgement_batch_identity.sql
-supabase test db supabase/tests/029_v2_x_daily_judgement_final_authority.sql
+supabase test db --local supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql
+supabase test db --local supabase/tests/027_v2_x_daily_judgement_batch_identity.sql
+supabase test db --local supabase/tests/029_v2_x_daily_judgement_final_authority.sql
 ```
 
 Expected: all focused files pass. Confirm the migration does not mutate pre-existing rows by asserting it has no `update public.x_collection_batches` statement.
@@ -99,7 +99,7 @@ Expected: all focused files pass. Confirm the migration does not mutate pre-exis
 - [ ] **Step 5: Commit the database change**
 
 ```bash
-git add supabase/migrations/20260803090000_x_daily_judgement_grace_deadline.sql supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql
+git add supabase/migrations/20260802160849_x_daily_judgement_grace_deadline.sql supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql
 git commit -m "fix(v2): add X daily judgement grace deadline"
 ```
 
@@ -115,7 +115,7 @@ git commit -m "fix(v2): add X daily judgement grace deadline"
 - Consumes: `x_collection_batch_sources.exclusion_code` only inside the server-side Reader repository.
 - Produces: `timedOutSourceCount: number` on a public-safe judgement batch and `timedOut: boolean` on a public-safe blogger card; neither internal source IDs nor exclusion codes leave the repository.
 
-- [ ] **Step 1: Write failing repository and component tests**
+- [x] **Step 1: Write failing repository and component tests**
 
 Add a repository fixture whose succeeded, empty partial batch has one `settlement_deadline_exceeded` source. Assert its public projection is:
 
@@ -129,9 +129,9 @@ expect(result[0]?.bloggers).toEqual(expect.arrayContaining([
 expect(JSON.stringify(result)).not.toContain("settlement_deadline_exceeded");
 ```
 
-Add a component test with an empty partial batch and `timedOutSourceCount: 1`; assert it contains “采集超时，未生成判断” and “采集未在当日结算宽限期内完成，未调用模型。”. Add a non-timeout partial fixture and assert it retains “本窗口没有形成新的跨博主判断。” and does not contain the timeout copy. Add a timed-out blogger fixture and assert it contains “采集超出当日结算宽限期，未纳入当日判断。”.
+Add a component test with an empty partial batch and `timedOutSourceCount: 1`; assert it contains “采集超时，未形成判断” and “其中 1 位因采集未在结算截止前完成。”. Add a non-timeout partial fixture and assert it retains “本窗口没有形成新的跨博主判断。” and does not contain the timeout copy. Add a timed-out blogger fixture and assert it contains “采集超时：本机未在结算时间前完成采集。”.
 
-- [ ] **Step 2: Run the focused Node tests and verify they fail for missing fields/copy**
+- [x] **Step 2: Run the focused Node tests and verify they fail for missing fields/copy**
 
 Run:
 
@@ -142,11 +142,11 @@ npm test -- src/lib/db/repositories/reader-source-navigation.test.ts src/compone
 
 Expected: FAIL because `timedOutSourceCount` and `timedOut` are not projected and the new copy is absent.
 
-- [ ] **Step 3: Implement the smallest safe projection and rendering change**
+- [x] **Step 3: Implement the smallest safe projection and rendering change**
 
 In `readXDay`, include `exclusion_code` only in the private batch-source select. Derive counts/booleans by equality with the literal `settlement_deadline_exceeded`; do not return the code. Extend the reader TypeScript shapes with `timedOutSourceCount` and `timedOut`. In `XReader`, use the timeout copy only when the current succeeded revision has no stock/market viewpoint and `timedOutSourceCount > 0`; use the timed-out blogger copy only when `blogger.timedOut` is true. Keep generic `ReaderStatus` unchanged for every other path.
 
-- [ ] **Step 4: Run focused Node tests and verify they pass**
+- [x] **Step 4: Run focused Node tests and verify they pass**
 
 Run:
 
@@ -174,7 +174,7 @@ git commit -m "fix(v2): explain X judgement collection timeout"
 - Consumes: completed migrations, pgTAP/Node results, Vercel production deployment, linked Supabase history, and the local X Worker service.
 - Produces: a redacted production-release record stating the grace deadline, migration result, deployment identifier, Worker status, and Reader acceptance result.
 
-- [ ] **Step 1: Run the full deterministic validation suite**
+- [x] **Step 1: Run the full deterministic validation suite**
 
 Run serially to avoid pgTAP initialization contention:
 
