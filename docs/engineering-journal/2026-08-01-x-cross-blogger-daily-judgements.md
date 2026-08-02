@@ -26,7 +26,7 @@ control-plane 目录被精确链接到 Vercel 项目 `invest-hub-v1-control-plan
 
 | 范围 | 命令 | 结果 |
 | --- | --- | --- |
-| 数据库生命周期 authority | V2 runner 内的 `supabase db reset`；`supabase test db` | reset 成功；32 files / 561 tests 通过，其中 judgement 026/027/028/029 直接验证真实 DB 状态转移。 |
+| 数据库生命周期 authority | V2 runner 内的 `supabase db reset`；`supabase test db` | 初始 reset 成功；32 files / 561 tests 通过，其中 judgement 026/027/028/029 直接验证真实 DB 状态转移。2026-08-02 对账 marker 加入后，merged `main` 全量 pgTAP 为 33 files / 564 tests 通过。 |
 | judgement Worker 聚焦组 | V2 runner 显式运行 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`test_protocol.py`、`test_worker_recovery.py` | 58/58 通过；scheduled CLI telemetry 保留安全失败布尔值且不输出细节；没有 cross-blogger synthetic state-machine 或重复 discovery。 |
 | final Node 边界 | V2 runner 中去重后的实际 route/repository/page/component 聚焦组 | 8 files / 40 tests 通过：Reader runtime whitelist、admin regeneration、revision history、all/source/date URL 恢复；Worker completion API 已由前置 control-plane 组的 `api.integration.test.ts` 覆盖。 |
 | 全量 Worker | `PYTHONPATH=workers/v0/src /Users/hanyuec/Desktop/Invest_hub/workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_*.py' -v` | 使用现有 main V0 virtualenv；161/161 通过。 |
