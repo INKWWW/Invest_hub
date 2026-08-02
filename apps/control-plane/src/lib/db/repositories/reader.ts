@@ -94,6 +94,8 @@ export type XReaderDate = {
       stockViewpoints: ReaderJudgement[];
       marketIndustryViewpoints: ReaderJudgement[];
       uncertainties: string[];
+      includedSourceCount: number;
+      noNewSourceCount: number;
       excludedSourceCount: number;
       timedOutSourceCount: number;
       revisionHistory: XReaderJudgementRevision[];
@@ -332,6 +334,8 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const judgement: XReaderDate["judgement"]["batches"][number] = {
       cutoffAt: batch.cutoff_at,
       status: judgementStatus(batch.status),
+      includedSourceCount: batchRows.filter((row) => row.settlement_status === "included").length,
+      noNewSourceCount: batchRows.filter((row) => row.settlement_status === "no_new_information").length,
       excludedSourceCount: batchRows.filter((row) => row.settlement_status === "excluded").length,
       timedOutSourceCount: batchRows.filter((row) => row.settlement_status === "excluded" && row.exclusion_code === "settlement_deadline_exceeded").length,
       ...current,
