@@ -14,6 +14,14 @@ Worker 边界由实际 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`t
 
 2026-08-02 的 production preflight 发现远端 history 已记录 `20260731084640`，但仓库缺少同版本文件，故 `supabase db push --linked --dry-run` 正确拒绝继续。该版本在 2026-07-31 工程记录中已被确认是终态失败来源隔离修复，且已只读确认远端 `public.enqueue_due_x_tasks` 保留 `deferred_source_ids`。本次只新增同版本的本地历史 marker：它只执行 `select 1`，不重放 DDL，空库再由 `20260731100000_x_defer_terminal_failed_sources.sql` 提供最终 `create or replace function` 定义。对账 pgTAP 3/3 与该函数的既有终态失败隔离回归 6/6 已在本地通过；禁止 `migration repair`、`db pull`、Dashboard SQL 或推测性历史 SQL。此时 marker 尚未进入远端，因此尚未重试 remote dry-run，也没有执行新的 remote migration、Vercel deploy、Worker restart、真实 X/Codex 调用或 authenticated `/x` 验收。
 
+## 生产对账与页面验收（2026-08-02）
+
+对账分支快进至 `main` 并推送 `origin/main` 后，远端 dry-run 不再报告缺失 history，且只列出十条计划内 migration：`20260731100000`、`20260801090000`、`20260801100000`、`20260801120000`、`20260801130000`、`20260801140000`、`20260801150000`、`20260801160000`、`20260801170000` 和 `20260801180000`。实际 `supabase db push --linked` 逐条应用了这十条 migration；命令随后只在本地 migration catalog cache 阶段报告缺少临时证书文件，故没有把 CLI 结束语作为成功依据。独立只读核对确认远端 history 已包含 `20260731084640` 加上述十条版本，并确认 `public.enqueue_due_x_tasks` 仍含 `deferred_source_ids`。
+
+control-plane 目录被精确链接到 Vercel 项目 `invest-hub-v1-control-plane`，随后 production deployment `dpl_8TVpwmZfW2FnYmJ2zNJQdLV5Hxbb` 为 Ready。稳定别名 `https://invest-hub-v0-control-plane.vercel.app` 已直接核对指向该 deployment；匿名 `/x` 请求仍转至 `/login?next=%2Fx`。`com.investhub.x-worker` 已通过 `launchctl kickstart -k` 重启，check-only 验证报告 loaded。没有通过临时脚本创建 task、读取真实 X 内容或调用 Codex；后续 judgement 只由正常 scheduler 处理。
+
+已认证普通用户会话在正式 `/x` 完成了实际验收。只记录结构性结果，不复制真实内容：页面无错误覆盖层；包含博主与日期两个筛选控件；10 个日期卡片按降序；每个卡片的结构为日期、当日判断总结、单个博主观点；页面存在 3 个 judgement batch 和 47 个独立博主区块。375px 本地截图检查显示页面没有横向溢出，筛选与当日判断总结均保持可读。
+
 ## 本地验证结果
 
 | 范围 | 命令 | 结果 |
@@ -32,11 +40,11 @@ Worker 边界由实际 `test_cli.py`、`test_x_cross_blogger_judgements.py`、`t
 
 | 项目 | 执行前必须确认/操作 | 当前状态 |
 | --- | --- | --- |
-| 目标 Supabase project/ref | 通过生产 control-plane 的 server-only binding 做只读、脱敏核对；不得从历史 Vercel 项目名或域名推断。 | 未确认，未读取 Sensitive value。 |
+| 目标 Supabase project/ref | production control-plane 已精确链接到 `invest-hub-v1-control-plane`；Supabase CLI 的 linked history 通过既有 X production terminal-failure version 与十条 judgement migration 做只读核对。未读取 Sensitive value。 | 已完成受控核对。 |
 | additive migrations | 先确认远端已匹配本地历史 marker `20260731084640_x_defer_terminal_failed_sources_historical_marker.sql`，再按顺序仅应用 `20260731100000_x_defer_terminal_failed_sources.sql`、`20260801090000_x_cross_blogger_daily_judgements.sql`、`20260801100000_x_daily_judgement_hardening.sql`、`20260801120000_x_daily_judgement_worker_protocol.sql`、`20260801130000_x_daily_judgement_completion_lease_and_metadata.sql`、`20260801140000_x_daily_judgement_regeneration.sql`、`20260801150000_x_daily_judgement_batch_identity.sql`、`20260801160000_x_daily_judgement_state_security.sql`、`20260801170000_x_daily_judgement_final_authority.sql`、`20260801180000_x_daily_judgement_frozen_claim_authority.sql`。 | remote marker 已存在；其余十条未应用。 |
 | rollback switch | 停止新的 judgement claiming，并回退 Reader projection 到前一已验证 control-plane release；保留 immutable batches/runs/versions，绝不删除或改写既有 X task、coverage、segment、analysis 或 checkpoint。 | 仅有步骤，未执行。 |
-| X Worker | 服务名 `com.investhub.x-worker`；只在单独授权后重启或使其领取新 judgement。 | 未重启。 |
+| X Worker | 服务名 `com.investhub.x-worker`；只在单独授权后重启或使其领取新 judgement。 | 已通过 `launchctl kickstart -k` 重启，check-only 状态为 loaded。 |
 | revision 1 → 2 | 在生产中先确认已成功且有 revision 1 的 batch；管理员显式 regenerate 后，由正常 Worker claim 领取，并验证 revision 1 保留、revision 2 成为 Reader 投影。 | 未执行。 |
-| Reader | 使用已认证普通用户检查 `/x` desktop 与 375px、日期顺序、单博主范围说明和无敏感字段。 | 未执行。 |
+| Reader | 使用已认证普通用户检查 `/x` desktop 与 375px、日期顺序、单博主范围说明和无敏感字段。 | 已执行；桌面及 375px 通过，结构、筛选、登录保护与无错误覆盖层均符合预期。 |
 
 在用户逐项明确授权前，不得执行 remote migration、Vercel deploy、`com.investhub.x-worker` 重启、真实 X/OpenCLI/Browser 读取或对真实内容调用 Codex CLI。

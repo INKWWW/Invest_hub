@@ -1,6 +1,6 @@
 # X 生产 Migration 历史对账 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 在不改写生产 history 或业务数据的前提下，使仓库可安全应用已批准的 X judgement migrations。
 
@@ -28,7 +28,7 @@
 - Consumes: production history 中已存在的 version `20260731084640`，以及 `20260731100000_x_defer_terminal_failed_sources.sql` 的 `public.enqueue_due_x_tasks(uuid, timestamptz)`。
 - Produces: 本地与远端均可识别的 migration version；空库中的 final scheduler function 仍包含 `deferred_source_ids`。
 
-- [ ] **Step 1: 写入先失败的 pgTAP 对账测试。**
+- [x] **Step 1: 写入先失败的 pgTAP 对账测试。**
 
 ```sql
 begin;
@@ -49,13 +49,13 @@ select * from finish();
 rollback;
 ```
 
-- [ ] **Step 2: 在 marker 不存在时执行该测试，确认它因缺少 `20260731084640` 而失败。**
+- [x] **Step 2: 在 marker 不存在时执行该测试，确认它因缺少 `20260731084640` 而失败。**
 
 Run: `supabase db reset --yes && supabase test db supabase/tests/030_v2_x_migration_history_reconciliation.sql`
 
 Expected: the first assertion fails because the local migration history has no `20260731084640` version.
 
-- [ ] **Step 3: 新增最小 marker migration。**
+- [x] **Step 3: 新增最小 marker migration。**
 
 ```sql
 -- Production recorded this version on 2026-07-31 for terminal X failure
@@ -64,13 +64,13 @@ Expected: the first assertion fails because the local migration history has no `
 select 1;
 ```
 
-- [ ] **Step 4: 重置本地数据库并运行对账与既有隔离测试。**
+- [x] **Step 4: 重置本地数据库并运行对账与既有隔离测试。**
 
 Run: `supabase db reset --yes && supabase test db supabase/tests/030_v2_x_migration_history_reconciliation.sql && supabase test db supabase/tests/023_v2_x_terminal_failure_scheduler.sql && supabase migration list --local`
 
 Expected: two pgTAP files pass; local history lists both `20260731084640` and `20260731100000`.
 
-- [ ] **Step 5: 提交最小实现。**
+- [x] **Step 5: 提交最小实现。**
 
 ```bash
 git add supabase/migrations/20260731084640_x_defer_terminal_failed_sources_historical_marker.sql supabase/tests/030_v2_x_migration_history_reconciliation.sql
@@ -87,15 +87,15 @@ git commit -m "fix(v2): reconcile X migration history"
 - Consumes: Task 1 的 marker、实际 local pgTAP 结果和此前 dry-run 拒绝证据。
 - Produces: 可审计的对账原因、禁止操作、当前发布状态与下一步受控生产序列。
 
-- [ ] **Step 1: 仅记录已发生的本地事实。** 将 project status 和工程日志更新为：远端 version `20260731084640` 已被本地历史 marker 对齐；本地验证通过；remote `db push`、Vercel deploy、Worker restart、真实 X/Codex 读取及 authenticated Reader 验收尚未发生。明确 marker 不重放 DDL，`20260731100000` 才是最终函数定义。
+- [x] **Step 1: 仅记录已发生的本地事实。** 将 project status 和工程日志更新为：远端 version `20260731084640` 已被本地历史 marker 对齐；本地验证通过；remote `db push`、Vercel deploy、Worker restart、真实 X/Codex 读取及 authenticated Reader 验收尚未发生。明确 marker 不重放 DDL，`20260731100000` 才是最终函数定义。
 
-- [ ] **Step 2: 运行最小本地 gate。**
+- [x] **Step 2: 运行最小本地 gate。**
 
 Run: `supabase db reset --yes && supabase test db supabase/tests/030_v2_x_migration_history_reconciliation.sql && supabase test db supabase/tests/023_v2_x_terminal_failure_scheduler.sql && bash scripts/v0/redact-check.sh && git diff --check`
 
 Expected: all commands exit 0; no secret, raw content or ignored `node_modules` path is staged.
 
-- [ ] **Step 3: 提交文档与本地证据。**
+- [x] **Step 3: 提交文档与本地证据。**
 
 ```bash
 git add docs/project-status.md docs/engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md
@@ -112,7 +112,7 @@ git commit -m "docs(v2): record migration history reconciliation"
 - Consumes: Task 2 完成的 `main` commit、Supabase linked project、Vercel production alias 与本机 `com.investhub.x-worker`。
 - Produces: 十条 judgement migrations 的生产 history、Ready deployment、已重启的 X Worker 和受认证 `/x` 验收记录。
 
-- [ ] **Step 1: 以精确 commit 范围推送 main，并在写入前执行远端 dry-run。**
+- [x] **Step 1: 以精确 commit 范围推送 main，并在写入前执行远端 dry-run。**
 
 ```bash
 git push origin main
@@ -122,7 +122,7 @@ supabase db push --linked --dry-run
 
 Expected: history maps `20260731084640` both locally and remotely; dry-run lists exactly `20260731100000`, `20260801090000`, `20260801100000`, `20260801120000`, `20260801130000`, `20260801140000`, `20260801150000`, `20260801160000`, `20260801170000`, and `20260801180000`, with no missing-local-history error.
 
-- [ ] **Step 2: 仅在 dry-run 完全匹配后应用 migration，并只读核对结果。**
+- [x] **Step 2: 仅在 dry-run 完全匹配后应用 migration，并只读核对结果。**
 
 ```bash
 supabase db push --linked
@@ -133,7 +133,7 @@ supabase db query --linked --output-format json "select position('deferred_sourc
 
 Expected: all eleven versions are returned; `preserves_terminal_failure_isolation` is `true`.
 
-- [ ] **Step 3: 部署同一 main commit，并确认正式别名 Ready。**
+- [x] **Step 3: 部署同一 main commit，并确认正式别名 Ready。**
 
 ```bash
 cd apps/control-plane
@@ -144,7 +144,7 @@ curl --noproxy '*' --silent --show-error --max-time 20 --location --output /dev/
 
 Expected: Vercel target is `production` and status is `Ready`; anonymous `/x` resolves to the login route rather than exposing Reader data.
 
-- [ ] **Step 4: 重启并核对 X Worker，不手动伪造 judgement 输入。**
+- [x] **Step 4: 重启并核对 X Worker，不手动伪造 judgement 输入。**
 
 ```bash
 launchctl kickstart -k "gui/$(id -u)/com.investhub.x-worker"
@@ -153,9 +153,9 @@ bash scripts/v2/verify-launchd-x-worker.sh
 
 Expected: launchd reports `com.investhub.x-worker` loaded with its configured X-only executable and configuration. The normal scheduler, not an ad-hoc script, is allowed to claim a future judgement batch.
 
-- [ ] **Step 5: 使用已认证普通用户会话验收 `/x`。** 打开正式 `/x`，确认最新上海日期在首位、判断总结在单博主卡片前、每位博主独立分块、来源/日期筛选仍可用，375px 宽度不横向溢出；仅记录是否通过和可回溯 version，不复制真实帖子、Prompt、模型响应、Cookie 或内部 ID。
+- [x] **Step 5: 使用已认证普通用户会话验收 `/x`。** 打开正式 `/x`，确认最新上海日期在首位、判断总结在单博主卡片前、每位博主独立分块、来源/日期筛选仍可用，375px 宽度不横向溢出；仅记录是否通过和可回溯 version，不复制真实帖子、Prompt、模型响应、Cookie 或内部 ID。
 
-- [ ] **Step 6: 将实际生产结果写回工程记录与状态并提交。** 文档必须逐项写明 remote migration、deployment、Worker restart 和 Reader 验收的真实状态与 commit/deployment ID；任何未执行或失败步骤保持未完成，不得以本地测试替代。然后运行 `bash scripts/v0/redact-check.sh && git diff --check` 并提交：
+- [x] **Step 6: 将实际生产结果写回工程记录与状态并提交。** 文档必须逐项写明 remote migration、deployment、Worker restart 和 Reader 验收的真实状态与 commit/deployment ID；任何未执行或失败步骤保持未完成，不得以本地测试替代。然后运行 `bash scripts/v0/redact-check.sh && git diff --check` 并提交：
 
 ```bash
 git add docs/project-status.md docs/engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md
