@@ -22,6 +22,12 @@ control-plane 目录被精确链接到 Vercel 项目 `invest-hub-v1-control-plan
 
 已认证普通用户会话在正式 `/x` 完成了实际验收。只记录结构性结果，不复制真实内容：页面无错误覆盖层；包含博主与日期两个筛选控件；10 个日期卡片按降序；每个卡片的结构为日期、当日判断总结、单个博主观点；页面存在 3 个 judgement batch 和 47 个独立博主区块。375px 本地截图检查显示页面没有横向溢出，筛选与当日判断总结均保持可读。
 
+## 当日判断延迟结算宽限期发布（2026-08-03）
+
+用户授权后，`20260802160849_x_daily_judgement_grace_deadline.sql` 已在 production 应用，远端 history 已独立核对包含该版本。它只对正常调度器在此后新建的 X batch 生效：同一上海 `natural_date` 的 08:00、12:00、16:00、20:00 与次日 00:00 cutoff 统一在次日 01:00 结算；既有 batch、来源结算、coverage、judgement run 和 version 均保持不可变。实际 migration 应用后的本地 catalog 缓存出现证书文件缺失警告，但远端 migration list 已确认该版本存在，因此不以该缓存警告否定已应用结果。
+
+控制面 production deployment `dpl_6FSB8fZgQok6JpZUHweZQvjYKhwB` 为 Ready，稳定入口仍为 `https://invest-hub-v0-control-plane.vercel.app/x`；匿名请求继续重定向登录页，`com.investhub.x-worker` check-only 为 loaded。已认证生产 Reader 的只读验收确认日期、当日判断总结、单个博主观点顺序保持正确；历史超时 batch 显示“采集超时，未形成判断”，展开后显示未纳入来源与结算截止前未完成采集的说明，页面不存在内部排除字段。当天存在较晚窗口的博主卡按最新窗口投影，未出现可单独展示的超时卡；该卡的专用提示已由组件测试覆盖。没有手工创建采集任务、调用 Provider 或回写历史数据。
+
 ## 本地验证结果
 
 | 范围 | 命令 | 结果 |

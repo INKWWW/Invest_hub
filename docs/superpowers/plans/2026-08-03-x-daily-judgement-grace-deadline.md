@@ -96,7 +96,7 @@ supabase test db --local supabase/tests/029_v2_x_daily_judgement_final_authority
 
 Expected: all focused files pass. Confirm the migration does not mutate pre-existing rows by asserting it has no `update public.x_collection_batches` statement.
 
-- [ ] **Step 5: Commit the database change**
+- [x] **Step 5: Commit the database change**
 
 ```bash
 git add supabase/migrations/20260802160849_x_daily_judgement_grace_deadline.sql supabase/tests/031_v2_x_daily_judgement_grace_deadline.sql
@@ -157,7 +157,7 @@ npm test -- src/lib/db/repositories/reader-source-navigation.test.ts src/compone
 
 Expected: PASS. Verify serialized repository output does not contain `settlement_deadline_exceeded` or other internal fields.
 
-- [ ] **Step 5: Commit the Reader change**
+- [x] **Step 5: Commit the Reader change**
 
 ```bash
 git add apps/control-plane/src/lib/db/repositories/reader.ts apps/control-plane/src/lib/db/repositories/reader-source-navigation.test.ts apps/control-plane/src/components/reader/XReader.tsx apps/control-plane/src/components/reader/x-reader.test.tsx
@@ -187,18 +187,18 @@ cd ../.. && bash scripts/v0/redact-check.sh && git diff --check
 
 Expected: all commands exit zero. Treat the known local Turbopack external-`node_modules` symlink failure as an environment limitation only if it recurs; do not present Webpack as a substitute for the required suite.
 
-- [ ] **Step 2: Update redacted project records**
+- [x] **Step 2: Update redacted project records**
 
 Record that new batch deadlines are Shanghai `natural_date + 1 day 01:00`, prior batches remain immutable, timeout copy is derived from a safe boolean only, and production still has the local-machine / logged-in-X conditional boundary. Do not record real posts, names, prompts, secrets, IDs, or internal exclusion codes.
 
-- [ ] **Step 3: Commit release documentation**
+- [x] **Step 3: Commit release documentation**
 
 ```bash
 git add docs/project-status.md docs/engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md docs/superpowers/plans/2026-08-03-x-daily-judgement-grace-deadline.md
 git commit -m "docs(v2): record X judgement grace deadline"
 ```
 
-- [ ] **Step 4: Publish the reviewed branch and migrate production safely**
+- [x] **Step 4: Publish the reviewed branch and migrate production safely**
 
 Run on the exact reviewed `main` commit after local merge:
 
@@ -211,10 +211,10 @@ supabase migration list --linked
 
 Expected: the dry-run lists only `20260803090000_x_daily_judgement_grace_deadline.sql`; after push, local and remote versions match. If any unknown remote history appears, stop; do not use `migration repair`, `db pull`, or Dashboard SQL.
 
-- [ ] **Step 5: Deploy, verify Worker, and accept the real Reader**
+- [x] **Step 5: Deploy, verify Worker, and accept the real Reader**
 
 Deploy the exact `main` commit to the already linked Control Plane Vercel project, then verify its stable `/x` alias. Check `com.investhub.x-worker` is loaded without invoking a fake collection or Provider run. In an authenticated production browser session, verify the normal Reader structure still renders and, using only safe DOM text/structure inspection, confirm the new timeout wording is present if a historical timed-out batch is available; otherwise confirm no internal error or data leak and record that semantic UI copy was covered by deterministic tests rather than fabricating a timeout batch.
 
-- [ ] **Step 6: Final verification and handoff**
+- [x] **Step 6: Final verification and handoff**
 
 Re-run `git status --short`, `git log -1 --oneline`, the stable production `/x` HTTP check, and a final authenticated Reader check. Report actual migration/deployment/Worker/Reader evidence and the stable URL. Do not claim cloud or unattended reliability.
