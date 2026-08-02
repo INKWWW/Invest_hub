@@ -123,7 +123,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .reader-source-card { border: 1px solid #b8ceca; border-left: 4px solid #2d6872; background: #fffefa; box-shadow: 0 1px 0 rgba(23, 37, 45, 0.04); padding: clamp(1.15rem, 2.5vw, 1.6rem); }
 
-.reader-content h2.x-reader-author { margin: 0; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.45rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.035em; }
+.x-reader-author-strip { display: grid; gap: 0.2rem; border-left: 6px solid #1f6570; background: #e7f0ec; padding: 0.85rem 1rem; }
+
+.x-reader-author-strip p { margin: 0; color: #547077; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+
+.reader-content h3.x-reader-author { margin: 0; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.45rem, 3vw, 2rem); font-weight: 700; letter-spacing: -0.035em; }
 
 .reader-day-list { display: grid; gap: 1.25rem; margin-top: 1.15rem; }
 

@@ -50,7 +50,7 @@ describe("XReader", () => {
 
     expect(html.indexOf("2099-01-02")).toBeLessThan(html.indexOf("2099-01-01"));
     expect(html.indexOf("当日判断总结")).toBeLessThan(html.indexOf("单个博主观点"));
-    expect(html.indexOf("跨博主股票判断")).toBeLessThan(html.indexOf('<h3 class="x-reader-author">Second Author</h3>'));
+    expect(html.indexOf("跨博主股票判断")).toBeLessThan(html.indexOf('<header class="x-reader-author-strip"><p>博主</p><h3 class="x-reader-author">Second Author</h3></header>'));
     expect(html).toContain('class="x-reader-bloggers"');
     expect(html.match(/class="x-reader-blogger"/g) ?? []).toHaveLength(2);
     expect(html).not.toContain('class="reader-source-card"');
@@ -64,7 +64,7 @@ describe("XReader", () => {
     expect(html).toContain("采集超时，未形成判断");
     expect(html).toContain("其中 1 位因采集未在结算截止前完成。");
     expect(html.indexOf("最新博主观点")).toBeLessThan(html.indexOf("较早博主观点"));
-    expect(html.indexOf('<h3 class="x-reader-author">Second Author</h3>')).toBeLessThan(html.indexOf('<h3 class="x-reader-author">Third Author</h3>'));
+    expect(html.indexOf('<header class="x-reader-author-strip"><p>博主</p><h3 class="x-reader-author">Second Author</h3></header>')).toBeLessThan(html.indexOf('<header class="x-reader-author-strip"><p>博主</p><h3 class="x-reader-author">Third Author</h3></header>'));
     expect(html.indexOf("第三位最新观点")).toBeLessThan(html.indexOf("第三位较早观点"));
     expect(html).toContain('<details class="x-reader-segment" open="">');
     expect(html).toContain('<details class="x-reader-segment">');
