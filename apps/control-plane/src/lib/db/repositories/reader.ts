@@ -70,6 +70,7 @@ type XReaderSegment = {
 export type XReaderBlogger = {
   source: { sourceKey: string; displayName: string };
   status: ReaderStatus;
+  timedOut: boolean;
   segments: XReaderSegment[];
 };
 
@@ -94,6 +95,7 @@ export type XReaderDate = {
       marketIndustryViewpoints: ReaderJudgement[];
       uncertainties: string[];
       excludedSourceCount: number;
+      timedOutSourceCount: number;
       revisionHistory: XReaderJudgementRevision[];
     }>;
   };
@@ -280,7 +282,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       .select("batch_id,revision,coverage_status,output").in("batch_id", ids)
       .order("batch_id", { ascending: true }).order("revision", { ascending: false }).range(from, to)),
     readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_collection_batch_sources")
-      .select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status").in("batch_id", ids)
+      .select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status,exclusion_code").in("batch_id", ids)
       .order("batch_id", { ascending: true }).order("source_id", { ascending: true }).range(from, to)),
   ]);
 
@@ -331,6 +333,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       cutoffAt: batch.cutoff_at,
       status: judgementStatus(batch.status),
       excludedSourceCount: batchRows.filter((row) => row.settlement_status === "excluded").length,
+      timedOutSourceCount: batchRows.filter((row) => row.settlement_status === "excluded" && row.exclusion_code === "settlement_deadline_exceeded").length,
       ...current,
       revisionHistory: batchVersions.slice(1).map((version) => judgementRevision(version, displayNamesBySourceId)),
     };
@@ -389,6 +392,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
         status: batchSource
           ? batchSourceReaderStatus(batchSource, taskId ? taskById.get(taskId) : undefined, taskId ? attemptResultByTaskId.get(taskId) : undefined)
           : "succeeded" as const,
+        timedOut: batchSource?.settlement_status === "excluded" && batchSource.exclusion_code === "settlement_deadline_exceeded",
         segments: projectedSegments,
       }];
     }).sort((left, right) => left.source.displayName.localeCompare(right.source.displayName));

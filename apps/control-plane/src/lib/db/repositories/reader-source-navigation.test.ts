@@ -85,13 +85,13 @@ describe("X reader date projection", () => {
       { batch_id: "batch-20", revision: 2, coverage_status: "complete", output: { stock_viewpoints: [{ statement: "latest", supporting_source_ids: ["source-b"], dissenting_source_ids: ["source-a"], analysis_ids: ["analysis-2"], evidence_post_ids: ["post-2"], uncertainties: ["uncertain"] }], market_industry_viewpoints: [], uncertainties: [] } },
     ]);
     databaseMocks.rows.set("x_collection_batch_sources", [
-      { batch_id: "batch-16", source_id: "source-a", source_display_name: "Alpha at sixteen", x_sync_task_id: "task-a-16", settlement_status: "excluded" },
+      { batch_id: "batch-16", source_id: "source-a", source_display_name: "Alpha at sixteen", x_sync_task_id: "task-a-16", settlement_status: "excluded", exclusion_code: "settlement_deadline_exceeded" },
       { batch_id: "batch-16", source_id: "source-c", source_display_name: "Gamma archived", x_sync_task_id: "task-c-16", settlement_status: "included" },
       { batch_id: "batch-20", source_id: "source-a", source_display_name: "Alpha", x_sync_task_id: "task-a-20", settlement_status: "included" },
       { batch_id: "batch-20", source_id: "source-b", source_display_name: "Beta", x_sync_task_id: "task-b-20", settlement_status: "no_new_information" },
       { batch_id: "batch-pending", source_id: "source-a", source_display_name: "Alpha", x_sync_task_id: "task-a-pending", settlement_status: "pending" },
       { batch_id: "batch-pending", source_id: "source-b", source_display_name: "Beta", x_sync_task_id: "task-b-failed", settlement_status: "excluded" },
-      { batch_id: "batch-pending", source_id: "source-c", source_display_name: "Gamma archived", x_sync_task_id: "task-c-delayed", settlement_status: "excluded" },
+      { batch_id: "batch-pending", source_id: "source-c", source_display_name: "Gamma archived", x_sync_task_id: "task-c-delayed", settlement_status: "excluded", exclusion_code: "settlement_deadline_exceeded" },
     ]);
     databaseMocks.rows.set("sync_tasks", [
       { id: "task-a-16", source_id: "source-a", status: "failed", updated_at: "2099-01-03T00:00:00.000Z" },
@@ -120,7 +120,7 @@ describe("X reader date projection", () => {
       stockViewpoints: [{ statement: "latest", supportingDisplayNames: ["Beta"], dissentingDisplayNames: ["Alpha"] }],
       revisionHistory: [{ revision: 1, coverageStatus: "complete", stockViewpoints: [{ statement: "stale", supportingDisplayNames: ["Alpha"] }] }],
     });
-    expect(result[0]?.judgement.batches[1]).toMatchObject({ coverageStatus: "partial", excludedSourceCount: 1, stockViewpoints: [{ statement: "sixteen", supportingDisplayNames: ["Alpha at sixteen"] }] });
+    expect(result[0]?.judgement.batches[1]).toMatchObject({ coverageStatus: "partial", excludedSourceCount: 1, timedOutSourceCount: 1, stockViewpoints: [{ statement: "sixteen", supportingDisplayNames: ["Alpha at sixteen"] }] });
     expect(result[1]?.judgement.batches.map((batch) => batch.status)).toEqual(["judgement_pending", "judgement_failed"]);
     expect(result[0]?.bloggers).toEqual(expect.arrayContaining([
       expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "succeeded" }),
@@ -130,10 +130,10 @@ describe("X reader date projection", () => {
     expect(result[1]?.bloggers).toEqual(expect.arrayContaining([
       expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "processing", segments: [] }),
       expect.objectContaining({ source: { sourceKey: "beta", displayName: "Beta" }, status: "failed", segments: [] }),
-      expect.objectContaining({ source: { sourceKey: "gamma", displayName: "Gamma archived" }, status: "partial_failure", segments: [] }),
+      expect.objectContaining({ source: { sourceKey: "gamma", displayName: "Gamma archived" }, status: "partial_failure", timedOut: true, segments: [] }),
     ]));
     expect(databaseMocks.filters).not.toContainEqual({ table: "sources", field: "enabled", value: true });
-    for (const forbidden of ["analysis_ids", "evidence_post_ids", "analysis-2", "post-2", "provider", "task-a-20", "task-global-latest", "evidence_refs"]) expect(serialized).not.toContain(forbidden);
+    for (const forbidden of ["analysis_ids", "evidence_post_ids", "analysis-2", "post-2", "provider", "task-a-20", "task-global-latest", "evidence_refs", "settlement_deadline_exceeded"]) expect(serialized).not.toContain(forbidden);
   });
 
   it("publishes judgement coverage only when a persisted version proves it", async () => {
