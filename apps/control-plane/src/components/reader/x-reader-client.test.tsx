@@ -57,26 +57,26 @@ describe("XReader client selectors", () => {
     });
   });
 
-  it("retains date when source changes and retains source when date changes", () => {
+  it("keeps date selection in the current page without persisting it to the URL", () => {
     let tree = renderClient(undefined, "2099-01-02");
     const [source, date] = elements(tree, "select");
     source?.props?.onChange?.({ target: { value: "second" } });
 
     tree = renderClient(undefined, "2099-01-02");
     expect(elements(tree, "select")[0]?.props?.value).toBe("second");
-    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second&date=2099-01-02");
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second");
 
     elements(tree, "select")[1]?.props?.onChange?.({ target: { value: "2099-01-01" } });
     tree = renderClient(undefined, "2099-01-02");
     expect(elements(tree, "select")[1]?.props?.value).toBe("2099-01-01");
-    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second&date=2099-01-01");
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second");
   });
 
-  it("uses one normalized URL update and removes only selectors set to all", () => {
+  it("uses one normalized URL update and removes stale date parameters", () => {
     renderClient("second", "2099-01-02");
 
     expect(replaceState).toHaveBeenCalledTimes(1);
-    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second&date=2099-01-02");
+    expect(replaceState).toHaveBeenLastCalledWith(null, "", "/x?source=second");
 
     hooks.state = ["all", "all"];
     renderClient("second", "2099-01-02");
