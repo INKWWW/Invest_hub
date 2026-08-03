@@ -31,6 +31,22 @@ def enrolment_response() -> dict[str, object]:
     }
 
 
+def valid_v3_completion() -> dict[str, object]:
+    return {
+        "run_id": "judgement-run-1", "attempt": 1,
+        "schema_version": "v3-x-cross-blogger", "provider": "codex_cli",
+        "model_reported": None, "prompt_version": "v3-x-cross-blogger-1",
+        "security_industry_viewpoints": [{
+            "statement": "博主对公开 fixture 标的表达了条件性观点。",
+            "action_intent": "watch", "action_scope": "公开 fixture 标的", "conditions": ["等待公开条件确认"],
+            "supporting_source_ids": ["source-a"], "dissenting_source_ids": [],
+            "analysis_ids": ["post-a@1"], "evidence_post_ids": ["post-a"], "uncertainties": [],
+        }],
+        "market_structure_viewpoints": [], "strategy_mindset_viewpoints": [],
+        "uncertainties": ["公开 fixture 的覆盖限制"],
+    }
+
+
 class WorkerProtocolTests(unittest.TestCase):
     def test_enrol_persists_secret_but_never_the_raw_code(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -330,7 +346,7 @@ class WorkerProtocolTests(unittest.TestCase):
         }
         context = {
             "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
-            "prompt_version": "v2-x-cross-blogger-1",
+            "prompt_version": "v3-x-cross-blogger-1",
             "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
                 "id": "segment-1", "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
                 "viewpoints": ["观点"], "uncertainties": [], "analyses": [{
@@ -339,11 +355,7 @@ class WorkerProtocolTests(unittest.TestCase):
                 }],
             }]}], "excluded_sources": [{"source_id": "source-z", "display_name": "Z", "reason": "no_new_information"}],
         }
-        completion = {
-            "run_id": "judgement-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger", "provider": "codex_cli",
-            "model_reported": None, "prompt_version": "v2-x-cross-blogger-1", "stock_viewpoints": [],
-            "market_industry_viewpoints": [], "uncertainties": ["不足"],
-        }
+        completion = valid_v3_completion()
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()), (200, claim), (200, context), (200, {"status": "succeeded"}), (200, {"status": "retryable_failed"}))
             protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
@@ -363,11 +375,8 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertTrue(str(transport.calls[4]["url"]).endswith("/api/worker/x-daily-judgements/judgement-run-1/failure"))
 
     def test_x_daily_judgement_completion_rejects_unsafe_item_before_transport(self) -> None:
-        completion = {
-            "run_id": "judgement-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger", "provider": "codex_cli",
-            "model_reported": None, "prompt_version": "v2-x-cross-blogger-1", "stock_viewpoints": [{"statement": "only this"}],
-            "market_industry_viewpoints": [], "uncertainties": [],
-        }
+        completion = valid_v3_completion()
+        completion["security_industry_viewpoints"] = [{"statement": "only this"}]
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()))
             protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
@@ -379,11 +388,8 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(len(transport.calls), 1)
 
     def test_x_daily_judgement_completion_rejects_unsafe_model_telemetry_before_transport(self) -> None:
-        completion = {
-            "run_id": "judgement-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger", "provider": "codex_cli",
-            "model_reported": "C:\\private\\model", "prompt_version": "v2-x-cross-blogger-1", "stock_viewpoints": [],
-            "market_industry_viewpoints": [], "uncertainties": [],
-        }
+        completion = valid_v3_completion()
+        completion["model_reported"] = "C:\\private\\model"
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()))
             protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
@@ -393,6 +399,41 @@ class WorkerProtocolTests(unittest.TestCase):
                 protocol.complete_x_daily_judgement(completion)
 
             self.assertEqual(len(transport.calls), 1)
+
+    def test_x_daily_judgement_completion_rejects_non_string_top_level_uncertainty_before_transport(self) -> None:
+        completion = valid_v3_completion()
+        completion["uncertainties"] = [1]
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            with self.assertRaisesRegex(ProtocolError, "invalid x daily judgement completion"):
+                protocol.complete_x_daily_judgement(completion)
+
+            self.assertEqual(len(transport.calls), 1)
+
+    def test_x_daily_judgement_protocol_rejects_v2_context_and_completion_before_transport(self) -> None:
+        v2_context = {
+            "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
+            "prompt_version": "v2-x-cross-blogger-1", "sources": [], "excluded_sources": [],
+        }
+        v2_completion = {
+            "run_id": "judgement-run-1", "attempt": 1, "schema_version": "v2-x-cross-blogger", "provider": "codex_cli",
+            "model_reported": None, "prompt_version": "v2-x-cross-blogger-1", "stock_viewpoints": [],
+            "market_industry_viewpoints": [], "uncertainties": [],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, v2_context))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            with self.assertRaisesRegex(ProtocolError, "invalid x daily judgement context"):
+                protocol.get_x_daily_judgement_context("judgement-run-1", 1)
+            with self.assertRaisesRegex(ProtocolError, "invalid x daily judgement completion"):
+                protocol.complete_x_daily_judgement(v2_completion)
+
+            self.assertEqual(len(transport.calls), 2)
 
 
 if __name__ == "__main__":

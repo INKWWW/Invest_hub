@@ -336,6 +336,22 @@ class WorkerRecoveryTests(unittest.TestCase):
         self.assertEqual(protocol.range_completions, [])
         self.assertEqual(protocol.judgement_failures, [{"run_id": "judgement-run-1", "attempt": 1, "failure_class": "provider_failure"}])
 
+    def test_judgement_protocol_rejection_is_reported_as_schema_error(self) -> None:
+        class ProtocolRejectingContext(FakeProtocol):
+            def get_x_daily_judgement_context(self, _run_id: str, _attempt: int) -> dict[str, object]:
+                raise ProtocolError("invalid x daily judgement context")
+
+        protocol = ProtocolRejectingContext()
+        protocol.judgement_claim_value = {
+            "run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
+            "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"},
+        }
+
+        outcome = Worker(protocol).run_x_daily_judgement_once(lambda _claim, _context: {})
+
+        self.assertEqual(outcome.status, "recovering")
+        self.assertEqual(protocol.judgement_failures, [{"run_id": "judgement-run-1", "attempt": 1, "failure_class": "schema_error"}])
+
     def test_no_ready_judgement_is_a_no_task_without_invoking_runtime(self) -> None:
         protocol = FakeProtocol()
         invoked: list[bool] = []
