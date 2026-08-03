@@ -6,7 +6,7 @@ v3 Prompt 发布后，`XDailyJudgementRuntime` 已固定构造 `v3-x-cross-blogg
 
 用户批准的最小修复只改 Worker 的本地 HTTP 边界：context 只接受 v3 prompt version，completion 只接受三类 v3 arrays 及其行动倾向、范围、条件、来源、分析、证据和不确定性字段；Runtime 继续是来源归属、证据闭包、opaque ID 和系统建议的权威验证点。Worker 对 ProtocolError 现在提交 `schema_error`。未改数据库、控制面、Reader、调度、单帖/窗口 Prompt 或任何历史 judgement，也未手工创建任务、调用 Provider 或回写生产记录。
 
-TDD 先证明有效 v3 context 被旧 Protocol 拒绝、v2 却被旧 Protocol 接受，并证明旧 ProtocolError 被记为 `persistence_failure`；最小实现后，聚焦 Protocol 18 tests、Worker recovery 13 tests 和完整 Worker 168 tests 全部通过。`git diff --check` 与 `bash scripts/v0/redact-check.sh` 均通过。待同一提交推送和 Worker reload 后，只以正常调度产生后续 judgement；不会回刷 2026-08-03 或恢复其终态失败 run。
+TDD 先证明有效 v3 context 被旧 Protocol 拒绝、v2 却被旧 Protocol 接受，并证明旧 ProtocolError 被记为 `persistence_failure`；最小实现后，聚焦 Protocol 18 tests、Worker recovery 13 tests 和完整 Worker 168 tests 全部通过。`git diff --check` 与 `bash scripts/v0/redact-check.sh` 均通过。提交 `4b6ba4a` 已推送到 `origin/main`；`com.investhub.x-worker` 已用 `launchctl kickstart -k` 重启，launchd 状态为 `running`，进程工作目录为本仓库 checkout。只读数据库查询确认本次没有创建 run，2026-08-03 20:00 与次日 00:00 的三个 attempt 终态失败记录仍不可变地保留。没有控制面、数据库或 Reader 改动，故不做 Vercel deployment；后续仅由下一次正常 scheduler 产生新的 v3 judgement，不会回刷 2026-08-03 或恢复其终态失败 run。
 
 ## Prompt v3 本地验收（2026-08-03）
 

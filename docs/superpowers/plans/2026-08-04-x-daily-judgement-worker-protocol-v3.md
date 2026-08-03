@@ -130,12 +130,12 @@
 
   Expected: 差异检查与脱敏检查通过；只包含本 Plan 允许的 Worker、测试和治理记录文件。
 
-- [ ] **Step 3: 提交并推送经过验证的代码。**
+- [x] **Step 3: 提交并推送经过验证的代码。**
 
   Run: `git add workers/v0/src/invest_hub_worker/protocol.py workers/v0/src/invest_hub_worker/worker.py workers/v0/tests/test_protocol.py workers/v0/tests/test_worker_recovery.py docs/engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md docs/project-status.md docs/superpowers/plans/2026-08-04-x-daily-judgement-worker-protocol-v3.md && git commit -m "fix: align X daily judgement worker protocol with v3" && git push origin main`
 
   Expected: `main` 与 `origin/main` 指向同一已验证提交；不使用强推。
 
-- [ ] **Step 4: 更新本机 Worker 并进行只读生产验收。**
+- [x] **Step 4: 更新本机 Worker 并进行只读生产验收。**
 
-  在确认本地 checkout 与 `origin/main` 完全一致后，重启 `com.investhub.x-worker` 使其加载该提交。仅查询 Worker loaded 状态、后续正常 judgement run 的 status/failure_class 和已认证 `/x` 的只读投影；不手工创建任务、不回刷 2026-08-03、不开启 regeneration、不调用 Provider。将实际命令和结果写入工程记录和项目状态。
+  在确认本地 checkout 与 `origin/main` 完全一致后，已重启 `com.investhub.x-worker` 并查询 launchd/进程、近期 run 的 status/failure_class。此次修复不改控制面或 Reader，且没有正常新 run 可投影，因此不以旧 Reader 页面伪造 v3 验收；不手工创建任务、不回刷 2026-08-03、不开启 regeneration、不调用 Provider。实际结果已写入工程记录和项目状态。
