@@ -82,7 +82,7 @@ describe("X reader date projection", () => {
     databaseMocks.rows.set("x_daily_judgement_versions", [
       { batch_id: "batch-16", revision: 1, coverage_status: "partial", output: { stock_viewpoints: [{ statement: "sixteen", supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["analysis-16"], evidence_post_ids: ["post-16"], uncertainties: [] }], market_industry_viewpoints: [], uncertainties: [] } },
       { batch_id: "batch-20", revision: 1, coverage_status: "complete", output: { stock_viewpoints: [{ statement: "stale", supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["analysis-1"], evidence_post_ids: ["post-1"], uncertainties: [] }], market_industry_viewpoints: [], uncertainties: [] } },
-      { batch_id: "batch-20", revision: 2, coverage_status: "complete", output: { stock_viewpoints: [{ statement: "latest", supporting_source_ids: ["source-b"], dissenting_source_ids: ["source-a"], analysis_ids: ["analysis-2"], evidence_post_ids: ["post-2"], uncertainties: ["uncertain"] }], market_industry_viewpoints: [], uncertainties: [] } },
+      { batch_id: "batch-20", revision: 2, coverage_status: "complete", output: { security_industry_viewpoints: [{ statement: "latest", action_intent: "buy", action_scope: "测试个股", conditions: ["等待趋势确认"], supporting_source_ids: ["source-b"], dissenting_source_ids: ["source-a"], analysis_ids: ["analysis-2"], evidence_post_ids: ["post-2"], uncertainties: ["uncertain"] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [{ statement: "strategy", action_intent: "watch", action_scope: "高波动市场", conditions: ["等待波动收敛"], supporting_source_ids: ["source-b"], dissenting_source_ids: [], analysis_ids: ["analysis-2"], evidence_post_ids: ["post-2"], uncertainties: [] }], uncertainties: [] } },
     ]);
     databaseMocks.rows.set("x_collection_batch_sources", [
       { batch_id: "batch-16", source_id: "source-a", source_display_name: "Alpha at sixteen", x_sync_task_id: "task-a-16", settlement_status: "excluded", exclusion_code: "settlement_deadline_exceeded" },
@@ -117,7 +117,8 @@ describe("X reader date projection", () => {
     expect(result[0]?.judgement.batches.map((batch) => batch.cutoffAt)).toEqual(["2099-01-02T12:00:00.000Z", "2099-01-02T08:00:00.000Z"]);
     expect(result[0]?.judgement.batches[0]).toMatchObject({
       revision: 2,
-      stockViewpoints: [{ statement: "latest", supportingDisplayNames: ["Beta"], dissentingDisplayNames: ["Alpha"] }],
+      stockViewpoints: [{ statement: "latest", actionIntent: "buy", actionScope: "测试个股", conditions: ["等待趋势确认"], supportingDisplayNames: ["Beta"], dissentingDisplayNames: ["Alpha"] }],
+      strategyMindsetViewpoints: [{ statement: "strategy", actionIntent: "watch", actionScope: "高波动市场", conditions: ["等待波动收敛"], supportingDisplayNames: ["Beta"] }],
       revisionHistory: [{ revision: 1, coverageStatus: "complete", stockViewpoints: [{ statement: "stale", supportingDisplayNames: ["Alpha"] }] }],
     });
     expect(result[0]?.judgement.batches[0]).toMatchObject({ coverageStatus: "complete", includedSourceCount: 1, noNewSourceCount: 1 });

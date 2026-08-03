@@ -10,7 +10,7 @@ const days = [{
     batches: [{
       cutoffAt: "2099-01-02T12:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 2,
       stockViewpoints: [{ statement: "跨博主股票判断", supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: [] }],
-      marketIndustryViewpoints: [], uncertainties: [], excludedSourceCount: 1, timedOutSourceCount: 0,
+      marketIndustryViewpoints: [], strategyMindsetViewpoints: [{ statement: "一位博主建议保持观望。", actionIntent: "watch", actionScope: "高波动市场", conditions: ["等待趋势确认"], supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: [] }], uncertainties: [], excludedSourceCount: 1, timedOutSourceCount: 0,
       includedSourceCount: 4, noNewSourceCount: 2,
       revisionHistory: [{
         revision: 1, coverageStatus: "partial",
@@ -61,6 +61,9 @@ describe("XReader", () => {
     expect(html).toContain("修订版本 1");
     expect(html).toContain("输入覆盖：4 位博主观点已纳入，2 位无新增信息，1 位未纳入。");
     expect(html).toContain("下方主题仅列出直接支持或反对该主题的博主。");
+    expect(html).toContain("投资策略与心态");
+    expect(html).toContain("博主倾向：观望（高波动市场）");
+    expect(html).toContain("条件：等待趋势确认");
     expect(html).toContain("采集超时，未形成判断");
     expect(html).toContain("其中 1 位因采集未在结算截止前完成。");
     expect(html.indexOf("最新博主观点")).toBeLessThan(html.indexOf("较早博主观点"));

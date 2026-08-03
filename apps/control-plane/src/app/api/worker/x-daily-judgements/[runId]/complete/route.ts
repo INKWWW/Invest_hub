@@ -11,7 +11,7 @@ import {
 
 const completionKeys = [
   "run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version",
-  "stock_viewpoints", "market_industry_viewpoints", "uncertainties",
+  "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties",
 ].sort();
 const strongConsensusWording = /共识|一致认为|共同认为|市场(?:已经|已)?确认/u;
 
@@ -47,9 +47,13 @@ function isJudgementItem(value: unknown): value is XDailyJudgementItem {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   return Object.keys(item).sort().join(",") === [
-    "analysis_ids", "dissenting_source_ids", "evidence_post_ids", "statement", "supporting_source_ids", "uncertainties",
+    "action_intent", "action_scope", "analysis_ids", "conditions", "dissenting_source_ids", "evidence_post_ids", "statement", "supporting_source_ids", "uncertainties",
   ].sort().join(",")
     && typeof item.statement === "string" && item.statement.length > 0 && item.statement.length <= 1000
+    && ["build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid", "none"].includes(String(item.action_intent))
+    && typeof item.action_scope === "string" && item.action_scope.length <= 300
+    && ((item.action_intent === "none" && item.action_scope === "") || (item.action_intent !== "none" && item.action_scope.trim().length > 0))
+    && isStringArray(item.conditions)
     && isStringArray(item.supporting_source_ids, 128) && isStringArray(item.dissenting_source_ids, 128)
     && isStringArray(item.analysis_ids, 128) && isStringArray(item.evidence_post_ids, 128)
     && isStringArray(item.uncertainties);
@@ -61,11 +65,12 @@ function isCompletion(value: unknown): value is XDailyJudgementCompletion {
   return Object.keys(completion).sort().join(",") === completionKeys.join(",")
     && typeof completion.run_id === "string" && typeof completion.attempt === "number"
     && Number.isInteger(completion.attempt) && completion.attempt > 0
-    && completion.schema_version === "v2-x-cross-blogger" && completion.provider === "codex_cli"
+    && completion.schema_version === "v3-x-cross-blogger" && completion.provider === "codex_cli"
     && isSafeModelReported(completion.model_reported)
-    && completion.prompt_version === "v2-x-cross-blogger-1"
-    && Array.isArray(completion.stock_viewpoints) && completion.stock_viewpoints.every(isJudgementItem)
-    && Array.isArray(completion.market_industry_viewpoints) && completion.market_industry_viewpoints.every(isJudgementItem)
+    && completion.prompt_version === "v3-x-cross-blogger-1"
+    && Array.isArray(completion.security_industry_viewpoints) && completion.security_industry_viewpoints.every(isJudgementItem)
+    && Array.isArray(completion.market_structure_viewpoints) && completion.market_structure_viewpoints.every(isJudgementItem)
+    && Array.isArray(completion.strategy_mindset_viewpoints) && completion.strategy_mindset_viewpoints.every(isJudgementItem)
     && isStringArray(completion.uncertainties);
 }
 
@@ -102,14 +107,14 @@ function referencesFrozenContext(completion: XDailyJudgementCompletion, judgemen
   ]);
   if (containsOpaqueId(completion.uncertainties, opaqueIds)) return false;
 
-  return [...completion.stock_viewpoints, ...completion.market_industry_viewpoints].every((item) => {
+  return [...completion.security_industry_viewpoints, ...completion.market_structure_viewpoints, ...completion.strategy_mindset_viewpoints].every((item) => {
     if (!isUnique(item.supporting_source_ids) || !isUnique(item.dissenting_source_ids)
       || !isUnique(item.analysis_ids) || !isUnique(item.evidence_post_ids)
       || item.analysis_ids.length === 0 || item.evidence_post_ids.length === 0
       || item.supporting_source_ids.some((id) => item.dissenting_source_ids.includes(id))
       || (strongConsensusWording.test(item.statement)
         && (item.supporting_source_ids.length < 2 || item.dissenting_source_ids.length > 0))
-      || containsOpaqueId([item.statement, ...item.uncertainties], opaqueIds)) return false;
+      || containsOpaqueId([item.statement, item.action_scope, ...item.conditions, ...item.uncertainties], opaqueIds)) return false;
 
     const itemSourceIds = new Set([...item.supporting_source_ids, ...item.dissenting_source_ids]);
     const citedAnalysisSourceIds = new Set<string>();

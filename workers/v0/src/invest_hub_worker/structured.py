@@ -60,6 +60,9 @@ V2_X_ANALYSIS_FIELDS = frozenset({"post_id", "blogger_viewpoint", "arguments", "
 V2_X_WINDOW_FIELDS = frozenset({"schema_version", "natural_date", "range_task_id", "occurred_from_at", "occurred_through_at", "window_viewpoints", "analysis_ids", "evidence_post_ids", "uncertainties"})
 V2_X_CROSS_BLOGGER_FIELDS = frozenset({"schema_version", "stock_viewpoints", "market_industry_viewpoints", "uncertainties"})
 V2_X_CROSS_BLOGGER_ITEM_FIELDS = frozenset({"statement", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"})
+V3_X_CROSS_BLOGGER_FIELDS = frozenset({"schema_version", "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties"})
+V3_X_CROSS_BLOGGER_ITEM_FIELDS = frozenset({"statement", "action_intent", "action_scope", "conditions", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"})
+V3_X_ACTION_INTENTS = frozenset({"build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid", "none"})
 _IMPERATIVE_INVESTMENT_RECOMMENDATION = re.compile(r"(?:系统\s*)?(?:建议|应当|应该|必须|请|立即).{0,24}(?:买入|卖出|加仓|减仓|建仓|清仓|抄底|追涨)")
 _STRONG_CONSENSUS_WORDING = re.compile(r"(?:共识|一致认为|共同认为|市场(?:已经|已)?确认)")
 
@@ -237,6 +240,122 @@ def parse_v2_x_cross_blogger_output(
         "schema_version": "v2-x-cross-blogger",
         "stock_viewpoints": normalized_items(payload["stock_viewpoints"], "stock"),
         "market_industry_viewpoints": normalized_items(payload["market_industry_viewpoints"], "market_industry"),
+        "uncertainties": list(payload["uncertainties"]),
+    }
+
+
+def parse_v3_x_cross_blogger_output(
+    text: str,
+    *,
+    allowed_source_ids: set[str],
+    allowed_analysis_ids: set[str],
+    allowed_post_ids: set[str],
+    analysis_source_ids: Mapping[str, str],
+    analysis_evidence_post_ids: Mapping[str, set[str]],
+    frozen_source_ids: set[str] | None = None,
+    opaque_context_ids: Mapping[str, set[str]] | None = None,
+) -> dict[str, object]:
+    """Validate v3 cross-blogger investment judgements before persistence."""
+
+    payload = _json_object(text)
+    _require_exact_fields(payload, V3_X_CROSS_BLOGGER_FIELDS, "invalid_v3_x_cross_blogger")
+    if payload.get("schema_version") != "v3-x-cross-blogger":
+        raise SchemaError("invalid_v3_x_cross_blogger", "schema_version must be v3-x-cross-blogger")
+    categories = ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")
+    if not all(isinstance(payload.get(category), list) for category in categories):
+        raise SchemaError("invalid_v3_x_cross_blogger", "viewpoints must be arrays")
+    if not _string_list(payload.get("uncertainties")):
+        raise SchemaError("invalid_v3_x_cross_blogger", "uncertainties must be a string array")
+    opaque_source_ids = frozen_source_ids if frozen_source_ids is not None else allowed_source_ids
+    if not allowed_source_ids <= opaque_source_ids or not all(_non_empty_string(source_id) for source_id in opaque_source_ids):
+        raise SchemaError("source", "frozen source catalog is invalid")
+    if set(analysis_source_ids) != allowed_analysis_ids or set(analysis_evidence_post_ids) != allowed_analysis_ids:
+        raise SchemaError("analysis", "analysis ownership catalog is incomplete")
+    for analysis_id in allowed_analysis_ids:
+        source_id = analysis_source_ids.get(analysis_id)
+        evidence_ids = analysis_evidence_post_ids.get(analysis_id)
+        if source_id not in allowed_source_ids or not isinstance(evidence_ids, set) or not evidence_ids or not evidence_ids <= allowed_post_ids:
+            raise SchemaError("analysis", "analysis ownership catalog is invalid")
+    context_catalog = opaque_context_ids or {}
+    if not set(context_catalog) <= {"batch", "run", "segment"} or any(
+        not isinstance(opaque_ids, set) or not all(_non_empty_string(opaque_id) for opaque_id in opaque_ids)
+        for opaque_ids in context_catalog.values()
+    ):
+        raise SchemaError("context", "opaque context catalog is invalid")
+    opaque_catalogs = (
+        ("batch", context_catalog.get("batch", set())),
+        ("run", context_catalog.get("run", set())),
+        ("segment", context_catalog.get("segment", set())),
+        ("analysis", allowed_analysis_ids),
+        ("source", opaque_source_ids),
+        ("evidence", allowed_post_ids),
+    )
+    for opaque_kind, opaque_ids in opaque_catalogs:
+        _reject_opaque_ids(payload["uncertainties"], opaque_ids, opaque_kind)
+
+    def normalized_items(values: list[object], category: str) -> list[dict[str, object]]:
+        result: list[dict[str, object]] = []
+        for index, value in enumerate(values):
+            if not isinstance(value, Mapping):
+                raise SchemaError("invalid_v3_x_cross_blogger_item", f"{category} item {index} must be an object")
+            _require_exact_fields(value, V3_X_CROSS_BLOGGER_ITEM_FIELDS, "invalid_v3_x_cross_blogger_item")
+            statement = value["statement"]
+            if not _non_empty_string(statement):
+                raise SchemaError("invalid_v3_x_cross_blogger_item", "statement must be a non-empty string")
+            if _IMPERATIVE_INVESTMENT_RECOMMENDATION.search(statement):
+                raise SchemaError("invalid_v3_x_cross_blogger_item", "imperative system investment recommendation is not allowed")
+            action_intent = value["action_intent"]
+            action_scope = value["action_scope"]
+            if action_intent not in V3_X_ACTION_INTENTS:
+                raise SchemaError("action intent", "action intent is invalid")
+            if not isinstance(action_scope, str) or (action_intent == "none" and action_scope) or (action_intent != "none" and not action_scope.strip()):
+                raise SchemaError("action scope", "action scope is inconsistent with action intent")
+            if not _string_list(value["conditions"]):
+                raise SchemaError("conditions", "conditions must be a string array")
+            for opaque_kind, opaque_ids in opaque_catalogs:
+                _reject_opaque_ids([statement, action_scope], opaque_ids, opaque_kind)
+                _reject_opaque_ids(value["conditions"], opaque_ids, opaque_kind)
+            supporting = value["supporting_source_ids"]
+            dissenting = value["dissenting_source_ids"]
+            if not _string_list(supporting) or not _string_list(dissenting) or len(set(supporting)) != len(supporting) or len(set(dissenting)) != len(dissenting):
+                raise SchemaError("invalid_v3_x_cross_blogger_item", "source IDs must be unique string arrays")
+            if not set(supporting) <= allowed_source_ids or not set(dissenting) <= allowed_source_ids:
+                raise SchemaError("source", "unknown source")
+            if set(supporting) & set(dissenting):
+                raise SchemaError("source", "source cannot be both supporting and dissenting")
+            if _STRONG_CONSENSUS_WORDING.search(statement) and (len(supporting) < 2 or dissenting):
+                raise SchemaError("consensus", "strong consensus wording requires two independent supporting sources and no dissenting source")
+            analyses = value["analysis_ids"]
+            if not _non_empty_string_list(analyses) or len(set(analyses)) != len(analyses):
+                raise SchemaError("analysis", "analysis IDs must be unique and non-empty")
+            if not set(analyses) <= allowed_analysis_ids:
+                raise SchemaError("analysis", "unknown analysis")
+            evidence = value["evidence_post_ids"]
+            if not _non_empty_string_list(evidence):
+                raise SchemaError("evidence", "evidence must be non-empty")
+            if len(set(evidence)) != len(evidence):
+                raise SchemaError("evidence", "duplicate evidence ID")
+            if not set(evidence) <= allowed_post_ids:
+                raise SchemaError("evidence", "unknown evidence post")
+            if not _string_list(value["uncertainties"]):
+                raise SchemaError("invalid_v3_x_cross_blogger_item", "uncertainties must be a string array")
+            for opaque_kind, opaque_ids in opaque_catalogs:
+                _reject_opaque_ids(value["uncertainties"], opaque_ids, opaque_kind)
+            item_source_ids = set(supporting) | set(dissenting)
+            analysis_sources = {analysis_source_ids[analysis_id] for analysis_id in analyses}
+            if not analysis_sources <= item_source_ids or not item_source_ids <= analysis_sources:
+                raise SchemaError("source", "analysis source ownership does not match item sources")
+            analysis_evidence = set().union(*(analysis_evidence_post_ids[analysis_id] for analysis_id in analyses))
+            if set(evidence) != analysis_evidence:
+                raise SchemaError("evidence", "evidence posts must exactly match the referenced analyses")
+            result.append(dict(value))
+        return result
+
+    return {
+        "schema_version": "v3-x-cross-blogger",
+        "security_industry_viewpoints": normalized_items(payload["security_industry_viewpoints"], "security_industry"),
+        "market_structure_viewpoints": normalized_items(payload["market_structure_viewpoints"], "market_structure"),
+        "strategy_mindset_viewpoints": normalized_items(payload["strategy_mindset_viewpoints"], "strategy_mindset"),
         "uncertainties": list(payload["uncertainties"]),
     }
 

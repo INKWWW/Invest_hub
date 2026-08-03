@@ -21,7 +21,7 @@ from .structured import (
     SchemaError,
     parse_v1_1_chunk_output,
     parse_v2_x_chunk_output,
-    parse_v2_x_cross_blogger_output,
+    parse_v3_x_cross_blogger_output,
     parse_v2_x_window_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -43,7 +43,7 @@ class XDailyJudgementRuntime:
             raise ValueError("prompt_template must be non-empty")
         self.provider = provider
         self.prompt_template = prompt_template
-        self.public_template = _read_public_prompt("v2_x_cross_blogger.md")
+        self.public_template = _read_public_prompt("v3_x_cross_blogger.md")
 
     def execute(self, claim: dict[str, object], context: dict[str, object]) -> dict[str, object]:
         run_id = claim.get("run_id")
@@ -72,13 +72,13 @@ class XDailyJudgementRuntime:
             raise RuntimeExecutionError("schema_error", "daily judgement context has no included source")
         provider_context = ProviderContext(
             chunk_id=run_id,
-            prompt_version="v2-x-cross-blogger-1",
+            prompt_version="v3-x-cross-blogger-1",
             prompt_text=(
                 f"{self.public_template}\n\n本地私有补充说明：\n{self.prompt_template}"
                 f"\n\n已验证的跨博主上下文（仅本地 Codex CLI 可见）：\n{json.dumps(context, ensure_ascii=False)}"
             ),
             attempt=attempt,
-            operation="v2_x_cross_blogger",
+            operation="v3_x_cross_blogger",
             allowed_source_ids=frozenset(allowed_source_ids),
             allowed_analysis_ids=frozenset(allowed_analysis_ids),
             allowed_post_ids=frozenset(allowed_post_ids),
@@ -94,7 +94,7 @@ class XDailyJudgementRuntime:
         if not _safe_model_reported(response.model_reported):
             raise RuntimeExecutionError("schema_error", "model telemetry is unsafe")
         try:
-            parsed = parse_v2_x_cross_blogger_output(
+            parsed = parse_v3_x_cross_blogger_output(
                 json.dumps(response.parsed_output, ensure_ascii=False),
                 allowed_source_ids=allowed_source_ids,
                 allowed_analysis_ids=allowed_analysis_ids,
@@ -109,12 +109,13 @@ class XDailyJudgementRuntime:
         return {
             "run_id": run_id,
             "attempt": attempt,
-            "schema_version": "v2-x-cross-blogger",
+            "schema_version": "v3-x-cross-blogger",
             "provider": "codex_cli",
             "model_reported": response.model_reported,
-            "prompt_version": "v2-x-cross-blogger-1",
-            "stock_viewpoints": parsed["stock_viewpoints"],
-            "market_industry_viewpoints": parsed["market_industry_viewpoints"],
+            "prompt_version": "v3-x-cross-blogger-1",
+            "security_industry_viewpoints": parsed["security_industry_viewpoints"],
+            "market_structure_viewpoints": parsed["market_structure_viewpoints"],
+            "strategy_mindset_viewpoints": parsed["strategy_mindset_viewpoints"],
             "uncertainties": parsed["uncertainties"],
         }
 
@@ -122,7 +123,7 @@ class XDailyJudgementRuntime:
     def _validate_context(
         context: Mapping[str, object], run_id: str, batch_id: str, attempt: int
     ) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]], set[str], set[str]]:
-        if set(context) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") != "v2-x-cross-blogger-1":
+        if set(context) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") != "v3-x-cross-blogger-1":
             raise ValueError("context identity is invalid")
         if context.get("batch_id") != batch_id:
             raise ValueError("context batch identity is invalid")
