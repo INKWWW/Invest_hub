@@ -46,8 +46,14 @@ export type ReaderDay = {
   batches: Array<{ presentation: SummaryPresentation }>;
 };
 
+type ReaderActionIntent = "build_position" | "buy" | "add" | "hold" | "reduce" | "sell" | "watch" | "avoid";
+type InputActionIntent = ReaderActionIntent | "none";
+
 export type ReaderJudgement = {
   statement: string;
+  actionIntent?: ReaderActionIntent | null;
+  actionScope?: string;
+  conditions?: string[];
   supportingDisplayNames: string[];
   dissentingDisplayNames: string[];
   uncertainties: string[];
@@ -79,6 +85,7 @@ export type XReaderJudgementRevision = {
   coverageStatus: "complete" | "partial" | "no_new_information";
   stockViewpoints: ReaderJudgement[];
   marketIndustryViewpoints: ReaderJudgement[];
+  strategyMindsetViewpoints?: ReaderJudgement[];
   uncertainties: string[];
 };
 
@@ -93,6 +100,7 @@ export type XReaderDate = {
       revision: number;
       stockViewpoints: ReaderJudgement[];
       marketIndustryViewpoints: ReaderJudgement[];
+      strategyMindsetViewpoints?: ReaderJudgement[];
       uncertainties: string[];
       includedSourceCount: number;
       noNewSourceCount: number;
@@ -172,13 +180,25 @@ function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function inputActionIntent(value: unknown): InputActionIntent | null {
+  return typeof value === "string" && ["build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid", "none"].includes(value)
+    ? value as InputActionIntent : null;
+}
+
 function judgementItems(value: unknown, displayNames: Map<string, string>): ReaderJudgement[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     const judgement = object(item);
     if (!judgement || typeof judgement.statement !== "string") return [];
+    const actionIntent = inputActionIntent(judgement.action_intent) ?? "none";
+    const actionScope = typeof judgement.action_scope === "string" ? judgement.action_scope : "";
+    const conditions = strings(judgement.conditions);
+    const validAction = actionIntent === "none" ? actionScope === "" : actionScope !== "";
     return [{
       statement: judgement.statement,
+      actionIntent: validAction && actionIntent !== "none" ? actionIntent : null,
+      actionScope: validAction ? actionScope : "",
+      conditions: validAction ? conditions : [],
       supportingDisplayNames: strings(judgement.supporting_source_ids).flatMap((sourceId) => displayNames.has(sourceId) ? [displayNames.get(sourceId)!] : []),
       dissentingDisplayNames: strings(judgement.dissenting_source_ids).flatMap((sourceId) => displayNames.has(sourceId) ? [displayNames.get(sourceId)!] : []),
       uncertainties: strings(judgement.uncertainties),
@@ -199,8 +219,9 @@ function judgementRevision(
   return {
     revision: version.revision,
     coverageStatus: version.coverage_status,
-    stockViewpoints: judgementItems(output?.stock_viewpoints, displayNames),
-    marketIndustryViewpoints: judgementItems(output?.market_industry_viewpoints, displayNames),
+    stockViewpoints: judgementItems(output?.security_industry_viewpoints ?? output?.stock_viewpoints, displayNames),
+    marketIndustryViewpoints: judgementItems(output?.market_structure_viewpoints ?? output?.market_industry_viewpoints, displayNames),
+    strategyMindsetViewpoints: judgementItems(output?.strategy_mindset_viewpoints, displayNames),
     uncertainties: strings(output?.uncertainties),
   };
 }
@@ -329,6 +350,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       coverageStatus: null,
       stockViewpoints: [],
       marketIndustryViewpoints: [],
+      strategyMindsetViewpoints: [],
       uncertainties: [],
     };
     const judgement: XReaderDate["judgement"]["batches"][number] = {

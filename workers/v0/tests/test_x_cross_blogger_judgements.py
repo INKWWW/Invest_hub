@@ -25,6 +25,95 @@ def valid_output() -> dict[str, object]:
     }
 
 
+def valid_v3_output() -> dict[str, object]:
+    return {
+        "schema_version": "v3-x-cross-blogger",
+        "security_industry_viewpoints": [{
+            "statement": "一位博主认为该存储标的估值回落后存在修复机会，并明确倾向买入。",
+            "action_intent": "buy",
+            "action_scope": "该存储标的",
+            "conditions": ["需继续观察需求复苏是否兑现"],
+            "supporting_source_ids": ["source-a"],
+            "dissenting_source_ids": [],
+            "analysis_ids": ["post-a@1"],
+            "evidence_post_ids": ["post-a"],
+            "uncertainties": ["估值修复时间尚不确定"],
+        }],
+        "market_structure_viewpoints": [{
+            "statement": "一位博主认为 AI 硬件超跌后可能出现结构性反弹。",
+            "action_intent": "none",
+            "action_scope": "",
+            "conditions": ["需要后续订单数据确认"],
+            "supporting_source_ids": ["source-b"],
+            "dissenting_source_ids": [],
+            "analysis_ids": ["post-b@1"],
+            "evidence_post_ids": ["post-b"],
+            "uncertainties": [],
+        }],
+        "strategy_mindset_viewpoints": [{
+            "statement": "一位博主建议在波动放大时保持观望，避免追高。",
+            "action_intent": "watch",
+            "action_scope": "高波动市场环境",
+            "conditions": ["等待趋势和成交量同步改善"],
+            "supporting_source_ids": ["source-c"],
+            "dissenting_source_ids": [],
+            "analysis_ids": ["post-c@1"],
+            "evidence_post_ids": ["post-c"],
+            "uncertainties": [],
+        }],
+        "uncertainties": ["仅覆盖当前采集窗口的新增观点"],
+    }
+
+
+class XCrossBloggerJudgementV3SchemaTests(unittest.TestCase):
+    def parse(self, output: dict[str, object]) -> dict[str, object]:
+        parser = getattr(structured, "parse_v3_x_cross_blogger_output", None)
+        self.assertIsNotNone(parser, "v3 cross-blogger parser must be public")
+        return parser(  # type: ignore[misc,no-any-return]
+            json.dumps(output, ensure_ascii=False),
+            allowed_source_ids={"source-a", "source-b", "source-c"},
+            allowed_analysis_ids={"post-a@1", "post-b@1", "post-c@1"},
+            allowed_post_ids={"post-a", "post-b", "post-c"},
+            analysis_source_ids={"post-a@1": "source-a", "post-b@1": "source-b", "post-c@1": "source-c"},
+            analysis_evidence_post_ids={"post-a@1": {"post-a"}, "post-b@1": {"post-b"}, "post-c@1": {"post-c"}},
+            frozen_source_ids={"source-a", "source-b", "source-c", "source-d"},
+        )
+
+    def test_accepts_all_three_investment_categories_and_explicit_blogger_stance(self) -> None:
+        parsed = self.parse(valid_v3_output())
+
+        self.assertEqual(parsed["security_industry_viewpoints"][0]["action_intent"], "buy")
+        self.assertEqual(parsed["market_structure_viewpoints"][0]["action_intent"], "none")
+        self.assertEqual(parsed["strategy_mindset_viewpoints"][0]["action_intent"], "watch")
+
+    def test_rejects_unknown_or_incoherent_action_intent(self) -> None:
+        unknown = valid_v3_output()
+        unknown["security_industry_viewpoints"][0]["action_intent"] = "accumulate"
+        with self.assertRaisesRegex(structured.SchemaError, "action intent"):
+            self.parse(unknown)
+
+        no_scope = valid_v3_output()
+        no_scope["security_industry_viewpoints"][0]["action_scope"] = ""
+        with self.assertRaisesRegex(structured.SchemaError, "action scope"):
+            self.parse(no_scope)
+
+        inferred_scope = valid_v3_output()
+        inferred_scope["market_structure_viewpoints"][0]["action_scope"] = "AI 硬件"
+        with self.assertRaisesRegex(structured.SchemaError, "action scope"):
+            self.parse(inferred_scope)
+
+    def test_rejects_opaque_ids_in_conditions_and_action_scope(self) -> None:
+        condition = valid_v3_output()
+        condition["security_industry_viewpoints"][0]["conditions"] = ["post-a@1 的条件尚未满足"]
+        with self.assertRaisesRegex(structured.SchemaError, "opaque analysis ID"):
+            self.parse(condition)
+
+        scope = valid_v3_output()
+        scope["strategy_mindset_viewpoints"][0]["action_scope"] = "source-c 的策略"
+        with self.assertRaisesRegex(structured.SchemaError, "opaque source ID"):
+            self.parse(scope)
+
+
 class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
     def parse(self, output: dict[str, object]) -> dict[str, object]:
         parser = getattr(structured, "parse_v2_x_cross_blogger_output", None)
@@ -218,7 +307,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                     status="success", provider="codex_cli", model_reported="gpt-fixture",
                     prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
                     raw_ref="/private/evidence/raw.json", parsed_output_ref="/private/evidence/structured.json",
-                    parsed_output=valid_output(),
+                    parsed_output=valid_v3_output(),
                 )
 
             def assertEqual(self, left: object, right: object) -> None:
@@ -227,7 +316,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
 
         context_payload = {
             "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
-            "prompt_version": "v2-x-cross-blogger-1",
+            "prompt_version": "v3-x-cross-blogger-1",
             "sources": [
                 {"source_id": source_id, "display_name": source_id, "window_segments": [{
                     "id": f"segment-{source_id}", "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
@@ -251,7 +340,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         self.assertEqual(result["provider"], "codex_cli")
         self.assertEqual(result["model_reported"], "gpt-fixture")
         self.assertNotIn("raw_ref", result)
-        self.assertEqual(provider.context.operation, "v2_x_cross_blogger")
+        self.assertEqual(provider.context.operation, "v3_x_cross_blogger")
 
     def test_runtime_rejects_no_new_context_without_calling_provider(self) -> None:
         class NoNewProvider:
@@ -263,16 +352,17 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                     status="success", provider="codex_cli", model_reported="gpt-fixture",
                     prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
                     raw_ref=None, parsed_output_ref=None, parsed_output={
-                        "schema_version": "v2-x-cross-blogger",
-                        "stock_viewpoints": [],
-                        "market_industry_viewpoints": [],
+                        "schema_version": "v3-x-cross-blogger",
+                        "security_industry_viewpoints": [],
+                        "market_structure_viewpoints": [],
+                        "strategy_mindset_viewpoints": [],
                         "uncertainties": ["本窗口没有新增信息"],
                     },
                 )
 
         context_payload = {
             "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
-            "prompt_version": "v2-x-cross-blogger-1",
+            "prompt_version": "v3-x-cross-blogger-1",
             "sources": [],
             "excluded_sources": [{
                 "source_id": "source-no-new", "display_name": "No new", "reason": "no_new_information",
@@ -296,7 +386,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
 
         context_payload = {
             "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
-            "prompt_version": "v2-x-cross-blogger-1",
+            "prompt_version": "v3-x-cross-blogger-1",
             "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
                 "id": "segment-a", "occurred_from_at": "2099-01-01T00:00:00Z",
                 "occurred_through_at": "2099-01-01T08:00:00Z", "viewpoints": [], "uncertainties": [],
@@ -321,12 +411,12 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                 return ProviderResponse(
                     status="success", provider="codex_cli", model_reported="file:///private/evidence",
                     prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
-                    raw_ref=None, parsed_output_ref=None, parsed_output=valid_output(),
+                    raw_ref=None, parsed_output_ref=None, parsed_output=valid_v3_output(),
                 )
 
         context_payload = {
             "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
-            "prompt_version": "v2-x-cross-blogger-1",
+            "prompt_version": "v3-x-cross-blogger-1",
             "sources": [{"source_id": source_id, "display_name": source_id, "window_segments": [{
                 "id": source_id, "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
                 "viewpoints": [], "uncertainties": [], "analyses": [{
@@ -354,7 +444,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         context_payload = {
             "run_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
             "batch_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "attempt": 1,
-            "prompt_version": "v2-x-cross-blogger-1",
+            "prompt_version": "v3-x-cross-blogger-1",
             "sources": [{"source_id": source_id, "display_name": source_id, "window_segments": [{
                 "id": segment_id, "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
                 "viewpoints": [], "uncertainties": [], "analyses": [{
@@ -381,11 +471,11 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                         case_variant=rendered_opaque_id != opaque_id,
                         natural_language_field=natural_language_field,
                     ):
-                        output = valid_output()
+                        output = valid_v3_output()
                         if natural_language_field == "statement":
-                            output["stock_viewpoints"][0]["statement"] = f"{rendered_opaque_id} 表示估值仍需观察。"
+                            output["security_industry_viewpoints"][0]["statement"] = f"{rendered_opaque_id} 表示估值仍需观察。"
                         elif natural_language_field == "item_uncertainty":
-                            output["stock_viewpoints"][0]["uncertainties"] = [f"{rendered_opaque_id} 的上下文不足"]
+                            output["security_industry_viewpoints"][0]["uncertainties"] = [f"{rendered_opaque_id} 的上下文不足"]
                         else:
                             output["uncertainties"] = [f"{rendered_opaque_id} 的上下文不足"]
 

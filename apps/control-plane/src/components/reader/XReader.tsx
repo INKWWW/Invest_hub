@@ -6,6 +6,10 @@ import type { ReaderJudgement, XReaderBlogger, XReaderDate, XReaderJudgementRevi
 import { ReaderStatus } from "./ReaderStatus";
 
 const ALL = "all";
+const ACTION_INTENT_LABELS = {
+  build_position: "建仓", buy: "买入", add: "加仓", hold: "持有",
+  reduce: "减仓", sell: "卖出", watch: "观望", avoid: "回避",
+} as const;
 
 function sources(days: XReaderDate[]) {
   return [...new Map(days.flatMap((day) => day.bloggers.map((blogger) => [blogger.source.sourceKey, blogger.source]))).values()];
@@ -22,7 +26,7 @@ function validOrAll(value: string | undefined, values: string[]) {
 function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches"] }) {
   if (!batches.length) return <p className="summary-empty">本时段没有形成新的跨博主判断。</p>;
   return <div className="x-reader-judgements">{batches.map((batch, index) => <details className="x-reader-judgement" key={batch.cutoffAt} open={index === 0}>
-    <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(batch.cutoffAt))} · {batch.status === "succeeded" ? batch.coverageStatus === "partial" && batch.timedOutSourceCount > 0 && !batch.stockViewpoints.length && !batch.marketIndustryViewpoints.length ? "采集超时，未形成判断" : "已更新" : batch.status === "judgement_pending" ? "判断处理中" : "判断失败"}</summary>
+    <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(batch.cutoffAt))} · {batch.status === "succeeded" ? batch.coverageStatus === "partial" && batch.timedOutSourceCount > 0 && !batch.stockViewpoints.length && !batch.marketIndustryViewpoints.length && !(batch.strategyMindsetViewpoints?.length) ? "采集超时，未形成判断" : "已更新" : batch.status === "judgement_pending" ? "判断处理中" : "判断失败"}</summary>
     {batch.status === "succeeded" ? <div className="reader-section">
       <p>输入覆盖：{batch.includedSourceCount} 位博主观点已纳入，{batch.noNewSourceCount} 位无新增信息，{batch.excludedSourceCount} 位未纳入。下方主题仅列出直接支持或反对该主题的博主。</p>
       <JudgementRevision revision={batch} excludedSourceCount={batch.excludedSourceCount} timedOutSourceCount={batch.timedOutSourceCount} />
@@ -42,9 +46,10 @@ function JudgementRevision({ revision, excludedSourceCount, timedOutSourceCount 
   timedOutSourceCount: number;
 }) {
   return <div className="x-reader-revision-content">
-    {revision.stockViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`stock-${judgementIndex}`} judgement={judgement} />)}
-    {revision.marketIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} />)}
-    {!revision.stockViewpoints.length && !revision.marketIndustryViewpoints.length ? <p className="summary-empty">本窗口没有形成新的跨博主判断。</p> : null}
+    {revision.stockViewpoints.length ? <section><h3>个股与产业判断</h3>{revision.stockViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`stock-${judgementIndex}`} judgement={judgement} />)}</section> : null}
+    {revision.marketIndustryViewpoints.length ? <section><h3>市场结构判断</h3>{revision.marketIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} />)}</section> : null}
+    {revision.strategyMindsetViewpoints?.length ? <section><h3>投资策略与心态</h3>{revision.strategyMindsetViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`strategy-${judgementIndex}`} judgement={judgement} />)}</section> : null}
+    {!revision.stockViewpoints.length && !revision.marketIndustryViewpoints.length && !(revision.strategyMindsetViewpoints?.length) ? <p className="summary-empty">本窗口没有形成新的跨博主判断。</p> : null}
     {revision.coverageStatus === "partial" ? <p className="topic-uncertainty">本次判断未纳入 {excludedSourceCount} 位博主的完整信息。{timedOutSourceCount > 0 ? `其中 ${timedOutSourceCount} 位因采集未在结算截止前完成。` : ""}</p> : null}
     {revision.coverageStatus === "no_new_information" ? <p className="summary-empty">本窗口没有新的可判断信息。</p> : null}
     {revision.uncertainties.length ? <p className="topic-uncertainty">不确定性：{revision.uncertainties.join("；")}</p> : null}
@@ -53,6 +58,8 @@ function JudgementRevision({ revision, excludedSourceCount, timedOutSourceCount 
 
 function JudgementCard({ judgement }: { judgement: ReaderJudgement }) {
   return <section className="topic-card"><p>{judgement.statement}</p>
+    {judgement.actionIntent ? <p>博主倾向：{ACTION_INTENT_LABELS[judgement.actionIntent]}（{judgement.actionScope}）</p> : null}
+    {judgement.conditions?.length ? <p>条件：{judgement.conditions.join("；")}</p> : null}
     {judgement.supportingDisplayNames.length ? <p>支持观点：{judgement.supportingDisplayNames.join("、")}</p> : null}
     {judgement.dissentingDisplayNames.length ? <p>不同观点：{judgement.dissentingDisplayNames.join("、")}</p> : null}
     {judgement.uncertainties.length ? <p className="topic-uncertainty">不确定性：{judgement.uncertainties.join("；")}</p> : null}

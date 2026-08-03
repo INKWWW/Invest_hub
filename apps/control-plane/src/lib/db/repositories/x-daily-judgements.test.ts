@@ -42,7 +42,7 @@ describe("X daily judgement repository", () => {
         run_id: claim.run_id,
         batch_id: claim.batch.id,
         attempt: 1,
-        prompt_version: "v2-x-cross-blogger-1",
+        prompt_version: "v3-x-cross-blogger-1",
         sources: [{
           source_id: "33333333-3333-4333-8333-333333333333",
           display_name: "Fixture researcher",
@@ -81,12 +81,16 @@ describe("X daily judgement repository", () => {
     const completion = {
       run_id: claim.run_id,
       attempt: 1,
-      schema_version: "v2-x-cross-blogger" as const,
+      schema_version: "v3-x-cross-blogger" as const,
       provider: "codex_cli" as const,
       model_reported: null,
-      prompt_version: "v2-x-cross-blogger-1" as const,
-      stock_viewpoints: [],
-      market_industry_viewpoints: [],
+      prompt_version: "v3-x-cross-blogger-1" as const,
+      security_industry_viewpoints: [{
+        statement: "一位博主明确倾向买入该标的。", action_intent: "buy" as const, action_scope: "该标的", conditions: ["需求改善"],
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"], dissenting_source_ids: [], analysis_ids: ["post-1"], evidence_post_ids: ["post-1"], uncertainties: [],
+      }],
+      market_structure_viewpoints: [],
+      strategy_mindset_viewpoints: [],
       uncertainties: [],
     };
 
@@ -97,12 +101,16 @@ describe("X daily judgement repository", () => {
       p_attempt: 1,
       p_worker_id: "worker-1",
       p_payload: {
-        schema_version: "v2-x-cross-blogger",
+        schema_version: "v3-x-cross-blogger",
         provider: "codex_cli",
         model_reported: null,
-        prompt_version: "v2-x-cross-blogger-1",
-        stock_viewpoints: [],
-        market_industry_viewpoints: [],
+        prompt_version: "v3-x-cross-blogger-1",
+        security_industry_viewpoints: [{
+          statement: "一位博主明确倾向买入该标的。", action_intent: "buy", action_scope: "该标的", conditions: ["需求改善"],
+          supporting_source_ids: ["33333333-3333-4333-8333-333333333333"], dissenting_source_ids: [], analysis_ids: ["post-1"], evidence_post_ids: ["post-1"], uncertainties: [],
+        }],
+        market_structure_viewpoints: [],
+        strategy_mindset_viewpoints: [],
         uncertainties: [],
       },
     });

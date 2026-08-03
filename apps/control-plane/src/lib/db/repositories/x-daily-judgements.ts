@@ -26,7 +26,7 @@ export type XDailyJudgementContext = {
   run_id: string;
   batch_id: string;
   attempt: number;
-  prompt_version: "v2-x-cross-blogger-1";
+  prompt_version: "v3-x-cross-blogger-1";
   sources: Array<{
     source_id: string;
     display_name: string;
@@ -44,6 +44,9 @@ export type XDailyJudgementContext = {
 
 export type XDailyJudgementItem = {
   statement: string;
+  action_intent: "build_position" | "buy" | "add" | "hold" | "reduce" | "sell" | "watch" | "avoid" | "none";
+  action_scope: string;
+  conditions: string[];
   supporting_source_ids: string[];
   dissenting_source_ids: string[];
   analysis_ids: string[];
@@ -54,12 +57,13 @@ export type XDailyJudgementItem = {
 export type XDailyJudgementCompletion = {
   run_id: string;
   attempt: number;
-  schema_version: "v2-x-cross-blogger";
+  schema_version: "v3-x-cross-blogger";
   provider: "codex_cli";
   model_reported: string | null;
-  prompt_version: "v2-x-cross-blogger-1";
-  stock_viewpoints: XDailyJudgementItem[];
-  market_industry_viewpoints: XDailyJudgementItem[];
+  prompt_version: "v3-x-cross-blogger-1";
+  security_industry_viewpoints: XDailyJudgementItem[];
+  market_structure_viewpoints: XDailyJudgementItem[];
+  strategy_mindset_viewpoints: XDailyJudgementItem[];
   uncertainties: string[];
 };
 
@@ -126,7 +130,7 @@ function parseAnalysis(value: unknown): XDailyJudgementAnalysis | null {
 function parseContext(value: unknown): XDailyJudgementContext | null {
   if (!isObject(value) || typeof value.run_id !== "string" || typeof value.batch_id !== "string"
     || typeof value.attempt !== "number" || !Number.isInteger(value.attempt)
-    || value.attempt < 1 || value.prompt_version !== "v2-x-cross-blogger-1"
+    || value.attempt < 1 || value.prompt_version !== "v3-x-cross-blogger-1"
     || !Array.isArray(value.sources) || !Array.isArray(value.excluded_sources)) return null;
   const sources = value.sources.map((source) => {
     if (!isObject(source) || typeof source.source_id !== "string" || typeof source.display_name !== "string"

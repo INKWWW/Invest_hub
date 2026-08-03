@@ -1003,7 +1003,7 @@ describe("v0 control-plane API authorization", () => {
       run_id: "11111111-1111-4111-8111-111111111111",
       batch_id: "22222222-2222-4222-8222-222222222222",
       attempt: 1,
-      prompt_version: "v2-x-cross-blogger-1",
+      prompt_version: "v3-x-cross-blogger-1",
       sources: [{ source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher", window_segments: [] }],
       excluded_sources: [{ source_id: "44444444-4444-4444-8444-444444444444", display_name: "Excluded fixture", reason: "deadline_elapsed" }],
     });
@@ -1086,12 +1086,13 @@ describe("v0 control-plane API authorization", () => {
     });
     xDailyJudgementMocks.completeXDailyJudgement.mockResolvedValue({ status: "succeeded" });
     const completion = {
-      run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v2-x-cross-blogger",
-      provider: "codex_cli", model_reported: null, prompt_version: "v2-x-cross-blogger-1",
-      stock_viewpoints: [{
-        statement: "Synthetic statement", supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
+      run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v3-x-cross-blogger",
+      provider: "codex_cli", model_reported: null, prompt_version: "v3-x-cross-blogger-1",
+      security_industry_viewpoints: [{
+        statement: "一位博主明确倾向买入该标的。", action_intent: "buy", action_scope: "该标的", conditions: ["需求改善"],
+        supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
         dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a"], uncertainties: [],
-      }], market_industry_viewpoints: [], uncertainties: [],
+      }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [],
     };
 
     const response = await postXDailyJudgementComplete(
@@ -1315,7 +1316,7 @@ describe("v0 control-plane API authorization", () => {
       run_id: "11111111-1111-4111-8111-111111111111",
       batch_id: "abcdefab-cdef-4abc-8def-abcdefabcdef",
       attempt: 1,
-      prompt_version: "v2-x-cross-blogger-1",
+      prompt_version: "v3-x-cross-blogger-1",
       sources: [
         {
           source_id: "33333333-3333-4333-8333-333333333333",
@@ -1440,9 +1441,9 @@ describe("v0 control-plane API authorization", () => {
     xDailyJudgementMocks.completeXDailyJudgement.mockRejectedValue({ code: "PT409", message: "lease_mismatch" });
     const stale = await postXDailyJudgementComplete(
       jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {
-        run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v2-x-cross-blogger",
-        provider: "codex_cli", model_reported: null, prompt_version: "v2-x-cross-blogger-1",
-        stock_viewpoints: [], market_industry_viewpoints: [], uncertainties: [],
+        run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v3-x-cross-blogger",
+        provider: "codex_cli", model_reported: null, prompt_version: "v3-x-cross-blogger-1",
+        security_industry_viewpoints: [], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [],
       }),
       { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },
     );
