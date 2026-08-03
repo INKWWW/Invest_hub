@@ -17,7 +17,7 @@
 
 ## Execution Record (2026-08-03)
 
-Task 1、Task 2 和 Task 3 均已完成。Worker 的先失败后通过测试已记录；完整验证结果为 pgTAP 35 files / 580 tests、Worker 165 tests、control-plane 42 files / 232 tests、lint 与 production build 均通过。发布和生产 `/x` 验收将在同一变更集通过受控发布后记录。
+Task 1、Task 2 和 Task 3 均已完成。Worker 的先失败后通过测试已记录；完整验证结果为 pgTAP 35 files / 580 tests、Worker 165 tests、control-plane 42 files / 232 tests、lint 与 production build 均通过。生产 migration `20260803100000`、deployment `dpl_EfqWarB463BqpLjEdeSXZx9nxkbU` 与已认证 `/x` 验收均已完成；历史 v2 判断保持不变，新 v3 判断在下一次正常生成时生效。
 
 ---
 

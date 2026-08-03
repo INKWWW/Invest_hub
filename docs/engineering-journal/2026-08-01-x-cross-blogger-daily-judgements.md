@@ -4,7 +4,7 @@
 
 在用户确认的 v3 Prompt 合同下，新增版本化公共 Prompt `v3-x-cross-blogger-1`。新生成记录将内容分为“个股与产业判断”“市场结构判断”“投资策略与心态”三类；`action_intent` 仅记录博主明确表达的建仓、买入、加仓、持有、减仓、卖出、观望或回避，且必须同时给出其适用范围。模型、Worker、Worker HTTP、数据库和 Reader 均拒绝或隐藏未经合同校验的操作倾向、系统建议、内部 ID 和非投资内容。历史 v2 记录未被改写，仍以原来的两类安全展示。
 
-本地确定性证据为：新增 v3 Worker schema 测试，完整 Worker 回归 165 tests 通过；新增 v3 pgTAP 契约测试，完整数据库回归 35 files / 580 tests 通过；控制面 42 files / 232 tests 通过，Reader 投影与界面测试覆盖第三类、行动倾向和条件；lint 与默认 `next build` 均通过。发布前仍需在 production 应用迁移、部署 control-plane，并以真实认证会话验收 `/x`；没有为了展示 v3 而伪造博主输入或回写任何历史判断。
+本地确定性证据为：新增 v3 Worker schema 测试，完整 Worker 回归 165 tests 通过；新增 v3 pgTAP 契约测试，完整数据库回归 35 files / 580 tests 通过；控制面 42 files / 232 tests 通过，Reader 投影与界面测试覆盖第三类、行动倾向和条件；lint 与默认 `next build` 均通过。production 已应用 `20260803100000_x_daily_judgement_prompt_v3.sql` 并由远端 migration history 确认，control-plane deployment `dpl_EfqWarB463BqpLjEdeSXZx9nxkbU` 为 Ready，稳定入口为 `https://invest-hub-v0-control-plane.vercel.app/x`。新版本机 Worker 已恢复并从 main 加载。已认证 `/x` 只读验收确认页面层级、筛选、覆盖说明和历史 v2 阅读均正常；没有为了展示 v3 而伪造博主输入或回写任何历史判断。新三类栏目将在下一次正常 v3 judgement 持久化后显示。
 
 日期：2026-08-01
 
