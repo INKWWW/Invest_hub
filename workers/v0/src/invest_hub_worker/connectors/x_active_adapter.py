@@ -199,7 +199,7 @@ class OpenCLICollectionInvoker:
         post: dict[str, object] = {
             "id": post_id,
             "author": {"id": author_handle.lower(), "name": str(row.get("name") or configured_handle)},
-            "text": "" if kind == "repost" else str(row.get("text") or ""),
+            "text": str(row.get("text") or ""),
             "created_at": created_at,
             "url": url,
             "post_type": kind,

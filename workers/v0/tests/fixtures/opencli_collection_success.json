@@ -47,7 +47,7 @@
       "id": "repost-1",
       "author": "Fixture",
       "name": "Fixture Author",
-      "text": "source text that must not become a blogger comment",
+      "text": "visible repost commentary",
       "created_at": "2026-07-23T00:13:00Z",
       "url": "https://x.com/fixture/status/6",
       "media_urls": [],
