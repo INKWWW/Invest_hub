@@ -22,12 +22,20 @@ class XCanonicalTests(unittest.TestCase):
         self.assertEqual(message.metadata["x"]["context_post"]["text"], "quoted view")
         self.assertEqual(message.content, "comment")
 
-    def test_x_repost_cannot_fabricate_an_author_comment(self) -> None:
-        with self.assertRaises(CanonicalValidationError):
-            Canonicalizer().map(x_page({
-                "id": "post-1", "author": {"id": "author-1"}, "text": "fabricated", "created_at": "2026-07-23T00:00:00Z",
-                "url": "https://x.com/author/status/1", "post_type": "repost", "reposted_post_id": "other-1", "context_status": "complete", "attachments": [],
-            }))
+    def test_x_repost_preserves_visible_blogger_comment_without_losing_relation(self) -> None:
+        message = Canonicalizer().map(x_page({
+            "id": "post-1", "author": {"id": "author-1"}, "text": "visible repost commentary", "created_at": "2026-07-23T00:00:00Z",
+            "url": "https://x.com/author/status/1", "post_type": "repost", "reposted_post_id": "other-1", "context_status": "unavailable", "attachments": [],
+        }))[0]
+        self.assertEqual(message.content, "visible repost commentary")
+        self.assertEqual(message.metadata["x"]["reposted_post_id"], "other-1")
+
+    def test_x_repost_without_visible_blogger_comment_remains_empty(self) -> None:
+        message = Canonicalizer().map(x_page({
+            "id": "post-1", "author": {"id": "author-1"}, "text": "", "created_at": "2026-07-23T00:00:00Z",
+            "url": "https://x.com/author/status/1", "post_type": "repost", "reposted_post_id": "other-1", "context_status": "unavailable", "attachments": [],
+        }))[0]
+        self.assertEqual(message.content, "")
 
     def test_x_requires_a_timezone_aware_time_and_safe_post_link(self) -> None:
         for bad in ("2026-07-23T00:00:00", "", None):

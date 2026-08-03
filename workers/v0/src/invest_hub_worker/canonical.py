@@ -94,8 +94,6 @@ class Canonicalizer:
             if any((name == expected_relation) != bool(value) for name, value in relation_values.items()):
                 raise CanonicalValidationError(f"X post context relation is invalid for {external_id}")
             content = str(item.get("text") or "")
-            if post_type == "repost" and content:
-                raise CanonicalValidationError("X repost cannot fabricate a blogger comment")
             attachments = item.get("attachments") if isinstance(item.get("attachments"), list) else []
             context_status = str(item.get("context_status") or "complete")
             if context_status not in {"complete", "unavailable", "deleted", "unresolved"}:
