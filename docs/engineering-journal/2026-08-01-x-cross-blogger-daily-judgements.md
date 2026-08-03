@@ -1,5 +1,13 @@
 # X 跨博主当日判断总结：最终边界本地验收记录
 
+## Worker Protocol v3 断层修复（2026-08-04，本地验证）
+
+v3 Prompt 发布后，`XDailyJudgementRuntime` 已固定构造 `v3-x-cross-blogger-1` context 和 `v3-x-cross-blogger` completion，但 `WorkerProtocol` 仍只接受 v2。于是 Worker 会在调用 Provider 前拒绝有效的 v3 context；即使越过该处，旧 completion validator 也会拒绝三类 v3 输出。该本地 ProtocolError 没有 failure class，旧代码将它默认登记为 `persistence_failure`，从而错误描述为持久化失败。
+
+用户批准的最小修复只改 Worker 的本地 HTTP 边界：context 只接受 v3 prompt version，completion 只接受三类 v3 arrays 及其行动倾向、范围、条件、来源、分析、证据和不确定性字段；Runtime 继续是来源归属、证据闭包、opaque ID 和系统建议的权威验证点。Worker 对 ProtocolError 现在提交 `schema_error`。未改数据库、控制面、Reader、调度、单帖/窗口 Prompt 或任何历史 judgement，也未手工创建任务、调用 Provider 或回写生产记录。
+
+TDD 先证明有效 v3 context 被旧 Protocol 拒绝、v2 却被旧 Protocol 接受，并证明旧 ProtocolError 被记为 `persistence_failure`；最小实现后，聚焦 Protocol 18 tests、Worker recovery 13 tests 和完整 Worker 168 tests 全部通过。`git diff --check` 与 `bash scripts/v0/redact-check.sh` 均通过。待同一提交推送和 Worker reload 后，只以正常调度产生后续 judgement；不会回刷 2026-08-03 或恢复其终态失败 run。
+
 ## Prompt v3 本地验收（2026-08-03）
 
 在用户确认的 v3 Prompt 合同下，新增版本化公共 Prompt `v3-x-cross-blogger-1`。新生成记录将内容分为“个股与产业判断”“市场结构判断”“投资策略与心态”三类；`action_intent` 仅记录博主明确表达的建仓、买入、加仓、持有、减仓、卖出、观望或回避，且必须同时给出其适用范围。模型、Worker、Worker HTTP、数据库和 Reader 均拒绝或隐藏未经合同校验的操作倾向、系统建议、内部 ID 和非投资内容。历史 v2 记录未被改写，仍以原来的两类安全展示。

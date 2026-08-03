@@ -388,7 +388,7 @@ def _parse_x_daily_judgement_claim(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_x_daily_judgement_context(value: dict[str, Any], run_id: str, attempt: int) -> dict[str, Any]:
-    if set(value) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or value.get("run_id") != run_id or not _non_empty_string(value.get("batch_id")) or value.get("attempt") != attempt or value.get("prompt_version") != "v2-x-cross-blogger-1":
+    if set(value) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or value.get("run_id") != run_id or not _non_empty_string(value.get("batch_id")) or value.get("attempt") != attempt or value.get("prompt_version") != "v3-x-cross-blogger-1":
         raise ProtocolError("invalid x daily judgement context")
     sources = value.get("sources")
     excluded = value.get("excluded_sources")
@@ -412,16 +412,31 @@ def _parse_x_daily_judgement_context(value: dict[str, Any], run_id: str, attempt
 
 
 def _validate_x_daily_judgement_completion(value: dict[str, Any]) -> None:
-    required = {"run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version", "stock_viewpoints", "market_industry_viewpoints", "uncertainties"}
-    if set(value) != required or value.get("schema_version") != "v2-x-cross-blogger" or value.get("provider") != "codex_cli" or value.get("prompt_version") != "v2-x-cross-blogger-1":
+    required = {
+        "run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version",
+        "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties",
+    }
+    if set(value) != required or value.get("schema_version") != "v3-x-cross-blogger" or value.get("provider") != "codex_cli" or value.get("prompt_version") != "v3-x-cross-blogger-1":
         raise ProtocolError("invalid x daily judgement completion")
     _validate_x_daily_judgement_identity(value.get("run_id"), value.get("attempt"), "completion")
-    if not _safe_model_reported(value.get("model_reported")) or not isinstance(value.get("stock_viewpoints"), list) or not isinstance(value.get("market_industry_viewpoints"), list) or not isinstance(value.get("uncertainties"), list):
+    categories = ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")
+    if not _safe_model_reported(value.get("model_reported")) or not all(isinstance(value.get(category), list) for category in categories) or not _string_array(value.get("uncertainties")):
         raise ProtocolError("invalid x daily judgement completion")
-    for item in [*value["stock_viewpoints"], *value["market_industry_viewpoints"]]:
-        if not isinstance(item, dict) or set(item) != {"statement", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"} or not _non_empty_string(item.get("statement")):
+    item_fields = {
+        "statement", "action_intent", "action_scope", "conditions", "supporting_source_ids",
+        "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties",
+    }
+    action_intents = {"build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid", "none"}
+    for item in [*(entry for category in categories for entry in value[category])]:
+        if not isinstance(item, dict) or set(item) != item_fields or not _non_empty_string(item.get("statement")):
             raise ProtocolError("invalid x daily judgement completion")
-        if not all(isinstance(item.get(key), list) and all(_non_empty_string(entry) for entry in item[key]) for key in ("supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties")):
+        action_intent = item.get("action_intent")
+        action_scope = item.get("action_scope")
+        if action_intent not in action_intents or not isinstance(action_scope, str) or (action_intent == "none" and action_scope) or (action_intent != "none" and not action_scope.strip()):
+            raise ProtocolError("invalid x daily judgement completion")
+        if not all(isinstance(item.get(key), list) and all(_non_empty_string(entry) for entry in item[key]) for key in ("conditions", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties")):
+            raise ProtocolError("invalid x daily judgement completion")
+        if not item["analysis_ids"] or not item["evidence_post_ids"]:
             raise ProtocolError("invalid x daily judgement completion")
 
 

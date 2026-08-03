@@ -297,7 +297,7 @@ class Worker:
             return
 
     def _report_x_daily_judgement_failure(self, run_id: str, attempt: int, error: Exception) -> None:
-        failure_class = str(getattr(error, "failure_class", "persistence_failure"))
+        failure_class = "schema_error" if isinstance(error, ProtocolError) else str(getattr(error, "failure_class", "persistence_failure"))
         if failure_class not in _X_DAILY_JUDGEMENT_FAILURES:
             failure_class = "persistence_failure"
         try:
