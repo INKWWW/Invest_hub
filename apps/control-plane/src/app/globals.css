@@ -283,6 +283,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .manual-refresh p { margin: 0; color: #52666c; font-size: 0.82rem; line-height: 1.5; }
 
+.x-manual-recovery { border: 1px solid #dce4e0; display: grid; gap: 0.55rem; padding: 1rem; }
+.x-manual-recovery h2, .x-manual-recovery p { margin: 0; }
+.x-manual-recovery p { color: #52666c; font-size: 0.9rem; line-height: 1.5; }
+.x-manual-recovery button { justify-self: start; }
+
 .author-profiles-form { display: grid; gap: 0.65rem; min-width: 17rem; }
 
 .author-profiles-form h3, .author-profiles-form p { margin: 0; }

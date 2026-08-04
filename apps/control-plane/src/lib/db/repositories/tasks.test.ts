@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const databaseMocks = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }));
-const judgementMocks = vi.hoisted(() => ({ ensureDueXCollectionBatches: vi.fn() }));
+const judgementMocks = vi.hoisted(() => ({ ensureDueXCollectionBatches: vi.fn(), advanceXManualRecoveryRuns: vi.fn() }));
 
 vi.mock("../supabase-server", () => ({
   createSupabaseAdminClient: () => ({ from: databaseMocks.from, rpc: databaseMocks.rpc }),
@@ -13,6 +13,7 @@ import { completeWindowedCaptureRange, scheduleDueSourceTasks } from "./tasks";
 describe("due source scheduling", () => {
   it("keeps X scheduling available when the retired Discord scheduler fails", async () => {
     judgementMocks.ensureDueXCollectionBatches.mockResolvedValue({});
+    judgementMocks.advanceXManualRecoveryRuns.mockResolvedValue({ runs: [] });
     databaseMocks.rpc.mockImplementation((name: string) => {
       if (name === "enqueue_due_discord_tasks") {
         return Promise.resolve({ data: null, error: { message: "discord scheduler unavailable" } });
@@ -28,10 +29,12 @@ describe("due source scheduling", () => {
       judgement_dispatch_failed: false,
     });
     expect(judgementMocks.ensureDueXCollectionBatches).toHaveBeenCalledWith("worker-1", new Date("2026-07-25T12:00:00Z"));
+    expect(judgementMocks.advanceXManualRecoveryRuns).toHaveBeenCalledWith("worker-1", new Date("2026-07-25T12:00:00Z"));
   });
 
   it("surfaces a safe judgement dispatch failure without discarding scheduled source work", async () => {
     judgementMocks.ensureDueXCollectionBatches.mockRejectedValue(new Error("private dispatcher detail"));
+    judgementMocks.advanceXManualRecoveryRuns.mockResolvedValue({ runs: [] });
     databaseMocks.rpc.mockImplementation((name: string) => {
       if (name === "enqueue_due_discord_tasks") {
         return Promise.resolve({ data: null, error: { message: "discord scheduler unavailable" } });
@@ -59,6 +62,7 @@ describe("due source scheduling", () => {
 
   it("maps an isolated database settlement failure to the safe judgement flag", async () => {
     judgementMocks.ensureDueXCollectionBatches.mockResolvedValue({ settlement_dispatch_failed: true });
+    judgementMocks.advanceXManualRecoveryRuns.mockResolvedValue({ runs: [] });
     databaseMocks.rpc.mockResolvedValue({
       data: { scheduled_at: "2026-07-25T12:00:00Z", tasks: [], deferred_source_ids: [] },
       error: null,

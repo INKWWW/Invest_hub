@@ -4,6 +4,7 @@ import { AdminShell } from "../../components/admin/AdminShell";
 import { StatusBadge } from "../../components/admin/StatusBadge";
 import { UserInviteForm } from "../../components/admin/UserInviteForm";
 import { WorkerCard } from "../../components/admin/WorkerCard";
+import { XManualRecoveryRunForm } from "../../components/admin/XManualRecoveryRunForm";
 import { buildTaskViewModel } from "../../lib/admin/view-model";
 import { getCurrentUser } from "../../lib/auth/current-user";
 import { listSources } from "../../lib/db/repositories/sources";
@@ -20,6 +21,7 @@ export default async function AdminOverviewPage() {
         <p>Operational state and recovery evidence for the V1 control plane.</p>
         <p><Link href="/admin/tasks">Inspect all tasks</Link></p>
       </section>
+      <XManualRecoveryRunForm />
       <UserInviteForm />
       <section>
         <h2>Workers ({workers.length})</h2>
