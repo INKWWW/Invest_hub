@@ -116,6 +116,72 @@ class ContractTests(unittest.TestCase):
                 },
             )
 
+    def test_recovery_window_claim_is_accepted(self):
+        claim = load_contract(
+            "task-claim",
+            {
+                "contract_version": "v0",
+                "task_id": "task-recovery-001",
+                "attempt": 1,
+                "task_type": "x_sync",
+                "source_id": "source-001",
+                "parameter_version": "x-standard-v2",
+                "lease_expires_at": "2099-01-01T00:10:00Z",
+                "safe_checkpoint": None,
+                "collection_scope": {"mode": "window"},
+                "capture_range": {
+                    "mode": "window",
+                    "trigger": "recovery",
+                    "timezone": "Asia/Shanghai",
+                    "start_at": "2099-01-01T00:00:00Z",
+                    "end_at": "2099-01-01T08:00:00Z",
+                    "scheduled_window_key": None,
+                },
+                "coverage_snapshot": {
+                    "coverage_start_at": "2099-01-01T00:00:00Z",
+                    "coverage_through_at": "2099-01-01T00:00:00Z",
+                    "last_completed_task_id": None,
+                },
+                "capture_progress": {"resume_cursor": None, "page_count": 0, "range_complete": False},
+                "author_profile_snapshot": [],
+                "source_snapshot": {
+                    "source_type": "x",
+                    "account_id": "fixture_account",
+                    "display_name": "Fixture",
+                    "parameter_version": "x-standard-v2",
+                },
+            },
+        )
+
+        self.assertEqual(claim["capture_range"]["trigger"], "recovery")
+
+    def test_recovery_window_completion_is_accepted(self):
+        completion = load_contract(
+            "window-range-completion",
+            {
+                "contract_version": "v0",
+                "task_id": "task-recovery-001",
+                "attempt": 1,
+                "range_complete": True,
+                "capture_range": {
+                    "mode": "window",
+                    "trigger": "recovery",
+                    "timezone": "Asia/Shanghai",
+                    "start_at": "2099-01-01T00:00:00Z",
+                    "end_at": "2099-01-01T08:00:00Z",
+                    "scheduled_window_key": None,
+                },
+                "boundary": {"kind": "history_exhausted", "observed_at": "2099-01-01T08:00:00Z"},
+                "summary_batch_ids": [],
+                "daily_summary_ids": [],
+                "x_post_analyses": [],
+                "x_daily_segments": [],
+                "no_new_data": True,
+            },
+        )
+
+        self.assertEqual(completion["capture_range"]["trigger"], "recovery")
+
     def test_checkpoint_outside_allowed_input_range_is_rejected(self):
         with self.assertRaises(ContractError):
             validate_task_result(
