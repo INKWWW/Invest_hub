@@ -68,12 +68,15 @@ function JudgementCard({ judgement }: { judgement: ReaderJudgement }) {
 
 function BloggerViewpointList({ title, viewpoints }: { title: string; viewpoints: ReaderJudgement[] | undefined }) {
   if (!viewpoints?.length) return null;
-  return <section><h4>{title}</h4>{viewpoints.map((viewpoint, index) => <section className="topic-card" key={index}>
-    <p>{viewpoint.statement}</p>
-    {viewpoint.actionIntent ? <p>博主倾向：{ACTION_INTENT_LABELS[viewpoint.actionIntent]}（{viewpoint.actionScope}）</p> : null}
-    {viewpoint.conditions?.length ? <p>条件：{viewpoint.conditions.join("；")}</p> : null}
+  return <section className="x-reader-viewpoint-group"><h4>{title}</h4><div className="x-reader-viewpoint-list">{viewpoints.map((viewpoint, index) => <article className="x-reader-viewpoint-card" key={index}>
+    <header><p>观点 {String(index + 1).padStart(2, "0")}</p></header>
+    <p className="x-reader-viewpoint-statement">{viewpoint.statement}</p>
+    {viewpoint.actionIntent || viewpoint.conditions?.length ? <dl className="x-reader-viewpoint-meta">
+      {viewpoint.actionIntent ? <div><dt>博主倾向</dt><dd>{ACTION_INTENT_LABELS[viewpoint.actionIntent]}（{viewpoint.actionScope}）</dd></div> : null}
+      {viewpoint.conditions?.length ? <div><dt>条件</dt><dd>{viewpoint.conditions.join("；")}</dd></div> : null}
+    </dl> : null}
     {viewpoint.uncertainties.length ? <p className="topic-uncertainty">不确定性：{viewpoint.uncertainties.join("；")}</p> : null}
-  </section>)}</section>;
+  </article>)}</div></section>;
 }
 
 function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
