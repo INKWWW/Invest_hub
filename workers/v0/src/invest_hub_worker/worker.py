@@ -296,20 +296,26 @@ class Worker:
         if failure_stage not in _X_FAILURE_STAGES:
             failure_stage = None
         retryable = self._is_retryable_x_failure(claim, failure_class)
+        payload = {
+            "contract_version": "v0",
+            "task_id": str(claim["task_id"]),
+            "attempt": int(claim["attempt"]),
+            "status": "retryable_failed",
+            "failure_class": failure_class,
+            "safe_checkpoint": claim.get("safe_checkpoint"),
+            "retryable": retryable,
+        }
+        if failure_stage is not None:
+            payload["failure_stage"] = failure_stage
         try:
-            self.protocol.report_failure(
-                {
-                    "contract_version": "v0",
-                    "task_id": str(claim["task_id"]),
-                    "attempt": int(claim["attempt"]),
-                    "status": "retryable_failed",
-                    "failure_class": failure_class,
-                    **({"failure_stage": failure_stage} if failure_stage is not None else {}),
-                    "safe_checkpoint": claim.get("safe_checkpoint"),
-                    "retryable": retryable,
-                }
-            )
+            self.protocol.report_failure(payload)
         except Exception:
+            if failure_stage is not None:
+                try:
+                    self.protocol.report_failure({key: value for key, value in payload.items() if key != "failure_stage"})
+                    return
+                except Exception:
+                    pass
             # A failed failure report must not be mistaken for a successful
             # task completion; the lease will remain conservative for retry.
             return
