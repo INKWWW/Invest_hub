@@ -304,7 +304,7 @@ class WorkerRecoveryTests(unittest.TestCase):
         }
         streamed: list[bool] = []
 
-        def execute_windowed(claim: dict[str, object], *, on_capture_page: object) -> dict[str, object]:
+        def execute_windowed(claim: dict[str, object], *, on_capture_page: object, on_post_analysis: object | None = None) -> dict[str, object]:
             streamed.append(True)
             on_capture_page({
                 "persistence": {

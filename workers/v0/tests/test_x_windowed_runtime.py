@@ -196,6 +196,21 @@ class XWindowedRuntimeTests(unittest.TestCase):
         self.assertEqual(segment["segment_output"]["security_industry_viewpoints"][0]["action_intent"], "buy")
         self.assertEqual(provider.operations, ["v3_x_post_analysis", "v3_x_window"])
 
+    def test_runtime_reports_each_completed_post_analysis_for_lease_renewal(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                return RawPage(
+                    page_id="x-progress", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/x-progress", telemetry=receipt_telemetry("time_boundary_reached", "2026-07-22T23:29:00Z"),
+                    messages=(quote_post(),),
+                )
+
+        completed: list[str] = []
+        with tempfile.TemporaryDirectory() as directory:
+            self.runtime(Connector(), directory).execute_windowed(claim(), on_post_analysis=lambda post_id: completed.append(post_id))
+
+        self.assertEqual(completed, ["post-new"])
+
     def test_history_task_uses_the_same_bounded_execution_path(self) -> None:
         class Connector:
             def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
