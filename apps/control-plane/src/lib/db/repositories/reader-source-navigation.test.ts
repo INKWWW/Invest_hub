@@ -171,6 +171,28 @@ describe("X reader date projection", () => {
     ]);
   });
 
+  it("projects only the referenced v3 analysis and categorized v3 window output", async () => {
+    databaseMocks.rows.set("x_daily_viewpoint_segments", [{
+      source_id: "source-a", natural_date: "2099-01-03", occurred_from_at: "2099-01-03T08:00:00.000Z", occurred_through_at: "2099-01-03T09:00:00.000Z",
+      schema_version: "v3-x-window", prompt_version: "v3-x-window-1",
+      segment_output: { schema_version: "v3-x-window", security_industry_viewpoints: [{ statement: "窗口 v3 观点", action_intent: "buy", action_scope: "测试标的", conditions: ["条件"], uncertainties: [] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: ["窗口不确定性"] },
+      window_viewpoints: [], post_analysis_refs: [{ post_id: "post-1", analysis_version: 2 }],
+    }]);
+    databaseMocks.rows.set("canonical_messages", [{ id: "canonical-1", source_id: "source-a", external_message_id: "post-1" }]);
+    databaseMocks.rows.set("x_post_analyses", [
+      { canonical_message_id: "canonical-1", analysis_version: 1, blogger_viewpoint: "旧版本不得显示", arguments: [], quoted_post_viewpoint: null, uncertainties: [] },
+      { canonical_message_id: "canonical-1", analysis_version: 2, schema_version: "v3-x-post-analysis", prompt_version: "v3-x-post-analysis-1", analysis_output: { post_id: "post-1", blogger_viewpoint: "v3 单帖观点", action_intent: "buy", action_scope: "测试标的", conditions: ["条件"], evidence_post_ids: ["post-1"] }, blogger_viewpoint: "投影", arguments: ["论据"], quoted_post_viewpoint: null, uncertainties: [] },
+    ]);
+    databaseMocks.rows.set("x_post_contexts", [{ canonical_message_id: "canonical-1", post_url: "https://x.test/post/1" }]);
+
+    const result = await readXDay();
+    const segment = result.find((day) => day.naturalDate === "2099-01-03")?.bloggers[0]?.segments[0];
+
+    expect(segment).toMatchObject({ securityIndustryViewpoints: [{ statement: "窗口 v3 观点", actionIntent: "buy", actionScope: "测试标的" }], analyses: [{ bloggerViewpoint: "v3 单帖观点", actionIntent: "buy", postLink: "https://x.test/post/1" }] });
+    expect(JSON.stringify(segment)).not.toContain("post-1@2");
+    expect(JSON.stringify(segment)).not.toContain("旧版本不得显示");
+  });
+
   it("selects no unused internal evidence or segment identity fields", async () => {
     await readXDay();
 

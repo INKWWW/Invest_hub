@@ -63,10 +63,16 @@ type XReaderSegment = {
   occurredFromAt: string;
   occurredThroughAt: string;
   viewpoints: string[];
+  securityIndustryViewpoints?: ReaderJudgement[];
+  marketStructureViewpoints?: ReaderJudgement[];
+  strategyMindsetViewpoints?: ReaderJudgement[];
   uncertainties: string[];
   analyses: Array<{
     postLink: string;
     bloggerViewpoint: string | null;
+    actionIntent?: ReaderActionIntent | null;
+    actionScope?: string;
+    conditions?: string[];
     arguments: string[];
     quotedPostViewpoint: string | null;
     uncertainties: string[];
@@ -206,6 +212,19 @@ function judgementItems(value: unknown, displayNames: Map<string, string>): Read
   });
 }
 
+function bloggerViewpointItems(value: unknown): ReaderJudgement[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const viewpoint = object(item);
+    const actionIntent = inputActionIntent(viewpoint?.action_intent) ?? "none";
+    const actionScope = typeof viewpoint?.action_scope === "string" ? viewpoint.action_scope : "";
+    const statement = typeof viewpoint?.statement === "string" ? viewpoint.statement : "";
+    if (!statement || (actionIntent === "none" ? actionScope !== "" : actionScope === "")) return [];
+    return [{ statement, actionIntent: actionIntent === "none" ? null : actionIntent, actionScope,
+      conditions: strings(viewpoint?.conditions), supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: strings(viewpoint?.uncertainties) }];
+  });
+}
+
 function judgementStatus(status: string): "succeeded" | "judgement_pending" | "judgement_failed" {
   if (status === "succeeded") return "succeeded";
   return status === "judgement_failed" ? "judgement_failed" : "judgement_pending";
@@ -259,7 +278,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const segments = await readAllChunkPages(sourceIdChunks, (ids, from, to) => {
     let query = supabase.from("x_daily_viewpoint_segments")
-      .select("source_id,natural_date,occurred_from_at,occurred_through_at,window_viewpoints,post_analysis_refs")
+      .select("source_id,natural_date,occurred_from_at,occurred_through_at,schema_version,prompt_version,segment_output,window_viewpoints,post_analysis_refs")
       .in("source_id", ids);
     if (input.date) query = query.eq("natural_date", input.date);
     return query.order("natural_date", { ascending: false }).order("occurred_from_at", { ascending: true })
@@ -282,13 +301,13 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const canonicalIdChunks = chunkValues(canonicalIds, READER_QUERY_BATCH_SIZE);
   const [analysisRows, contextRows] = await Promise.all([
     readAllChunkPages(canonicalIdChunks, (ids, from, to) => supabase.from("x_post_analyses")
-      .select("canonical_message_id,analysis_version,blogger_viewpoint,arguments,quoted_post_viewpoint,uncertainties")
-      .in("canonical_message_id", ids).eq("analysis_version", 1)
+      .select("canonical_message_id,analysis_version,schema_version,prompt_version,analysis_output,blogger_viewpoint,arguments,quoted_post_viewpoint,uncertainties")
+      .in("canonical_message_id", ids)
       .order("canonical_message_id", { ascending: true }).order("analysis_version", { ascending: true }).range(from, to)),
     readAllChunkPages(canonicalIdChunks, (ids, from, to) => supabase.from("x_post_contexts").select("canonical_message_id,post_url")
       .in("canonical_message_id", ids).order("canonical_message_id", { ascending: true }).range(from, to)),
   ]);
-  const analysisByCanonicalId = new Map(analysisRows.map((row) => [row.canonical_message_id, row]));
+  const analysisByCanonicalId = new Map(analysisRows.map((row) => [`${row.canonical_message_id}:${row.analysis_version}`, row]));
   const contextByCanonicalId = new Map(contextRows.map((row) => [row.canonical_message_id, row]));
 
   const batches = await readAllPages((from, to) => {
@@ -400,18 +419,31 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
         const refs = Array.isArray(segment.post_analysis_refs) ? segment.post_analysis_refs : [];
         const analyses = refs.flatMap((ref) => {
           const postId = ref && typeof ref === "object" ? (ref as Record<string, unknown>).post_id : undefined;
-          if (typeof postId !== "string") return [];
+          const referencedVersion = ref && typeof ref === "object" ? (ref as Record<string, unknown>).analysis_version : undefined;
+          const analysisVersion = typeof referencedVersion === "number" ? referencedVersion : segment.schema_version === "v3-x-window" ? undefined : 1;
+          if (typeof postId !== "string" || typeof analysisVersion !== "number") return [];
           const canonical = canonicalByExternalId.get(`${sourceId}:${postId}`);
           if (!canonical) return [];
-          const analysis = analysisByCanonicalId.get(canonical.id);
+          const analysis = analysisByCanonicalId.get(`${canonical.id}:${analysisVersion}`);
           const context = contextByCanonicalId.get(canonical.id);
           if (!analysis || !context) return [];
-          return [{ postLink: context.post_url, bloggerViewpoint: analysis.blogger_viewpoint,
+          const output = analysis.schema_version === "v3-x-post-analysis" && analysis.prompt_version === "v3-x-post-analysis-1" ? object(analysis.analysis_output) : null;
+          if (analysisVersion === 2 && !output) return [];
+          const actionIntent = inputActionIntent(output?.action_intent) ?? "none";
+          const actionScope = typeof output?.action_scope === "string" ? output.action_scope : "";
+          const validAction = actionIntent === "none" ? actionScope === "" : actionScope !== "";
+          return [{ postLink: context.post_url, bloggerViewpoint: output && typeof output.blogger_viewpoint === "string" ? output.blogger_viewpoint : analysis.blogger_viewpoint,
+            actionIntent: validAction && actionIntent !== "none" ? actionIntent : null, actionScope: validAction ? actionScope : "", conditions: validAction ? strings(output?.conditions) : [],
             arguments: strings(analysis.arguments), quotedPostViewpoint: analysis.quoted_post_viewpoint,
             uncertainties: strings(analysis.uncertainties) }];
         });
+        const segmentOutput = segment.schema_version === "v3-x-window" && segment.prompt_version === "v3-x-window-1" ? object(segment.segment_output) : null;
         return { occurredFromAt: segment.occurred_from_at, occurredThroughAt: segment.occurred_through_at,
-          viewpoints: strings(segment.window_viewpoints), uncertainties: [], analyses };
+          viewpoints: segmentOutput ? [] : strings(segment.window_viewpoints),
+          securityIndustryViewpoints: bloggerViewpointItems(segmentOutput?.security_industry_viewpoints),
+          marketStructureViewpoints: bloggerViewpointItems(segmentOutput?.market_structure_viewpoints),
+          strategyMindsetViewpoints: bloggerViewpointItems(segmentOutput?.strategy_mindset_viewpoints),
+          uncertainties: segmentOutput ? strings(segmentOutput.uncertainties) : [], analyses };
       });
       return [{
         source: { sourceKey: source.source_key, displayName: batchSource?.source_display_name ?? source.display_name },
