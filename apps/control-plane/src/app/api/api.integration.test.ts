@@ -42,6 +42,13 @@ const xDailyJudgementMocks = vi.hoisted(() => ({
   completeXDailyJudgement: vi.fn(),
   failXDailyJudgement: vi.fn(),
 }));
+const xVerificationReplayMocks = vi.hoisted(() => ({
+  createXVerificationReplay: vi.fn(),
+  claimXVerificationReplay: vi.fn(),
+  getXVerificationReplayContext: vi.fn(),
+  completeXVerificationReplay: vi.fn(),
+  failXVerificationReplay: vi.fn(),
+}));
 const windowedSyncMocks = vi.hoisted(() => ({
   createManualDiscordRefresh: vi.fn(),
   getSourceCoverage: vi.fn(),
@@ -91,6 +98,7 @@ vi.mock("../../lib/auth/logout", () => logoutMocks);
 vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
 vi.mock("../../lib/db/repositories/x-daily-judgements", () => xDailyJudgementMocks);
+vi.mock("../../lib/db/repositories/x-v3-verification-replays", () => xVerificationReplayMocks);
 vi.mock("../../lib/db/repositories/windowed-sync", () => windowedSyncMocks);
 vi.mock("../../lib/db/repositories/author-profiles", () => authorProfileMocks);
 vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
@@ -132,6 +140,11 @@ import { POST as postXDailyJudgementClaim } from "./worker/x-daily-judgements/cl
 import { POST as postXDailyJudgementContext } from "./worker/x-daily-judgements/[runId]/context/route";
 import { POST as postXDailyJudgementComplete } from "./worker/x-daily-judgements/[runId]/complete/route";
 import { POST as postXDailyJudgementFailure } from "./worker/x-daily-judgements/[runId]/failure/route";
+import { POST as postCreateXVerificationReplay } from "./admin/x/v3-verification-replays/route";
+import { POST as postClaimXVerificationReplay } from "./worker/x-v3-verification-replays/[replayId]/claim/route";
+import { POST as postXVerificationReplayContext } from "./worker/x-v3-verification-replays/[replayId]/context/route";
+import { POST as postXVerificationReplayComplete } from "./worker/x-v3-verification-replays/[replayId]/complete/route";
+import { POST as postXVerificationReplayFailure } from "./worker/x-v3-verification-replays/[replayId]/failure/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}, method = "POST") {
   return new Request(`http://localhost${path}`, {
@@ -1474,6 +1487,77 @@ describe("v0 control-plane API authorization", () => {
       "11111111-1111-4111-8111-111111111111", 1, "worker-1", "timeout",
     );
     expect(taskMocks.recordTaskFailure).not.toHaveBeenCalled();
+  });
+
+  it("lets only an admin create the one-off X v3 verification replay from an exact source batch", async () => {
+    const sourceBatchId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const denied = await postCreateXVerificationReplay(jsonRequest("/api/admin/x/v3-verification-replays", { source_batch_id: sourceBatchId }));
+    expect(denied.status).toBe(403);
+    expect(xVerificationReplayMocks.createXVerificationReplay).not.toHaveBeenCalled();
+
+    authMocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", email: "admin@example.invalid" });
+    const malformed = await postCreateXVerificationReplay(jsonRequest("/api/admin/x/v3-verification-replays", { source_batch_id: sourceBatchId, unexpected: true }));
+    expect(malformed.status).toBe(422);
+    expect(xVerificationReplayMocks.createXVerificationReplay).not.toHaveBeenCalled();
+
+    xVerificationReplayMocks.createXVerificationReplay.mockResolvedValue({ replayId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", status: "queued" });
+    const created = await postCreateXVerificationReplay(jsonRequest("/api/admin/x/v3-verification-replays", { source_batch_id: sourceBatchId }));
+    expect(created.status).toBe(202);
+    expect(await created.json()).toEqual({ replay_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", status: "queued" });
+    expect(xVerificationReplayMocks.createXVerificationReplay).toHaveBeenCalledWith(sourceBatchId, "admin-1");
+  });
+
+  it("rejects malformed one-off replay Worker requests before repository access", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    const invalidReplayId = "not-a-replay-id";
+    const claim = await postClaimXVerificationReplay(
+      jsonRequest(`/api/worker/x-v3-verification-replays/${invalidReplayId}/claim`, {}),
+      { params: Promise.resolve({ replayId: invalidReplayId }) },
+    );
+    const context = await postXVerificationReplayContext(
+      jsonRequest(`/api/worker/x-v3-verification-replays/${invalidReplayId}/context`, {}),
+      { params: Promise.resolve({ replayId: invalidReplayId }) },
+    );
+    const complete = await postXVerificationReplayComplete(
+      jsonRequest(`/api/worker/x-v3-verification-replays/${invalidReplayId}/complete`, { attempt: 1 }),
+      { params: Promise.resolve({ replayId: invalidReplayId }) },
+    );
+    const failure = await postXVerificationReplayFailure(
+      jsonRequest(`/api/worker/x-v3-verification-replays/${invalidReplayId}/failure`, { attempt: 1, failure_class: "raw_output" }),
+      { params: Promise.resolve({ replayId: invalidReplayId }) },
+    );
+
+    for (const response of [claim, context, complete, failure]) expect(response.status).toBe(422);
+    expect(xVerificationReplayMocks.claimXVerificationReplay).not.toHaveBeenCalled();
+    expect(xVerificationReplayMocks.getXVerificationReplayContext).not.toHaveBeenCalled();
+    expect(xVerificationReplayMocks.completeXVerificationReplay).not.toHaveBeenCalled();
+    expect(xVerificationReplayMocks.failXVerificationReplay).not.toHaveBeenCalled();
+  });
+
+  it("returns frozen replay input only after the authenticated Worker has claimed the replay", async () => {
+    const replayId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xVerificationReplayMocks.claimXVerificationReplay.mockResolvedValue({ replayId, attempt: 1, leaseExpiresAt: "2099-01-01T00:15:00.000Z" });
+    xVerificationReplayMocks.getXVerificationReplayContext.mockResolvedValue({
+      replay_id: replayId, attempt: 1,
+      sources: [{ source_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", display_name: "Fixture", occurred_from_at: "2099-01-01T00:00:00.000Z", occurred_through_at: "2099-01-01T00:01:00.000Z", posts: [{ post_id: "post-1", content: "frozen worker input", occurred_at: "2099-01-01T00:00:00.000Z", post_url: "https://x.example/post/1", post_type: "post", quoted_post_id: null, reply_to_post_id: null, reposted_post_id: null, context_status: "resolved", attachments: [] }] }],
+    });
+
+    const claimed = await postClaimXVerificationReplay(
+      jsonRequest(`/api/worker/x-v3-verification-replays/${replayId}/claim`, {}),
+      { params: Promise.resolve({ replayId }) },
+    );
+    const context = await postXVerificationReplayContext(
+      jsonRequest(`/api/worker/x-v3-verification-replays/${replayId}/context`, { attempt: 1 }),
+      { params: Promise.resolve({ replayId }) },
+    );
+
+    expect(claimed.status).toBe(200);
+    expect(await claimed.json()).toEqual({ replay_id: replayId, attempt: 1, lease_expires_at: "2099-01-01T00:15:00.000Z" });
+    expect(context.status).toBe(200);
+    expect(xVerificationReplayMocks.claimXVerificationReplay).toHaveBeenCalledWith(replayId, "worker-1");
+    expect(xVerificationReplayMocks.getXVerificationReplayContext).toHaveBeenCalledWith(replayId, 1, "worker-1");
+    expect(await context.json()).toMatchObject({ replay_id: replayId, sources: [{ posts: [{ content: "frozen worker input" }] }] });
   });
 
   it("rejects unauthenticated Workers and client-supplied schedule ranges", async () => {

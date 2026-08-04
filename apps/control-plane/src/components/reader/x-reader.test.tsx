@@ -110,6 +110,27 @@ describe("XReader", () => {
     expect(html).toContain("可见判断");
   });
 
+  it("keeps an original failed judgement visible before its non-scheduled verification recovery", () => {
+    const html = renderToStaticMarkup(<XReader days={[{
+      naturalDate: "2099-01-05",
+      judgement: { visible: true, batches: [{
+        cutoffAt: "2099-01-05T08:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0,
+        stockViewpoints: [], marketIndustryViewpoints: [], strategyMindsetViewpoints: [], uncertainties: [], includedSourceCount: 3, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [],
+        verificationRecovery: {
+          stockViewpoints: [{ statement: "恢复后的判断", actionIntent: "watch", actionScope: "测试标的", conditions: [], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: [] }],
+          marketIndustryViewpoints: [], strategyMindsetViewpoints: [], uncertainties: [],
+        },
+      }] }, bloggers: [],
+    }]} initialNaturalDate="2099-01-05" />);
+
+    expect(html).toContain("判断失败");
+    expect(html).toContain("当日判断未能完成，稍后会重试。");
+    expect(html).toContain("验证恢复（非定时任务）");
+    expect(html).toContain("恢复后的判断");
+    expect(html.indexOf("当日判断未能完成，稍后会重试。")).toBeLessThan(html.indexOf("验证恢复（非定时任务）"));
+    for (const forbidden of ["analysis_ids", "evidence_post_ids", "replay_id", "prompt_version", "provider", "raw_content"]) expect(html).not.toContain(forbidden);
+  });
+
   it("renders batch-derived no-new, pending, failed, and excluded blogger placeholders", () => {
     const html = renderToStaticMarkup(<XReader days={[{
       naturalDate: "2099-01-04", judgement: { visible: true, batches: [] },

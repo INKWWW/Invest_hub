@@ -171,6 +171,33 @@ describe("X reader date projection", () => {
     ]);
   });
 
+  it("keeps the original judgement failure and projects only its succeeded one-off v3 recovery", async () => {
+    databaseMocks.rows.set("sources", [{ id: "source-a", source_key: "alpha", display_name: "Alpha", enabled: true }]);
+    databaseMocks.rows.set("x_daily_viewpoint_segments", []);
+    databaseMocks.rows.set("x_collection_batches", [{ id: "batch-failed", natural_date: "2099-01-01", cutoff_at: "2099-01-01T08:00:00.000Z", status: "judgement_failed" }]);
+    databaseMocks.rows.set("x_daily_judgement_versions", []);
+    databaseMocks.rows.set("x_collection_batch_sources", [{ batch_id: "batch-failed", source_id: "source-a", source_display_name: "Alpha", x_sync_task_id: null, settlement_status: "included", exclusion_code: null }]);
+    databaseMocks.rows.set("sync_tasks", []);
+    databaseMocks.rows.set("task_attempts", []);
+    databaseMocks.rows.set("x_v3_verification_replays", [
+      { id: "replay-succeeded", source_batch_id: "batch-failed", status: "succeeded" },
+      { id: "replay-failed", source_batch_id: "batch-failed", status: "failed" },
+    ]);
+    databaseMocks.rows.set("x_v3_verification_versions", [
+      { replay_id: "replay-succeeded", output: { security_industry_viewpoints: [{ statement: "恢复后的 v3 判断", action_intent: "watch", action_scope: "测试标的", conditions: [], supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["private-analysis"], evidence_post_ids: ["private-evidence"], uncertainties: [] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [] }, schema_version: "v3-x-cross-blogger", prompt_version: "v3-x-cross-blogger-1" },
+      { replay_id: "replay-failed", output: { security_industry_viewpoints: [{ statement: "不得展示", supporting_source_ids: [], dissenting_source_ids: [] }] }, schema_version: "v3-x-cross-blogger", prompt_version: "v3-x-cross-blogger-1" },
+    ]);
+
+    const result = await readXDay();
+    const batch = result[0]?.judgement.batches[0] as unknown as { status: string; verificationRecovery?: { stockViewpoints: Array<{ statement: string }> } };
+
+    expect(batch.status).toBe("judgement_failed");
+    expect(batch.verificationRecovery?.stockViewpoints).toEqual([{ statement: "恢复后的 v3 判断", actionIntent: "watch", actionScope: "测试标的", conditions: [], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: [] }]);
+    expect(JSON.stringify(batch)).not.toContain("replay-succeeded");
+    expect(JSON.stringify(batch)).not.toContain("private-analysis");
+    expect(JSON.stringify(batch)).not.toContain("private-evidence");
+  });
+
   it("projects only the referenced v3 analysis and categorized v3 window output", async () => {
     databaseMocks.rows.set("x_daily_viewpoint_segments", [{
       source_id: "source-a", natural_date: "2099-01-03", occurred_from_at: "2099-01-03T08:00:00.000Z", occurred_through_at: "2099-01-03T09:00:00.000Z",
