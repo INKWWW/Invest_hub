@@ -180,12 +180,13 @@ describe("X reader date projection", () => {
     databaseMocks.rows.set("sync_tasks", []);
     databaseMocks.rows.set("task_attempts", []);
     databaseMocks.rows.set("x_v3_verification_replays", [
-      { id: "replay-succeeded", source_batch_id: "batch-failed", status: "succeeded" },
       { id: "replay-failed", source_batch_id: "batch-failed", status: "failed" },
     ]);
-    databaseMocks.rows.set("x_v3_verification_versions", [
-      { replay_id: "replay-succeeded", output: { security_industry_viewpoints: [{ statement: "恢复后的 v3 判断", action_intent: "watch", action_scope: "测试标的", conditions: [], supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["private-analysis"], evidence_post_ids: ["private-evidence"], uncertainties: [] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [] }, schema_version: "v3-x-cross-blogger", prompt_version: "v3-x-cross-blogger-1" },
-      { replay_id: "replay-failed", output: { security_industry_viewpoints: [{ statement: "不得展示", supporting_source_ids: [], dissenting_source_ids: [] }] }, schema_version: "v3-x-cross-blogger", prompt_version: "v3-x-cross-blogger-1" },
+    databaseMocks.rows.set("x_v3_verification_acceptance_runs", [
+      { id: "acceptance-succeeded", parent_replay_id: "replay-failed", status: "succeeded" },
+    ]);
+    databaseMocks.rows.set("x_v3_verification_acceptance_versions", [
+      { acceptance_run_id: "acceptance-succeeded", output: { security_industry_viewpoints: [{ statement: "恢复后的 v3 判断", action_intent: "watch", action_scope: "测试标的", conditions: [], supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["private-analysis"], evidence_post_ids: ["private-evidence"], uncertainties: [] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [] }, schema_version: "v3-x-cross-blogger", prompt_version: "v3-x-cross-blogger-1" },
     ]);
 
     const result = await readXDay();
@@ -193,7 +194,7 @@ describe("X reader date projection", () => {
 
     expect(batch.status).toBe("judgement_failed");
     expect(batch.verificationRecovery?.stockViewpoints).toEqual([{ statement: "恢复后的 v3 判断", actionIntent: "watch", actionScope: "测试标的", conditions: [], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: [] }]);
-    expect(JSON.stringify(batch)).not.toContain("replay-succeeded");
+    expect(JSON.stringify(batch)).not.toContain("acceptance-succeeded");
     expect(JSON.stringify(batch)).not.toContain("private-analysis");
     expect(JSON.stringify(batch)).not.toContain("private-evidence");
   });

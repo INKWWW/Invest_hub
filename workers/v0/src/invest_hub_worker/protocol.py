@@ -182,6 +182,35 @@ class WorkerProtocol:
         _, value = self._request("POST", f"api/worker/x-v3-verification-replays/{replay_id}/failure", {"attempt": attempt, "failure_class": failure_class})
         return self._object(value, "invalid x v3 verification replay failure acknowledgement")
 
+    def claim_x_v3_verification_acceptance_run(self, acceptance_run_id: str) -> dict[str, Any] | None:
+        self._require_credential(); _validate_x_v3_verification_identity(acceptance_run_id, 1, "claim")
+        status, value = self._request("POST", f"api/worker/x-v3-verification-acceptance-runs/{acceptance_run_id}/claim", {})
+        if status == 204 or value is None: return None
+        response = self._object(value, "invalid x v3 verification acceptance claim")
+        if set(response) != {"acceptance_run_id", "attempt", "lease_expires_at"} or response.get("acceptance_run_id") != acceptance_run_id or response.get("attempt") != 1 or not _non_empty_string(response.get("lease_expires_at")): raise ProtocolError("invalid x v3 verification acceptance claim")
+        return {"replay_id": acceptance_run_id, "attempt": 1, "lease_expires_at": response["lease_expires_at"]}
+
+    def get_x_v3_verification_acceptance_context(self, acceptance_run_id: str, attempt: int) -> dict[str, Any]:
+        self._require_credential(); _validate_x_v3_verification_identity(acceptance_run_id, attempt, "context")
+        _, value = self._request("POST", f"api/worker/x-v3-verification-acceptance-runs/{acceptance_run_id}/context", {"attempt": attempt})
+        response = self._object(value, "invalid x v3 verification acceptance context")
+        if set(response) != {"acceptance_run_id", "attempt", "sources"} or response.get("acceptance_run_id") != acceptance_run_id: raise ProtocolError("invalid x v3 verification acceptance context")
+        return _parse_x_v3_verification_replay_context({"replay_id": acceptance_run_id, "attempt": response.get("attempt"), "sources": response.get("sources")}, acceptance_run_id, attempt)
+
+    def complete_x_v3_verification_acceptance_run(self, completion: dict[str, Any]) -> dict[str, Any]:
+        self._require_credential(); _validate_x_v3_verification_replay_completion(completion)
+        acceptance_run_id = str(completion["replay_id"])
+        _, value = self._request("POST", f"api/worker/x-v3-verification-acceptance-runs/{acceptance_run_id}/complete", completion)
+        acknowledgement = self._object(value, "invalid x v3 verification acceptance completion acknowledgement")
+        if acknowledgement.get("status") != "succeeded": raise ProtocolError("x v3 verification acceptance completion was not acknowledged")
+        return acknowledgement
+
+    def fail_x_v3_verification_acceptance_run(self, acceptance_run_id: str, attempt: int, failure_class: str) -> dict[str, Any]:
+        self._require_credential(); _validate_x_v3_verification_identity(acceptance_run_id, attempt, "failure")
+        if failure_class not in {"timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure"}: raise ProtocolError("invalid x v3 verification acceptance failure")
+        _, value = self._request("POST", f"api/worker/x-v3-verification-acceptance-runs/{acceptance_run_id}/failure", {"attempt": attempt, "failure_class": failure_class})
+        return self._object(value, "invalid x v3 verification acceptance failure acknowledgement")
+
     def claim_x_activation(self) -> dict[str, Any] | None:
         self._require_credential()
         status, value = self._request("POST", "api/worker/x-activations/claim", {})
@@ -369,7 +398,7 @@ class WorkerProtocol:
             error = value.get("error") if isinstance(value, dict) else None
             if status == 409:
                 raise RemoteConflict(str(error or "remote conflict"))
-            raise ProtocolError(str(error or f"remote status {status}"))
+            raise ProtocolError(str(error or f"remote status {status}"), status=status)
         return status, value
 
     @staticmethod
