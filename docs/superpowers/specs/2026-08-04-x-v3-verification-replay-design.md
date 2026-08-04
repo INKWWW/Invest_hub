@@ -2,11 +2,11 @@
 
 ## 目标
 
-立即验证已发布的 X v3 证据链，而不等待下一次正常窗口、不重新访问 X、也不新增或修改任何线上定时任务。验证使用 2026-08-04 08:00 已冻结批次中三个 `included` 来源的已持久化事实，依次执行 v3 单帖分析、v3 单博主窗口汇总与 v3 跨博主当日判断，并将结果安全投影到正式 `/x` Reader。
+回刷 2026-08-03 两个已终态失败的 X 当日判断窗口，而不重新访问 X、也不新增或修改任何线上定时任务。恢复使用各自冻结批次中全部 `included` 来源的已持久化事实，依次执行 v3 单帖分析、v3 单博主窗口汇总与 v3 跨博主当日判断，并将结果安全投影到正式 `/x` Reader。
 
 ## 已确认事实
 
-08:00 批次的每日判断已以 `schema_error` 终态失败，且三个位于 `included` 的来源只有 v2 单博主窗口结果；因此现有 `claim_next_x_daily_judgement` 无法直接重试。该失败 run、v2 单帖分析、v2 segment、原 batch 和既有定时任务都不可变，也不得被更新、删除或标记为成功。
+两个批次的每日判断均在旧 Worker 的 v3 输出 / v2 context 协议不匹配后终态失败；旧运行记录只保留了泛化失败分类，因此不能用分类字段替代该因果事实。各自位于 `included` 的来源只有 v2 单博主窗口结果；因此现有 `claim_next_x_daily_judgement` 无法直接重试。失败 run、v2 单帖分析、v2 segment、原 batch 和既有定时任务都不可变，也不得被更新、删除或标记为成功。
 
 现有手动 X refresh 只创建单来源采集 range，不能形成 daily batch；直接使用它既会重新访问 X，也不能稳定验证跨博主每日判断。因此它不适用于本次验证。
 
@@ -25,7 +25,7 @@ v3 单帖结果仍写入既有 `x_post_analyses` 的 `analysis_version = 2`，�
 
 ### 执行接口
 
-管理员专用 `create_x_v3_verification_replay(source_batch_id, requested_by)` 只允许本次指定的终态批次、当前管理员和一次创建。它在单一事务中冻结 source snapshot，返回 opaque replay ID；数据库拒绝任意普通用户、非目标 batch、非终态 batch、重复 replay 和无 v2 输入的请求。
+管理员专用 `create_x_v3_verification_replay(source_batch_id, requested_by)` 只允许终态 `judgement_failed` 批次、当前管理员和一次创建。本次生产执行只传入已核验的两条 2026-08-03 批次 ID；接口本身不扫描、创建或重试任何其他批次。它在单一事务中冻结 source snapshot，返回 opaque replay ID；数据库拒绝任意普通用户、非终态失败 batch、重复 replay 和无 v2 输入的请求。
 
 Worker 新增显式一次性命令 `run-x-v3-verification --replay-id <opaque id>`。该命令先原子 claim replay，再通过 service-role RPC 获得冻结的 canonical post/context 输入；逐帖调用公开 `v3_x_post_analysis.md`，按来源调用 `v3_x_window.md`，最后调用 `v3_x_cross_blogger.md`。任一 parser、Provider 或数据库契约失败时，只把 replay 标为 `failed` 并记录枚举 failure class；不启动 OpenCLI、浏览器、采集或普通 scheduler。
 
@@ -47,7 +47,7 @@ Worker 新增显式一次性命令 `run-x-v3-verification --replay-id <opaque id
 1. 数据库测试覆盖 actor/source-batch gate、一次性 claim、冻结来源/帖子完整性、任一错误的原子失败、v2 不变和 v3 证据归属。
 2. Worker 测试证明一次性命令不导入 OpenCLI/Browser、不调用 scheduler，并严格按 post → window → daily 的 v3 contracts 运行。
 3. Reader 测试证明失败定时卡仍可见、成功 verification 卡带非定时标识、三层 v3 信息可读且无内部字段泄露。
-4. 生产执行只运行一次显式验证命令；随后以只读 SQL 和已认证 `/x` 验证 replay 成功、原失败记录仍在、结果可读且不新增任何定时任务。
+4. 生产执行只对两条经核验的 2026-08-03 批次各运行一次显式恢复命令；随后以只读 SQL 和已认证 `/x` 验证 replay 成功、原失败记录仍在、结果可读且不新增任何定时任务。
 
 ## 回滚与故障处置
 
