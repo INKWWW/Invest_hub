@@ -6,7 +6,7 @@
 
 ## 已确认根因
 
-`ensure_due_x_collection_batches` 在创建 batch 时，会把覆盖水位早于该 batch cutoff 的来源冻结为 `source_behind_cutoff`。它只为水位恰好落在当前 cutoff 前一窗口的来源创建 batch-bound task。已有 `enqueue_due_x_tasks` 能为每个来源创建其下一个连续窗口，但当前 scheduled Worker 未在 batch scheduler 前调用它；因此一旦来源落后多个窗口，后续 batch 只会反复显示排除，而不会持续追赶。
+`ensure_due_x_collection_batches` 在创建 batch 时，会把覆盖水位早于该 batch cutoff 的来源冻结为 `source_behind_cutoff`。它只为水位恰好落在当前 cutoff 前一窗口的来源创建 batch-bound task。scheduled Worker 已经调用 `enqueue_due_x_tasks`，后者也能为每个来源创建其下一个连续窗口；但它遇到终态 window 时会永久 defer 该来源。此前的 replacement recovery 仅能由管理员逐个创建，因此一旦新增或任一来源发生终态失败，后续 batch 会持续显示排除，直到人工逐来源处理。
 
 终态失败不能被无条件自动重试：它必须保留原失败审计并停止该来源，直到管理员发起一次受到水位、活动任务和 replacement 唯一性约束的 recovery。`opencli_contract` 也必须先修正合同，不能由队列掩盖。
 
@@ -16,7 +16,7 @@
 
 每次 scheduled Worker tick 先调用既有 `enqueue_due_x_tasks`，再创建和结算每日 batch。该入口每个来源只创建水位之后的下一个完整四小时 scheduled window，并且已有活跃任务、相同 range 或终态失败时不会重复创建。因此成功任务会自然前移水位，下一 tick 再创建下一个窗口，直至追平当前 cutoff；新加入并完成 coverage 初始化的来源同样自动进入这条路径。
 
-终态失败仍由既有 defer 规则隔离：不阻塞其他来源，不无限重试，也不伪造完整覆盖。管理员手动完整运行会为恰好阻塞连续水位的终态 X window 创建既有 replacement recovery；若 failure 是当前 OpenCLI 合同不兼容，则记录失败并完成该运行为失败，不继续创建 replacement。
+终态失败仍不阻塞其他来源、不无限重试，也不伪造完整覆盖。scheduler 对每个尚未有 replacement 的精确水位阻塞终态 task，只创建一次 system replacement recovery；replacement 再次终态失败时停止该来源并保留两次失败审计。管理员手动完整运行复用同一规则；若 replacement 后仍失败，则该 run 失败，不继续创建第三次任务。
 
 ### 手动完整运行
 
