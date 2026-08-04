@@ -1,5 +1,11 @@
 # X 跨博主当日判断总结：最终边界本地验收记录
 
+## 08:00 v3 一次性验证回放生产执行（2026-08-04）
+
+production 已应用 `20260804081609_x_v3_verification_replay_0800.sql`，并确认四张 replay 表和 completion RPC 存在。Control Plane 的 v3 replay API 已在 Vercel production Ready 部署中上线，稳定 `/x` 别名已切换到该部署；为解除平台阻断，Git author 已改为 GitHub 账户已验证邮箱后以无内容提交重新触发部署。该 author 修复不改动应用、数据库或定时任务。
+
+在精确预检通过后，只创建了一条面向 `2026-08-04T08:00+08:00` judgement-failed batch 的冻结 replay。它冻结了 3 个 included 来源，未创建 sync task，原 batch 仍保持 `judgement_failed`。one-shot Worker 只运行 `run-x-v3-verification`，没有启动 OpenCLI、浏览器采集或 normal scheduler。单帖 v3、博主窗口 v3 和每日 v3 输出均完成本地结构化解析，但最终 completion 持久化边界终态为 `persistence_failure`；没有写入 replay segment、replay version 或 v3 analysis。该 replay 的 attempt=1 已 terminal failed，按批准的 fail-closed/no-retry 约束不重跑、不新建第二条验证链，也不回写原 08:00 judgement。
+
 ## Worker Protocol v3 断层修复（2026-08-04，本地验证）
 
 v3 Prompt 发布后，`XDailyJudgementRuntime` 已固定构造 `v3-x-cross-blogger-1` context 和 `v3-x-cross-blogger` completion，但 `WorkerProtocol` 仍只接受 v2。于是 Worker 会在调用 Provider 前拒绝有效的 v3 context；即使越过该处，旧 completion validator 也会拒绝三类 v3 输出。该本地 ProtocolError 没有 failure class，旧代码将它默认登记为 `persistence_failure`，从而错误描述为持久化失败。
