@@ -21,6 +21,11 @@ _SAFE_PROTOCOL_FAILURE_CODES = frozenset({
     "range_completion_rejected",
 })
 _X_DAILY_JUDGEMENT_FAILURES = frozenset({"timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure"})
+_X_FAILURE_STAGES = frozenset({
+    "collection_fetch", "page_validation", "page_mapping", "page_boundary_validation",
+    "local_evidence_persistence", "remote_page_persist", "remote_page_acknowledgement",
+    "lease_renewal", "range_completion",
+})
 
 
 class WorkerState(StrEnum):
@@ -173,17 +178,23 @@ class Worker:
         segment = persistence.get("capture_segment")
         if not isinstance(segment, Mapping) or segment_payload.get("capture_segment") != segment:
             raise RuntimeError("window page segment does not match its persistence")
-        acknowledgement = self.protocol.persist(dict(persistence))
+        try:
+            acknowledgement = self.protocol.persist(dict(persistence))
+        except Exception as exc:
+            raise RuntimeExecutionError("persistence_failure", "control plane page persistence failed", failure_stage="remote_page_persist") from exc
         if acknowledgement.get("persisted") is not True:
-            raise LeaseUncertain("control plane did not acknowledge window page persistence")
+            raise RuntimeExecutionError("persistence_failure", "control plane did not acknowledge window page persistence", failure_stage="remote_page_acknowledgement")
         expected_cursor = segment.get("next_cursor")
         if acknowledgement.get("resume_cursor") != expected_cursor:
-            raise LeaseUncertain("control plane acknowledged an unexpected window resume cursor")
+            raise RuntimeExecutionError("persistence_failure", "control plane acknowledged an unexpected window resume cursor", failure_stage="remote_page_acknowledgement")
         task_id = persistence.get("task_id")
         attempt = persistence.get("attempt")
         if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
             raise RuntimeError("invalid window page identity")
-        self.protocol.renew(task_id, attempt)
+        try:
+            self.protocol.renew(task_id, attempt)
+        except Exception as exc:
+            raise RuntimeExecutionError("persistence_failure", "control plane lease renewal failed", failure_stage="lease_renewal") from exc
 
     def _persist_before_result(self, execution: dict[str, Any]) -> dict[str, Any]:
         """Persist a complete execution before allowing a success result.
@@ -264,9 +275,12 @@ class Worker:
         completion_payload = dict(completion)
         if completion_payload.get("summary_batch_ids") != summary_batch_ids or completion_payload.get("daily_summary_ids") != daily_summary_ids:
             raise LeaseUncertain("window completion receipts do not match persisted evidence")
-        final_acknowledgement = self.protocol.complete_capture_range(completion_payload)
+        try:
+            final_acknowledgement = self.protocol.complete_capture_range(completion_payload)
+        except Exception as exc:
+            raise RuntimeExecutionError("persistence_failure", "control plane range completion failed", failure_stage="range_completion") from exc
         if final_acknowledgement.get("status") != "succeeded":
-            raise LeaseUncertain("control plane did not acknowledge window completion")
+            raise RuntimeExecutionError("persistence_failure", "control plane did not acknowledge window completion", failure_stage="range_completion")
         return final_acknowledgement
 
     def _report_failure(self, claim: Mapping[str, Any], error: Exception) -> None:
@@ -278,6 +292,9 @@ class Worker:
         }
         if failure_class not in allowed:
             failure_class = "unknown"
+        failure_stage = getattr(error, "failure_stage", None)
+        if failure_stage not in _X_FAILURE_STAGES:
+            failure_stage = None
         retryable = self._is_retryable_x_failure(claim, failure_class)
         try:
             self.protocol.report_failure(
@@ -287,6 +304,7 @@ class Worker:
                     "attempt": int(claim["attempt"]),
                     "status": "retryable_failed",
                     "failure_class": failure_class,
+                    **({"failure_stage": failure_stage} if failure_stage is not None else {}),
                     "safe_checkpoint": claim.get("safe_checkpoint"),
                     "retryable": retryable,
                 }

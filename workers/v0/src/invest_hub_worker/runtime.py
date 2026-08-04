@@ -32,9 +32,10 @@ from .summaries import SummaryError, build_batch_summaries, build_v1_1_batch_sum
 
 
 class RuntimeExecutionError(RuntimeError):
-    def __init__(self, failure_class: str, message: str) -> None:
+    def __init__(self, failure_class: str, message: str, *, failure_stage: str | None = None) -> None:
         super().__init__(message)
         self.failure_class = failure_class
+        self.failure_stage = failure_stage
 
 
 class XDailyJudgementRuntime:
@@ -255,10 +256,10 @@ class WindowedCaptureRange:
         else:
             if not {"mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"} <= set(raw_range):
                 raise ValueError("window task capture_range is invalid")
-            if raw_range.get("trigger") not in {"scheduled", "manual", "bootstrap"}:
+            if raw_range.get("trigger") not in {"scheduled", "manual", "bootstrap", "recovery"}:
                 raise ValueError("window task capture_range trigger is invalid")
-            if raw_range.get("trigger") in {"manual", "bootstrap"} and scheduled_window_key is not None:
-                raise ValueError("manual and bootstrap windows cannot carry a scheduled_window_key")
+            if raw_range.get("trigger") in {"manual", "bootstrap", "recovery"} and scheduled_window_key is not None:
+                raise ValueError("non-scheduled windows cannot carry a scheduled_window_key")
             if raw_range.get("trigger") == "scheduled" and (not isinstance(scheduled_window_key, str) or not scheduled_window_key):
                 raise ValueError("scheduled window task requires a scheduled_window_key")
             if scheduled_window_key is not None and not isinstance(scheduled_window_key, str):
@@ -1094,7 +1095,7 @@ class XWindowedRuntime:
         capture_segments: list[dict[str, Any]] = []
         duplicate_count = 0
         overlap_start = capture_range.overlap_start_at or capture_range.start_at
-        failure_stage = "page validation"
+        failure_stage = "collection_fetch"
 
         try:
             page = self.connector.fetch_page(
@@ -1103,21 +1104,22 @@ class XWindowedRuntime:
                 lower_bound_at=overlap_start,
                 end_at=capture_range.end_at,
             )
+            failure_stage = "page_validation"
             receipt = self._validate_page(page, overlap_start)
-            failure_stage = "page mapping"
+            failure_stage = "page_mapping"
             mapped = self.canonicalizer.map(page)
-            failure_stage = "page boundary validation"
+            failure_stage = "page_boundary_validation"
             page_times = [_required_instant(message.occurred_at, "X post occurred_at") for message in mapped]
             if any(occurred_at > capture_range.end_at for occurred_at in page_times):
                 raise RuntimeExecutionError("opencli_contract", "X page contains a post after its fixed end_at")
             if any(message.author_id != source_snapshot["account_id"] for message in mapped):
                 raise RuntimeExecutionError("opencli_contract", "X page author does not match the task source snapshot")
-            failure_stage = "local evidence persistence"
+            failure_stage = "local_evidence_persistence"
             self.evidence.persist_raw(page)
             local_counts = self.evidence.persist_canonical(mapped)
             duplicate_count += int(local_counts.get("duplicate_count", 0))
 
-            failure_stage = "page persistence acknowledgement"
+            failure_stage = "remote_page_persist"
             page_execution = self._page_execution(claim, page, mapped, page_times, None)
             if on_capture_page is None:
                 capture_segments.append(page_execution["capture_segment"])
@@ -1133,13 +1135,13 @@ class XWindowedRuntime:
                 candidate_by_id[message.external_message_id] = message
             boundary = self._receipt_boundary(receipt, capture_range.end_at)
         except ConnectorError as exc:
-            raise RuntimeExecutionError(str(exc.code), "X collection failed") from exc
+            raise RuntimeExecutionError(str(exc.code), "X collection failed", failure_stage="collection_fetch") from exc
         except RuntimeExecutionError:
             raise
         except (ValueError, SchemaError) as exc:
-            raise RuntimeExecutionError("schema_error", f"X {failure_stage} failed schema validation") from exc
+            raise RuntimeExecutionError("schema_error", f"X {failure_stage.replace('_', ' ')} failed schema validation", failure_stage=failure_stage) from exc
         except Exception as exc:
-            raise RuntimeExecutionError("persistence_failure", "X local evidence persistence failed") from exc
+            raise RuntimeExecutionError("persistence_failure", "X bounded execution failed", failure_stage=failure_stage) from exc
 
         messages = sorted(candidate_by_id.values(), key=lambda item: (_required_instant(item.occurred_at, "X post occurred_at"), item.external_message_id))
         analyses, retries, elapsed_ms = self._post_analyses(claim, messages)

@@ -85,6 +85,37 @@ class ContractTests(unittest.TestCase):
                 },
             )
 
+    def test_failure_stage_is_allowlisted_when_present(self):
+        accepted = load_contract(
+            "task-failure",
+            {
+                "contract_version": "v0",
+                "task_id": "task-001",
+                "attempt": 1,
+                "status": "retryable_failed",
+                "failure_class": "persistence_failure",
+                "failure_stage": "remote_page_persist",
+                "safe_checkpoint": None,
+                "retryable": True,
+            },
+        )
+        self.assertEqual(accepted["failure_stage"], "remote_page_persist")
+
+        with self.assertRaises(ContractError):
+            load_contract(
+                "task-failure",
+                {
+                    "contract_version": "v0",
+                    "task_id": "task-001",
+                    "attempt": 1,
+                    "status": "retryable_failed",
+                    "failure_class": "persistence_failure",
+                    "failure_stage": "raw_exception_text",
+                    "safe_checkpoint": None,
+                    "retryable": True,
+                },
+            )
+
     def test_checkpoint_outside_allowed_input_range_is_rejected(self):
         with self.assertRaises(ContractError):
             validate_task_result(

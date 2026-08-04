@@ -147,6 +147,20 @@ class WorkerRecoveryTests(unittest.TestCase):
         self.assertEqual(outcome.status, "recovering")
         self.assertFalse(protocol.reported_failures[0]["retryable"])
 
+    def test_x_failure_reports_an_allowlisted_failure_stage(self) -> None:
+        protocol = FakeProtocol()
+        protocol.claim_value = {**CLAIM, "task_type": "x_sync", "source_id": "x-source"}
+        worker = Worker(
+            protocol,
+            execute=lambda _claim: (_ for _ in ()).throw(
+                RuntimeExecutionError("persistence_failure", "remote persistence failed", failure_stage="remote_page_persist")
+            ),
+        )
+
+        worker.run_once()
+
+        self.assertEqual(protocol.reported_failures[0]["failure_stage"], "remote_page_persist")
+
     def test_x_transient_failure_stops_retrying_after_the_third_attempt(self) -> None:
         protocol = FakeProtocol()
         protocol.claim_value = {**CLAIM, "task_type": "x_sync", "source_id": "x-source", "attempt": 3}

@@ -10,12 +10,16 @@
     "attempt": { "type": "integer", "minimum": 1 },
     "status": { "enum": ["retryable_failed", "failed", "cancelled"] },
     "failure_class": { "$ref": "#/$defs/failure_class" },
+    "failure_stage": { "$ref": "#/$defs/failure_stage" },
     "safe_checkpoint": { "type": ["string", "null"], "maxLength": 512 },
     "retryable": { "type": "boolean" }
   },
   "$defs": {
     "failure_class": {
       "enum": ["timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure", "lease_expired", "network_error", "preflight", "unauthorized", "opencli_contract", "opencli_missing", "opencli_stale", "unknown"]
+    },
+    "failure_stage": {
+      "enum": ["collection_fetch", "page_validation", "page_mapping", "page_boundary_validation", "local_evidence_persistence", "remote_page_persist", "remote_page_acknowledgement", "lease_renewal", "range_completion"]
     }
   }
 }

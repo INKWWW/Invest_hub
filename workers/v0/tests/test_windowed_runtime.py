@@ -10,7 +10,7 @@ from invest_hub_worker.config import LocalWorkerConfig
 from invest_hub_worker.connectors.base import RawPage
 from invest_hub_worker.evidence import LocalEvidenceStore
 from invest_hub_worker.providers.base import ProviderContext, ProviderResponse
-from invest_hub_worker.runtime import AuthorizedDiscordRuntime, RuntimeExecutionError
+from invest_hub_worker.runtime import AuthorizedDiscordRuntime, RuntimeExecutionError, WindowedCaptureRange
 from invest_hub_worker.worker import Worker
 
 
@@ -112,6 +112,16 @@ def window_claim() -> dict[str, object]:
 
 
 class WindowedRuntimeTests(unittest.TestCase):
+    def test_recovery_window_claim_is_a_valid_non_scheduled_window(self) -> None:
+        claim = window_claim()
+        capture_range = dict(claim["capture_range"])
+        capture_range["trigger"] = "recovery"
+        claim["capture_range"] = capture_range
+
+        parsed = WindowedCaptureRange.from_claim(claim)
+
+        self.assertEqual(parsed.capture_range["trigger"], "recovery")
+
     def test_windowed_runtime_generates_a_v1_1_fact_batch_and_author_daily_summary(self) -> None:
         class OnePageConnector:
             def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, end_at: datetime) -> RawPage:

@@ -10,6 +10,7 @@ type TaskFailure = {
   attempt: number;
   status: "retryable_failed" | "failed" | "cancelled";
   failure_class: string;
+  failure_stage?: string;
   safe_checkpoint: string | null;
   retryable: boolean;
 };
