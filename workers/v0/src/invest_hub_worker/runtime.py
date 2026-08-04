@@ -22,6 +22,8 @@ from .structured import (
     parse_v1_1_chunk_output,
     parse_v2_x_chunk_output,
     parse_v3_x_cross_blogger_output,
+    parse_v3_x_post_analysis_output,
+    parse_v3_x_window_output,
     parse_v2_x_window_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -1053,8 +1055,8 @@ class XWindowedRuntime:
         self.canonicalizer = canonicalizer
         self.provider = provider
         self.prompt_template = prompt_template
-        self.chunk_template = _read_public_prompt("v2_x_chunk.md")
-        self.window_template = _read_public_prompt("v2_x_window.md")
+        self.chunk_template = _read_public_prompt("v3_x_post_analysis.md")
+        self.window_template = _read_public_prompt("v3_x_window.md")
         self.retry_policy = retry_policy or RetryPolicy(max_attempts=3, timeout_seconds=240)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
@@ -1242,9 +1244,9 @@ class XWindowedRuntime:
         for message in messages:
             context = self._context_for_prompt(message)
             provider_context = ProviderContext(
-                chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-post-{message.external_message_id}", prompt_version=self.config.parameter_version,
+                chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-post-{message.external_message_id}", prompt_version="v3-x-post-analysis-1",
                 prompt_text=self._chunk_prompt(message, context), input_message_ids=frozenset({message.external_message_id}),
-                operation="v2_x_chunk", visible_context_post_ids=frozenset({context["id"]}) if context is not None else frozenset(),
+                operation="v3_x_post_analysis", visible_context_post_ids=frozenset({context["id"]}) if context is not None else frozenset(),
             )
             response = self.retry_policy.execute(self.provider, (message,), provider_context)
             retries += max(0, response.attempt - 1)
@@ -1252,16 +1254,22 @@ class XWindowedRuntime:
             if response.status != "success" or response.parsed_output is None:
                 raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X post analysis")
             try:
-                output = parse_v2_x_chunk_output(json.dumps(response.parsed_output, ensure_ascii=False), {message.external_message_id}, set(provider_context.visible_context_post_ids))
+                output = parse_v3_x_post_analysis_output(
+                    json.dumps(response.parsed_output, ensure_ascii=False),
+                    {message.external_message_id},
+                    {message.external_message_id: set(provider_context.visible_context_post_ids)},
+                )
             except SchemaError as exc:
                 raise RuntimeExecutionError("schema_error", "X post analysis failed evidence validation") from exc
             analysis = output["analyses"][0]
             analyses.append({
-                "post_id": message.external_message_id, "analysis_version": 1,
+                "post_id": message.external_message_id, "analysis_version": 2,
+                "schema_version": "v3-x-post-analysis", "prompt_version": "v3-x-post-analysis-1",
+                "analysis_output": analysis,
                 "blogger_viewpoint": analysis["blogger_viewpoint"], "arguments": analysis["arguments"],
                 "quoted_post_viewpoint": analysis["quoted_post_viewpoint"], "uncertainties": analysis["uncertainties"],
                 "evidence_post_ids": analysis["evidence_post_ids"], "post_link": analysis["post_link"],
-                "analysis_id": f"{message.external_message_id}@1",
+                "analysis_id": f"{message.external_message_id}@2",
             })
         return analyses, retries, elapsed_ms
 
@@ -1280,14 +1288,19 @@ class XWindowedRuntime:
             if context is not None:
                 visible_evidence.add(context["id"])
         provider_context = ProviderContext(
-            chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-window", prompt_version=self.config.parameter_version,
-            prompt_text=self._window_prompt(claim, capture_range, analyses, natural_date), input_message_ids=frozenset(analysis_ids), operation="v2_x_window",
+            chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-window", prompt_version="v3-x-window-1",
+            prompt_text=self._window_prompt(claim, capture_range, analyses, natural_date), input_message_ids=frozenset(analysis_ids), operation="v3_x_window",
+            allowed_analysis_evidence_post_ids=tuple(sorted((str(analysis["analysis_id"]), tuple(sorted(analysis["evidence_post_ids"]))) for analysis in analyses)),
         )
         response = self.retry_policy.execute(self.provider, tuple(analyses), provider_context)
         if response.status != "success" or response.parsed_output is None:
             raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X window viewpoint")
         try:
-            output = parse_v2_x_window_output(json.dumps(response.parsed_output, ensure_ascii=False), analysis_ids)
+            output = parse_v3_x_window_output(
+                json.dumps(response.parsed_output, ensure_ascii=False),
+                analysis_ids,
+                {str(analysis["analysis_id"]): set(analysis["evidence_post_ids"]) for analysis in analyses},
+            )
         except SchemaError as exc:
             raise RuntimeExecutionError("schema_error", "X window viewpoint failed analysis validation") from exc
         if output["range_task_id"] != str(claim["task_id"]) or output["natural_date"] != natural_date or not set(output["evidence_post_ids"]) <= visible_evidence:
@@ -1295,13 +1308,8 @@ class XWindowedRuntime:
         return {
             "natural_date": natural_date, "occurred_from_at": _instant_text(min(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
             "occurred_through_at": _instant_text(max(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
-            "window_viewpoints": output["window_viewpoints"],
-            # The model may summarize a repost as having no standalone
-            # viewpoint and omit its analysis id.  The durable range contract
-            # still requires every persisted post analysis to be referenced by
-            # the daily segment, so the Worker owns this completeness step.
-            "analysis_ids": sorted(analysis_ids),
-            "evidence_post_ids": sorted(set(output["evidence_post_ids"]) | {message.external_message_id for message in messages}),
+            "schema_version": "v3-x-window", "prompt_version": "v3-x-window-1", "segment_output": output,
+            "window_viewpoints": [], "analysis_ids": output["analysis_ids"], "evidence_post_ids": output["evidence_post_ids"],
             "uncertainties": output["uncertainties"],
         }, max(0, response.attempt - 1), response.elapsed_ms
 

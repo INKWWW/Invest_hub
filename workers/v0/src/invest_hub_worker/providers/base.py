@@ -42,7 +42,7 @@ class ProviderContext:
             raise ValueError("attempt must be positive")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        if self.operation not in {"legacy_topics", "v1_1_chunk", "v1_1_daily", "v2_x_chunk", "v2_x_window", "v2_x_cross_blogger", "v3_x_cross_blogger"}:
+        if self.operation not in {"legacy_topics", "v1_1_chunk", "v1_1_daily", "v2_x_chunk", "v2_x_window", "v2_x_cross_blogger", "v3_x_post_analysis", "v3_x_window", "v3_x_cross_blogger"}:
             raise ValueError("operation must be an approved structuring operation")
         message_ids: set[str] = set()
         for identity in self.input_message_authors:

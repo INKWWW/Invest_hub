@@ -115,7 +115,17 @@ class Provider:
                 "quoted_post_viewpoint": "被引用观点", "uncertainties": [],
                 "evidence_post_ids": [post_id, "context-1"], "post_link": "https://x.com/fixture/status/1",
             }]}
-        else:
+        elif context.operation == "v3_x_post_analysis":
+            post_id = next(iter(context.input_message_ids))
+            self.post_ids.append(post_id)
+            output = {"schema_version": "v3-x-post-analysis", "analyses": [{
+                "post_id": post_id, "investment_relevance": "investment_related",
+                "investment_categories": ["security_industry"], "blogger_viewpoint": "作者明确倾向买入。",
+                "action_intent": "buy", "action_scope": "测试标的", "conditions": ["需求改善"],
+                "arguments": ["帖子论据"], "quoted_post_viewpoint": "被引用观点", "uncertainties": [],
+                "evidence_post_ids": [post_id, "context-1"], "post_link": "https://x.com/fixture/status/1",
+            }]}
+        elif context.operation == "v2_x_window":
             prompt_payload = json.loads(context.prompt_text.rsplit("\n", 1)[-1])
             analysis_ids = sorted(context.input_message_ids)
             if self.omit_last_window_analysis:
@@ -124,6 +134,19 @@ class Provider:
                       "occurred_from_at": prompt_payload["occurred_from_at"], "occurred_through_at": prompt_payload["occurred_through_at"],
                       "window_viewpoints": ["本窗口综合观点"], "analysis_ids": analysis_ids,
                       "evidence_post_ids": [*self.post_ids, "context-1"], "uncertainties": []}
+        elif context.operation == "v3_x_window":
+            prompt_payload = json.loads(context.prompt_text.rsplit("\n", 1)[-1])
+            analyses = prompt_payload["post_analyses"]
+            analysis_ids = sorted(context.input_message_ids)
+            evidence_post_ids = sorted({evidence_id for analysis in analyses for evidence_id in analysis["evidence_post_ids"]})
+            output = {"schema_version": "v3-x-window", "natural_date": prompt_payload["natural_date"], "range_task_id": "x-window-1",
+                      "occurred_from_at": prompt_payload["occurred_from_at"], "occurred_through_at": prompt_payload["occurred_through_at"],
+                      "security_industry_viewpoints": [{"statement": "博主看好测试标的。", "action_intent": "buy", "action_scope": "测试标的",
+                          "conditions": ["需求改善"], "analysis_ids": analysis_ids, "evidence_post_ids": evidence_post_ids, "uncertainties": []}],
+                      "market_structure_viewpoints": [], "strategy_mindset_viewpoints": [],
+                      "analysis_ids": analysis_ids, "evidence_post_ids": evidence_post_ids, "uncertainties": []}
+        else:
+            raise AssertionError(f"unexpected Provider operation: {context.operation}")
         return ProviderResponse(status="success", provider="mock", model_reported=None, prompt_version=context.prompt_version,
                                 elapsed_ms=1, attempt=context.attempt, raw_ref=None, parsed_output_ref=None, parsed_output=output)
 
@@ -152,6 +175,26 @@ class XWindowedRuntimeTests(unittest.TestCase):
         self.assertEqual(completion["boundary"]["kind"], "oldest_at_or_before_start")
         self.assertEqual(completion["boundary"]["observed_at"], "2026-07-22T23:29:00Z")
         self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
+
+    def test_runtime_emits_v3_analysis_and_window_payloads(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                return RawPage(
+                    page_id="x-v3", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/x-v3", telemetry=receipt_telemetry("time_boundary_reached", "2026-07-22T23:29:00Z"),
+                    messages=(quote_post(),),
+                )
+
+        provider = Provider()
+        with tempfile.TemporaryDirectory() as directory:
+            completion = self.runtime(Connector(), directory, provider).execute_windowed(claim())["range_completion"]
+
+        analysis = completion["x_post_analyses"][0]
+        segment = completion["x_daily_segments"][0]
+        self.assertEqual((analysis["analysis_version"], analysis["schema_version"], analysis["prompt_version"]), (2, "v3-x-post-analysis", "v3-x-post-analysis-1"))
+        self.assertEqual(segment["schema_version"], "v3-x-window")
+        self.assertEqual(segment["segment_output"]["security_industry_viewpoints"][0]["action_intent"], "buy")
+        self.assertEqual(provider.operations, ["v3_x_post_analysis", "v3_x_window"])
 
     def test_history_task_uses_the_same_bounded_execution_path(self) -> None:
         class Connector:
@@ -256,7 +299,7 @@ class XWindowedRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             completion = self.runtime(Connector(), directory, provider).execute_windowed(claim())["range_completion"]
 
-        self.assertEqual(completion["x_daily_segments"][0]["analysis_ids"], ["post-new@1", "post-second@1"])
+        self.assertEqual(completion["x_daily_segments"][0]["analysis_ids"], ["post-new@2", "post-second@2"])
 
 
 if __name__ == "__main__":
