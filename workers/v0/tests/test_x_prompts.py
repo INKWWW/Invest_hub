@@ -8,6 +8,23 @@ PROMPT_ROOT = Path(__file__).resolve().parents[1] / "prompts"
 
 
 class XPromptContractTests(unittest.TestCase):
+    def test_v3_upstream_prompts_publish_versions_and_boundaries(self) -> None:
+        post = (PROMPT_ROOT / "v3_x_post_analysis.md").read_text(encoding="utf-8")
+        window = (PROMPT_ROOT / "v3_x_window.md").read_text(encoding="utf-8")
+        daily = (PROMPT_ROOT / "v3_x_cross_blogger.md").read_text(encoding="utf-8")
+
+        for field in (
+            '"schema_version": "v3-x-post-analysis"', "investment_relevance",
+            "investment_categories", "action_intent", "action_scope", "conditions",
+        ):
+            self.assertIn(field, post)
+        for field in (
+            '"schema_version": "v3-x-window"', "security_industry_viewpoints",
+            "market_structure_viewpoints", "strategy_mindset_viewpoints", "analysis_ids",
+        ):
+            self.assertIn(field, window)
+        self.assertIn("完整 v3 单帖分析", daily)
+
     def test_chunk_prompt_names_every_required_analysis_field(self) -> None:
         prompt = (PROMPT_ROOT / "v2_x_chunk.md").read_text(encoding="utf-8")
 
