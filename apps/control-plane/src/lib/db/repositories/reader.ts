@@ -333,21 +333,27 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       .select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status,exclusion_code").in("batch_id", ids)
       .order("batch_id", { ascending: true }).order("source_id", { ascending: true }).range(from, to)),
     readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_v3_verification_replays")
-      .select("id,source_batch_id,status").eq("status", "succeeded").in("source_batch_id", ids)
+      .select("id,source_batch_id,status").eq("status", "failed").in("source_batch_id", ids)
       .order("source_batch_id", { ascending: true }).order("id", { ascending: true }).range(from, to)),
   ]);
 
-  const succeededReplays = replays.filter((replay) => replay.status === "succeeded" && typeof replay.id === "string" && typeof replay.source_batch_id === "string");
-  const replayIds = succeededReplays.map((replay) => replay.id);
-  const verificationVersions = await readAllChunkPages(chunkValues(replayIds, READER_QUERY_BATCH_SIZE), (ids, from, to) => supabase.from("x_v3_verification_versions")
-    .select("replay_id,output,schema_version,prompt_version").in("replay_id", ids)
-    .order("replay_id", { ascending: true }).range(from, to));
-  const verificationVersionByReplayId = new Map(verificationVersions
-    .filter((version) => version.schema_version === "v3-x-cross-blogger" && version.prompt_version === "v3-x-cross-blogger-1" && typeof version.replay_id === "string")
-    .map((version) => [version.replay_id, version]));
-  const succeededReplayByBatchId = new Map(succeededReplays
-    .filter((replay) => verificationVersionByReplayId.has(replay.id))
-    .map((replay) => [replay.source_batch_id, replay]));
+  const failedReplays = replays.filter((replay) => replay.status === "failed" && typeof replay.id === "string" && typeof replay.source_batch_id === "string");
+  const failedReplayIds = failedReplays.map((replay) => replay.id);
+  const acceptanceRuns = await readAllChunkPages(chunkValues(failedReplayIds, READER_QUERY_BATCH_SIZE), (ids, from, to) => supabase.from("x_v3_verification_acceptance_runs")
+    .select("id,parent_replay_id,status").eq("status", "succeeded").in("parent_replay_id", ids)
+    .order("parent_replay_id", { ascending: true }).order("id", { ascending: true }).range(from, to));
+  const successfulAcceptances = acceptanceRuns.filter((run) => run.status === "succeeded" && typeof run.id === "string" && typeof run.parent_replay_id === "string");
+  const acceptanceIds = successfulAcceptances.map((run) => run.id);
+  const verificationVersions = await readAllChunkPages(chunkValues(acceptanceIds, READER_QUERY_BATCH_SIZE), (ids, from, to) => supabase.from("x_v3_verification_acceptance_versions")
+    .select("acceptance_run_id,output,schema_version,prompt_version").in("acceptance_run_id", ids)
+    .order("acceptance_run_id", { ascending: true }).range(from, to));
+  const verificationVersionByAcceptanceId = new Map(verificationVersions
+    .filter((version) => version.schema_version === "v3-x-cross-blogger" && version.prompt_version === "v3-x-cross-blogger-1" && typeof version.acceptance_run_id === "string")
+    .map((version) => [version.acceptance_run_id, version]));
+  const acceptanceByParentReplayId = new Map(successfulAcceptances
+    .filter((run) => verificationVersionByAcceptanceId.has(run.id))
+    .map((run) => [run.parent_replay_id, run]));
+  const failedReplayByBatchId = new Map(failedReplays.map((replay) => [replay.source_batch_id, replay]));
 
   const batchSources = allBatchSources.filter((row) => sourceIdSet.has(row.source_id));
   const batchSourcesByBatch = new Map<string, typeof batchSources>();
@@ -403,8 +409,9 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       ...current,
       revisionHistory: batchVersions.slice(1).map((version) => judgementRevision(version, displayNamesBySourceId)),
     };
-    const replay = succeededReplayByBatchId.get(batch.id);
-    const verificationVersion = replay ? verificationVersionByReplayId.get(replay.id) : undefined;
+    const replay = failedReplayByBatchId.get(batch.id);
+    const acceptance = replay ? acceptanceByParentReplayId.get(replay.id) : undefined;
+    const verificationVersion = acceptance ? verificationVersionByAcceptanceId.get(acceptance.id) : undefined;
     if (batch.status === "judgement_failed" && verificationVersion) {
       const recovery = judgementRevision({ revision: 1, coverage_status: "complete", output: verificationVersion.output }, displayNamesBySourceId);
       judgement.verificationRecovery = {

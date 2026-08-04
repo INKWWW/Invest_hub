@@ -43,7 +43,7 @@ function isJudgementItem(value: unknown): value is XVerificationReplayJudgementI
     && isStringArray(value.evidence_post_ids, 128) && isStringArray(value.uncertainties);
 }
 
-function isCompletion(value: unknown): value is XVerificationReplayCompletion {
+export function isCompletion(value: unknown): value is XVerificationReplayCompletion {
   if (!isObject(value) || !equalKeys(value, completionKeys) || typeof value.replay_id !== "string" || value.attempt !== 1
     || value.provider !== "codex_cli" || !isSafeModelReported(value.model_reported) || !Array.isArray(value.sources) || !isObject(value.daily)) return false;
   const daily = value.daily;
@@ -71,7 +71,7 @@ function isCompletion(value: unknown): value is XVerificationReplayCompletion {
     });
 }
 
-function referencesFrozenContext(completion: XVerificationReplayCompletion, frozen: XVerificationReplayContext) {
+export function referencesFrozenContext(completion: XVerificationReplayCompletion, frozen: XVerificationReplayContext) {
   if (completion.replay_id !== frozen.replay_id || completion.attempt !== frozen.attempt || frozen.sources.length === 0) return false;
   const frozenSourceIds = frozen.sources.map((source) => source.source_id);
   if (!isUnique(frozenSourceIds) || completion.sources.length !== frozenSourceIds.length

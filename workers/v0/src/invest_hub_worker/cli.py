@@ -54,6 +54,13 @@ def build_parser() -> argparse.ArgumentParser:
     verification_replay.add_argument("--evidence-dir", required=True)
     verification_replay.add_argument("--replay-id", required=True)
     verification_replay.add_argument("--worker-name", default="v3-x-verification-worker")
+    verification_acceptance = subparsers.add_parser("run-x-v3-verification-acceptance", help="run one server-frozen X v3 acceptance verification")
+    verification_acceptance.add_argument("--config", required=True)
+    verification_acceptance.add_argument("--credential", required=True)
+    verification_acceptance.add_argument("--prompt-path", required=True)
+    verification_acceptance.add_argument("--evidence-dir", required=True)
+    verification_acceptance.add_argument("--acceptance-run-id", required=True)
+    verification_acceptance.add_argument("--worker-name", default="v3-x-acceptance-worker")
     resolve_identity = subparsers.add_parser("resolve-x-identity", help="verify one configured X source identity without collecting posts")
     resolve_identity.add_argument("--config", required=True)
     resolve_identity.add_argument("--credential", required=True)
@@ -70,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         return _resolve_x_identity(args)
     if args.command == "run-x-v3-verification":
         return _run_x_v3_verification_replay(args)
+    if args.command == "run-x-v3-verification-acceptance":
+        return _run_x_v3_verification_acceptance(args)
     acknowledgement_variable = "V1_REAL_DISCORD_ACK" if args.command == "run-scheduled" else "V0_REAL_DISCORD_ACK"
     if args.command == "run-scheduled" and args.poll_seconds < 1:
         print(json.dumps({"status": "refused", "reason": "poll_seconds_must_be_positive"}))
@@ -160,10 +169,51 @@ def _run_x_v3_verification_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_x_v3_verification_acceptance(args: argparse.Namespace) -> int:
+    """Execute one isolated acceptance run without any normal Worker path."""
+    if os.environ.get("V2_REAL_X_ACK") != "authorized":
+        print(json.dumps({"status": "refused", "error": "real_x_requires_explicit_authorization"}))
+        return 2
+    try:
+        config = LocalWorkerConfigSet.load(Path(args.config))
+    except ConfigError:
+        print(json.dumps({"status": "refused", "error": "x_only_config_required"}))
+        return 2
+    if not config.sources or any(source.source_type != "x" for source in config.sources):
+        print(json.dumps({"status": "refused", "error": "x_only_config_required"}))
+        return 2
+    protocol = WorkerProtocol(config.control_plane_url, Path(args.credential), worker_name=args.worker_name)
+    if protocol.credential is None:
+        print(json.dumps({"status": "refused", "error": "worker_enrolment_required"}))
+        return 2
+    try:
+        claim = protocol.claim_x_v3_verification_acceptance_run(args.acceptance_run_id)
+    except ProtocolError:
+        print(json.dumps({"status": "failed", "error": "persistence_failure"}))
+        return 1
+    if claim is None:
+        print(json.dumps({"status": "no_claim", "error": None}))
+        return 0
+    try:
+        runtime = build_authorized_x_v3_verification_replay_runtime(evidence_dir=Path(args.evidence_dir), prompt_path=Path(args.prompt_path))
+        completion = runtime.execute(claim, protocol.get_x_v3_verification_acceptance_context(args.acceptance_run_id, 1))
+        protocol.complete_x_v3_verification_acceptance_run(completion)
+    except Exception as exc:
+        failure_class = _verification_failure_class(exc)
+        try: protocol.fail_x_v3_verification_acceptance_run(args.acceptance_run_id, 1, failure_class)
+        except ProtocolError: pass
+        print(json.dumps({"status": "failed", "error": failure_class}))
+        return 1
+    print(json.dumps({"status": "succeeded", "error": None}))
+    return 0
+
+
 def _verification_failure_class(error: Exception) -> str:
     allowed = {"timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure"}
     if isinstance(error, RuntimeExecutionError) and error.failure_class in allowed:
         return error.failure_class
+    if isinstance(error, ProtocolError) and error.status == 422:
+        return "schema_error"
     if isinstance(error, ProtocolError):
         return "persistence_failure"
     return "persistence_failure"
