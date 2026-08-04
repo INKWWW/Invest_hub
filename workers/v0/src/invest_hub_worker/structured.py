@@ -60,11 +60,127 @@ V2_X_ANALYSIS_FIELDS = frozenset({"post_id", "blogger_viewpoint", "arguments", "
 V2_X_WINDOW_FIELDS = frozenset({"schema_version", "natural_date", "range_task_id", "occurred_from_at", "occurred_through_at", "window_viewpoints", "analysis_ids", "evidence_post_ids", "uncertainties"})
 V2_X_CROSS_BLOGGER_FIELDS = frozenset({"schema_version", "stock_viewpoints", "market_industry_viewpoints", "uncertainties"})
 V2_X_CROSS_BLOGGER_ITEM_FIELDS = frozenset({"statement", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"})
+V3_X_POST_FIELDS = frozenset({"schema_version", "analyses"})
+V3_X_POST_ANALYSIS_FIELDS = frozenset({"post_id", "investment_relevance", "investment_categories", "blogger_viewpoint", "action_intent", "action_scope", "conditions", "arguments", "quoted_post_viewpoint", "uncertainties", "evidence_post_ids", "post_link"})
+V3_X_INVESTMENT_RELEVANCE = frozenset({"investment_related", "not_investment_related"})
+V3_X_INVESTMENT_CATEGORIES = frozenset({"security_industry", "market_structure", "strategy_mindset"})
+V3_X_WINDOW_FIELDS = frozenset({"schema_version", "natural_date", "range_task_id", "occurred_from_at", "occurred_through_at", "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "analysis_ids", "evidence_post_ids", "uncertainties"})
+V3_X_WINDOW_ITEM_FIELDS = frozenset({"statement", "action_intent", "action_scope", "conditions", "analysis_ids", "evidence_post_ids", "uncertainties"})
 V3_X_CROSS_BLOGGER_FIELDS = frozenset({"schema_version", "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties"})
 V3_X_CROSS_BLOGGER_ITEM_FIELDS = frozenset({"statement", "action_intent", "action_scope", "conditions", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"})
 V3_X_ACTION_INTENTS = frozenset({"build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid", "none"})
 _IMPERATIVE_INVESTMENT_RECOMMENDATION = re.compile(r"(?:系统\s*)?(?:建议|应当|应该|必须|请|立即).{0,24}(?:买入|卖出|加仓|减仓|建仓|清仓|抄底|追涨)")
 _STRONG_CONSENSUS_WORDING = re.compile(r"(?:共识|一致认为|共同认为|市场(?:已经|已)?确认)")
+
+
+def parse_v3_x_post_analysis_output(
+    text: str,
+    allowed_post_ids: set[str],
+    allowed_context_post_ids: Mapping[str, set[str]] | set[str],
+) -> dict[str, Any]:
+    payload = _json_object(text)
+    _require_exact_fields(payload, V3_X_POST_FIELDS, "invalid_v3_x_post")
+    if payload.get("schema_version") != "v3-x-post-analysis" or not isinstance(payload.get("analyses"), list):
+        raise SchemaError("invalid_v3_x_post", "schema version or analyses is invalid")
+    analyses: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for value in payload["analyses"]:
+        if not isinstance(value, Mapping):
+            raise SchemaError("invalid_v3_x_post_analysis", "analysis must be an object")
+        _require_exact_fields(value, V3_X_POST_ANALYSIS_FIELDS, "invalid_v3_x_post_analysis")
+        post_id = value["post_id"]
+        if not _non_empty_string(post_id) or post_id not in allowed_post_ids or post_id in seen:
+            raise SchemaError("invalid_v3_x_post_analysis", "analysis must name one unique allowed post")
+        seen.add(post_id)
+        context_ids = allowed_context_post_ids.get(post_id) if isinstance(allowed_context_post_ids, Mapping) else allowed_context_post_ids
+        if not isinstance(context_ids, set) or not all(_non_empty_string(context_id) for context_id in context_ids):
+            raise SchemaError("invalid_v3_x_post", "post bundle context is invalid")
+        relevance = value["investment_relevance"]
+        categories = value["investment_categories"]
+        if relevance not in V3_X_INVESTMENT_RELEVANCE or not _string_list(categories) or len(set(categories)) != len(categories) or not set(categories) <= V3_X_INVESTMENT_CATEGORIES:
+            raise SchemaError("invalid_v3_x_post_analysis", "investment relevance or categories is invalid")
+        if any(value[field] is not None and not _non_empty_string(value[field]) for field in ("blogger_viewpoint", "quoted_post_viewpoint")):
+            raise SchemaError("invalid_v3_x_post_analysis", "viewpoints must be a string or null")
+        action_intent = value["action_intent"]
+        action_scope = value["action_scope"]
+        if action_intent not in V3_X_ACTION_INTENTS or not isinstance(action_scope, str) or (action_intent == "none" and action_scope) or (action_intent != "none" and not action_scope.strip()):
+            raise SchemaError("action scope", "action scope is inconsistent with action intent")
+        if not all(_string_list(value[field]) for field in ("conditions", "arguments", "uncertainties")):
+            raise SchemaError("invalid_v3_x_post_analysis", "text fields must be string arrays")
+        evidence = value["evidence_post_ids"]
+        if not _non_empty_string_list(evidence) or len(set(evidence)) != len(evidence) or post_id not in evidence or not set(evidence) <= ({post_id} | context_ids):
+            raise SchemaError("evidence", "analysis evidence is outside its post bundle")
+        link = value["post_link"]
+        if not _non_empty_string(link) or not link.startswith("https://") or "/status/" not in link:
+            raise SchemaError("invalid_v3_x_post_analysis", "post_link must be an HTTPS post link")
+        if relevance == "not_investment_related" and (categories or value["blogger_viewpoint"] is not None or value["quoted_post_viewpoint"] is not None or action_intent != "none" or action_scope or value["conditions"] or value["arguments"] or value["uncertainties"]):
+            raise SchemaError("invalid_v3_x_post_analysis", "non-investment analysis must be empty")
+        opaque_ids = {post_id} | context_ids
+        for natural_value in (value["blogger_viewpoint"], value["quoted_post_viewpoint"], action_scope):
+            if natural_value is not None:
+                _reject_opaque_ids([natural_value], opaque_ids, "evidence")
+        for field in ("conditions", "arguments", "uncertainties"):
+            _reject_opaque_ids(value[field], opaque_ids, "evidence")
+        analyses.append(dict(value))
+    if seen != allowed_post_ids:
+        raise SchemaError("invalid_v3_x_post", "exactly one analysis is required for every input post")
+    return {"schema_version": "v3-x-post-analysis", "analyses": analyses}
+
+
+def parse_v3_x_window_output(
+    text: str,
+    allowed_analysis_ids: set[str],
+    analysis_evidence_post_ids: Mapping[str, set[str]],
+) -> dict[str, Any]:
+    payload = _json_object(text)
+    _require_exact_fields(payload, V3_X_WINDOW_FIELDS, "invalid_v3_x_window")
+    if payload.get("schema_version") != "v3-x-window" or not _valid_date(payload.get("natural_date")):
+        raise SchemaError("invalid_v3_x_window", "schema version or natural date is invalid")
+    if not _non_empty_string(payload["range_task_id"]) or not _valid_instant(payload["occurred_from_at"]) or not _valid_instant(payload["occurred_through_at"]) or payload["occurred_from_at"] > payload["occurred_through_at"]:
+        raise SchemaError("invalid_v3_x_window", "window identity or instants are invalid")
+    if set(analysis_evidence_post_ids) != allowed_analysis_ids or any(not evidence_ids for evidence_ids in analysis_evidence_post_ids.values()):
+        raise SchemaError("analysis", "analysis evidence catalog is incomplete")
+    expected_evidence = set().union(*analysis_evidence_post_ids.values()) if analysis_evidence_post_ids else set()
+    for field, expected in (("analysis_ids", allowed_analysis_ids), ("evidence_post_ids", expected_evidence)):
+        values = payload[field]
+        if not _non_empty_string_list(values) or len(set(values)) != len(values) or set(values) != expected:
+            raise SchemaError("coverage", f"{field} must exactly cover the window input")
+    if not _string_list(payload["uncertainties"]):
+        raise SchemaError("invalid_v3_x_window", "uncertainties must be a string array")
+    opaque_ids = allowed_analysis_ids | expected_evidence
+    _reject_opaque_ids(payload["uncertainties"], opaque_ids, "analysis")
+    categories = ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")
+    normalized: dict[str, list[dict[str, Any]]] = {}
+    for category in categories:
+        values = payload[category]
+        if not isinstance(values, list):
+            raise SchemaError("invalid_v3_x_window", "viewpoints must be arrays")
+        items: list[dict[str, Any]] = []
+        for value in values:
+            if not isinstance(value, Mapping):
+                raise SchemaError("invalid_v3_x_window_item", "window item must be an object")
+            _require_exact_fields(value, V3_X_WINDOW_ITEM_FIELDS, "invalid_v3_x_window_item")
+            if not _non_empty_string(value["statement"]) or _STRONG_CONSENSUS_WORDING.search(value["statement"]):
+                raise SchemaError("invalid_v3_x_window_item", "statement is invalid for one blogger")
+            action_intent = value["action_intent"]
+            action_scope = value["action_scope"]
+            if action_intent not in V3_X_ACTION_INTENTS or not isinstance(action_scope, str) or (action_intent == "none" and action_scope) or (action_intent != "none" and not action_scope.strip()):
+                raise SchemaError("action scope", "action scope is inconsistent with action intent")
+            if not _string_list(value["conditions"]) or not _string_list(value["uncertainties"]):
+                raise SchemaError("invalid_v3_x_window_item", "text fields must be string arrays")
+            analysis_ids = value["analysis_ids"]
+            if not _non_empty_string_list(analysis_ids) or len(set(analysis_ids)) != len(analysis_ids) or not set(analysis_ids) <= allowed_analysis_ids:
+                raise SchemaError("analysis", "window item cites an unknown analysis")
+            evidence = value["evidence_post_ids"]
+            expected_item_evidence = set().union(*(analysis_evidence_post_ids[analysis_id] for analysis_id in analysis_ids))
+            if not _non_empty_string_list(evidence) or len(set(evidence)) != len(evidence) or set(evidence) != expected_item_evidence:
+                raise SchemaError("evidence", "window item evidence does not match analyses")
+            _reject_opaque_ids([value["statement"], action_scope], opaque_ids, "analysis")
+            _reject_opaque_ids(value["conditions"], opaque_ids, "analysis")
+            _reject_opaque_ids(value["uncertainties"], opaque_ids, "analysis")
+            items.append(dict(value))
+        normalized[category] = items
+    return {"schema_version": "v3-x-window", "natural_date": payload["natural_date"], "range_task_id": payload["range_task_id"], "occurred_from_at": payload["occurred_from_at"], "occurred_through_at": payload["occurred_through_at"], **normalized, "analysis_ids": list(payload["analysis_ids"]), "evidence_post_ids": list(payload["evidence_post_ids"]), "uncertainties": list(payload["uncertainties"])}
 
 
 def parse_v2_x_chunk_output(
