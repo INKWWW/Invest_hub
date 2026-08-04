@@ -26,7 +26,7 @@ const days = [{
   },
   bloggers: [{
     source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false,
-    segments: [{ occurredFromAt: "2099-01-02T11:00:00.000Z", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新博主观点"], uncertainties: [], analyses: [] }, {
+    segments: [{ occurredFromAt: "2099-01-02T11:00:00.000Z", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新博主观点"], securityIndustryViewpoints: [{ statement: "测试标的具备修复条件", actionIntent: "buy", actionScope: "测试标的", conditions: [], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], uncertainties: [], analyses: [] }, {
       occurredFromAt: "2099-01-02T07:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["较早博主观点"], uncertainties: [], analyses: [],
     }],
   }, {
@@ -63,6 +63,8 @@ describe("XReader", () => {
     expect(html).toContain("下方主题仅列出直接支持或反对该主题的博主。");
     expect(html).toContain("投资策略与心态");
     expect(html).toContain("博主倾向：观望（高波动市场）");
+    expect(html).toContain("个股与产业观点");
+    expect(html).toContain("博主倾向：买入（测试标的）");
     expect(html).toContain("条件：等待趋势确认");
     expect(html).toContain("采集超时，未形成判断");
     expect(html).toContain("其中 1 位因采集未在结算截止前完成。");

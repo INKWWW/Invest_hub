@@ -66,6 +66,16 @@ function JudgementCard({ judgement }: { judgement: ReaderJudgement }) {
   </section>;
 }
 
+function BloggerViewpointList({ title, viewpoints }: { title: string; viewpoints: ReaderJudgement[] | undefined }) {
+  if (!viewpoints?.length) return null;
+  return <section><h4>{title}</h4>{viewpoints.map((viewpoint, index) => <section className="topic-card" key={index}>
+    <p>{viewpoint.statement}</p>
+    {viewpoint.actionIntent ? <p>博主倾向：{ACTION_INTENT_LABELS[viewpoint.actionIntent]}（{viewpoint.actionScope}）</p> : null}
+    {viewpoint.conditions?.length ? <p>条件：{viewpoint.conditions.join("；")}</p> : null}
+    {viewpoint.uncertainties.length ? <p className="topic-uncertainty">不确定性：{viewpoint.uncertainties.join("；")}</p> : null}
+  </section>)}</section>;
+}
+
 function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
   return <section className="x-reader-blogger">
     <header className="x-reader-author-strip"><p>博主</p><h3 className="x-reader-author">{blogger.source.displayName}</h3></header>
@@ -73,11 +83,17 @@ function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
     {!blogger.segments.length ? <p className="summary-empty">{blogger.timedOut ? "本批次未纳入该博主的完整信息。" : blogger.status === "partial_failure" ? "本批次未纳入该博主的完整信息。" : "本批次没有可展示的博主观点。"}</p> : null}
     {blogger.segments.map((segment, index) => <details className="x-reader-segment" key={segment.occurredThroughAt} open={index === 0}>
       <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(segment.occurredThroughAt))} · 博主观点</summary>
-      {segment.viewpoints.length ? <ul className="x-viewpoints">{segment.viewpoints.map((viewpoint, viewpointIndex) => <li key={viewpointIndex}>{viewpoint}</li>)}</ul> : <p className="summary-empty">本窗口没有形成新的博主观点。</p>}
+      {segment.viewpoints.length ? <ul className="x-viewpoints">{segment.viewpoints.map((viewpoint, viewpointIndex) => <li key={viewpointIndex}>{viewpoint}</li>)}</ul> : null}
+      <BloggerViewpointList title="个股与产业观点" viewpoints={segment.securityIndustryViewpoints} />
+      <BloggerViewpointList title="市场结构观点" viewpoints={segment.marketStructureViewpoints} />
+      <BloggerViewpointList title="投资策略与心态" viewpoints={segment.strategyMindsetViewpoints} />
+      {!segment.viewpoints.length && !segment.securityIndustryViewpoints?.length && !segment.marketStructureViewpoints?.length && !segment.strategyMindsetViewpoints?.length ? <p className="summary-empty">本窗口没有形成新的博主观点。</p> : null}
       {segment.uncertainties.length ? <p className="topic-uncertainty">不确定性：{segment.uncertainties.join("；")}</p> : null}
       {segment.analyses.map((analysis, analysisIndex) => <article className="x-analysis" key={analysisIndex}>
         <p><a href={analysis.postLink} target="_blank" rel="noreferrer">原始 X 帖子</a></p>
         <p><strong>博主观点：</strong>{analysis.bloggerViewpoint ?? "未表达（例如普通 repost）"}</p>
+        {analysis.actionIntent ? <p><strong>博主倾向：</strong>{ACTION_INTENT_LABELS[analysis.actionIntent]}（{analysis.actionScope}）</p> : null}
+        {analysis.conditions?.length ? <p><strong>条件：</strong>{analysis.conditions.join("；")}</p> : null}
         {analysis.arguments.length ? <p><strong>论据：</strong>{analysis.arguments.join("；")}</p> : null}
         {analysis.quotedPostViewpoint ? <p><strong>引用帖观点：</strong>{analysis.quotedPostViewpoint}</p> : null}
         {analysis.uncertainties.length ? <p className="topic-uncertainty">不确定性：{analysis.uncertainties.join("；")}</p> : null}
