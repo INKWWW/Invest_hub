@@ -12,7 +12,12 @@ from .config import LocalWorkerConfig, LocalWorkerConfigSet
 from .activation import activate_one_x_source
 from .errors import ConfigError, ProtocolError, RemoteConflict
 from .protocol import WorkerProtocol
-from .runtime import build_authorized_runtime_set, build_authorized_x_daily_judgement_runtime
+from .runtime import (
+    RuntimeExecutionError,
+    build_authorized_runtime_set,
+    build_authorized_x_daily_judgement_runtime,
+    build_authorized_x_v3_verification_replay_runtime,
+)
 from .worker import Worker
 from .x_identity import IdentityResolutionError, OpenCLIProfileInvoker, resolve_configured_x_identity
 
@@ -42,6 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_scheduled.add_argument("--worker-name", default="v1-authorized-worker")
     run_scheduled.add_argument("--once", action="store_true", help="perform one scheduling and task-processing iteration")
     run_scheduled.add_argument("--poll-seconds", type=int, default=60)
+    verification_replay = subparsers.add_parser("run-x-v3-verification", help="run one server-frozen X v3 verification replay")
+    verification_replay.add_argument("--config", required=True)
+    verification_replay.add_argument("--credential", required=True)
+    verification_replay.add_argument("--prompt-path", required=True)
+    verification_replay.add_argument("--evidence-dir", required=True)
+    verification_replay.add_argument("--replay-id", required=True)
+    verification_replay.add_argument("--worker-name", default="v3-x-verification-worker")
     resolve_identity = subparsers.add_parser("resolve-x-identity", help="verify one configured X source identity without collecting posts")
     resolve_identity.add_argument("--config", required=True)
     resolve_identity.add_argument("--credential", required=True)
@@ -56,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "resolve-x-identity":
         return _resolve_x_identity(args)
+    if args.command == "run-x-v3-verification":
+        return _run_x_v3_verification_replay(args)
     acknowledgement_variable = "V1_REAL_DISCORD_ACK" if args.command == "run-scheduled" else "V0_REAL_DISCORD_ACK"
     if args.command == "run-scheduled" and args.poll_seconds < 1:
         print(json.dumps({"status": "refused", "reason": "poll_seconds_must_be_positive"}))
@@ -100,6 +114,59 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if outcome.status in {"succeeded", "no_task"} else 1
     activation_invoker = OpenCLIProfileInvoker(_require_controlled_x_opencli_executable(args.opencli_executable)) if has_x else None
     return _run_scheduled(worker, once=args.once, poll_seconds=args.poll_seconds, activation_invoker=activation_invoker, judgement_runtime=judgement_runtime)
+
+
+def _run_x_v3_verification_replay(args: argparse.Namespace) -> int:
+    """Execute one explicit replay without entering any normal Worker path."""
+    if os.environ.get("V2_REAL_X_ACK") != "authorized":
+        print(json.dumps({"status": "refused", "error": "real_x_requires_explicit_authorization"}))
+        return 2
+    try:
+        config = LocalWorkerConfigSet.load(Path(args.config))
+    except ConfigError:
+        print(json.dumps({"status": "refused", "error": "x_only_config_required"}))
+        return 2
+    if not config.sources or any(source.source_type != "x" for source in config.sources):
+        print(json.dumps({"status": "refused", "error": "x_only_config_required"}))
+        return 2
+    protocol = WorkerProtocol(config.control_plane_url, Path(args.credential), worker_name=args.worker_name)
+    if protocol.credential is None:
+        print(json.dumps({"status": "refused", "error": "worker_enrolment_required"}))
+        return 2
+    try:
+        claim = protocol.claim_x_v3_verification_replay(args.replay_id)
+    except ProtocolError:
+        print(json.dumps({"status": "failed", "error": "persistence_failure"}))
+        return 1
+    if claim is None:
+        print(json.dumps({"status": "no_claim", "error": None}))
+        return 0
+    try:
+        runtime = build_authorized_x_v3_verification_replay_runtime(
+            evidence_dir=Path(args.evidence_dir), prompt_path=Path(args.prompt_path),
+        )
+        context = protocol.get_x_v3_verification_replay_context(args.replay_id, 1)
+        completion = runtime.execute(claim, context)
+        protocol.complete_x_v3_verification_replay(completion)
+    except Exception as exc:
+        failure_class = _verification_failure_class(exc)
+        try:
+            protocol.fail_x_v3_verification_replay(args.replay_id, 1, failure_class)
+        except ProtocolError:
+            pass
+        print(json.dumps({"status": "failed", "error": failure_class}))
+        return 1
+    print(json.dumps({"status": "succeeded", "error": None}))
+    return 0
+
+
+def _verification_failure_class(error: Exception) -> str:
+    allowed = {"timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure"}
+    if isinstance(error, RuntimeExecutionError) and error.failure_class in allowed:
+        return error.failure_class
+    if isinstance(error, ProtocolError):
+        return "persistence_failure"
+    return "persistence_failure"
 
 
 def _resolve_x_identity(args: argparse.Namespace) -> int:

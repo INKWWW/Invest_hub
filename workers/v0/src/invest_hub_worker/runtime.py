@@ -194,6 +194,199 @@ class XDailyJudgementRuntime:
         return source_ids, analysis_ids, post_ids, analysis_source_ids, analysis_evidence_post_ids, source_ids | excluded_ids, segment_ids
 
 
+class XVerificationReplayRuntime:
+    """Run the bounded v3 chain over one server-frozen verification replay.
+
+    This class deliberately has no Connector, scheduler, task claim, or local
+    evidence dependency.  Its only inputs are the worker-claimed replay and
+    the immutable context returned by the replay endpoint.
+    """
+
+    def __init__(self, *, provider: Provider, prompt_template: str) -> None:
+        if not prompt_template.strip():
+            raise ValueError("prompt_template must be non-empty")
+        self.provider = provider
+        self.prompt_template = prompt_template
+        self.chunk_template = _read_public_prompt("v3_x_post_analysis.md")
+        self.window_template = _read_public_prompt("v3_x_window.md")
+
+    def execute(self, claim: Mapping[str, object], context: Mapping[str, object]) -> dict[str, object]:
+        replay_id = claim.get("replay_id")
+        attempt = claim.get("attempt")
+        if not isinstance(replay_id, str) or not replay_id or isinstance(attempt, bool) or attempt != 1:
+            raise RuntimeExecutionError("schema_error", "verification replay claim is invalid")
+        try:
+            sources = self._validate_context(context, replay_id, attempt)
+            prepared_sources = [(source, self._analyses_for_source(replay_id, attempt, source)) for source in sources]
+            completed_sources = [
+                {"source_id": str(source["source_id"]), "analyses": analyses, "segment": self._window_segment(replay_id, attempt, source, analyses)}
+                for source, analyses in prepared_sources
+            ]
+            display_names = {str(source["source_id"]): str(source["display_name"]) for source in sources}
+            daily = self._execute_daily(replay_id, attempt, completed_sources, display_names)
+        except RuntimeExecutionError:
+            raise
+        except (TypeError, ValueError, KeyError) as exc:
+            raise RuntimeExecutionError("schema_error", "verification replay context is invalid") from exc
+        except Exception as exc:
+            raise RuntimeExecutionError("persistence_failure", "verification replay execution failed") from exc
+        return {
+            "replay_id": replay_id,
+            "attempt": attempt,
+            "provider": "codex_cli",
+            "model_reported": daily["model_reported"],
+            "sources": completed_sources,
+            "daily": {
+                "schema_version": daily["schema_version"],
+                "prompt_version": daily["prompt_version"],
+                "security_industry_viewpoints": daily["security_industry_viewpoints"],
+                "market_structure_viewpoints": daily["market_structure_viewpoints"],
+                "strategy_mindset_viewpoints": daily["strategy_mindset_viewpoints"],
+                "uncertainties": daily["uncertainties"],
+            },
+        }
+
+    @staticmethod
+    def _validate_context(context: Mapping[str, object], replay_id: str, attempt: int) -> list[dict[str, object]]:
+        if set(context) != {"replay_id", "attempt", "sources"} or context.get("replay_id") != replay_id or context.get("attempt") != attempt:
+            raise ValueError("replay identity is invalid")
+        sources = context.get("sources")
+        if not isinstance(sources, list) or not sources:
+            raise ValueError("replay sources are invalid")
+        observed: set[str] = set()
+        normalized: list[dict[str, object]] = []
+        required_source = {"source_id", "display_name", "occurred_from_at", "occurred_through_at", "posts"}
+        required_post = {"post_id", "content", "occurred_at", "post_url", "post_type", "quoted_post_id", "reply_to_post_id", "reposted_post_id", "context_status", "attachments"}
+        for source in sources:
+            if not isinstance(source, Mapping) or set(source) != required_source:
+                raise ValueError("replay source is invalid")
+            source_id = source.get("source_id")
+            display_name = source.get("display_name")
+            starts = source.get("occurred_from_at")
+            ends = source.get("occurred_through_at")
+            posts = source.get("posts")
+            if not all(isinstance(value, str) and value for value in (source_id, display_name, starts, ends)) or source_id in observed or not isinstance(posts, list) or not posts:
+                raise ValueError("replay source identity is invalid")
+            if _required_instant(starts, "replay source start") > _required_instant(ends, "replay source end"):
+                raise ValueError("replay source range is inverted")
+            observed.add(source_id)
+            post_ids: set[str] = set()
+            normalized_posts: list[dict[str, object]] = []
+            for post in posts:
+                if not isinstance(post, Mapping) or set(post) != required_post:
+                    raise ValueError("replay post is invalid")
+                post_id = post.get("post_id")
+                if not isinstance(post_id, str) or not post_id or post_id in post_ids:
+                    raise ValueError("replay post identity is invalid")
+                if not all(isinstance(post.get(key), str) for key in ("content", "occurred_at", "post_url", "post_type", "context_status")):
+                    raise ValueError("replay post content is invalid")
+                if any(post.get(key) is not None and (not isinstance(post.get(key), str) or not post.get(key)) for key in ("quoted_post_id", "reply_to_post_id", "reposted_post_id")):
+                    raise ValueError("replay post relation is invalid")
+                if not isinstance(post.get("attachments"), list):
+                    raise ValueError("replay post attachments are invalid")
+                post_ids.add(post_id)
+                normalized_posts.append(dict(post))
+            normalized.append({"source_id": source_id, "display_name": display_name, "occurred_from_at": starts, "occurred_through_at": ends, "posts": normalized_posts})
+        return normalized
+
+    def _analyses_for_source(self, replay_id: str, attempt: int, source: Mapping[str, object]) -> list[dict[str, object]]:
+        source_id = str(source["source_id"])
+        display_name = str(source["display_name"])
+        messages = [self._message_from_post(source_id, display_name, post) for post in source["posts"]]  # type: ignore[index]
+        analyses: list[dict[str, object]] = []
+        for message in messages:
+            provider_context = ProviderContext(
+                chunk_id=f"{replay_id}-{attempt}-x-post-{message.external_message_id}",
+                prompt_version="v3-x-post-analysis-1", prompt_text=self._post_prompt(message), attempt=attempt,
+                operation="v3_x_post_analysis", input_message_ids=frozenset({message.external_message_id}), visible_context_post_ids=frozenset(),
+            )
+            response = self.provider.complete((message,), provider_context)
+            if response.status != "success" or response.parsed_output is None:
+                raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X post analysis")
+            try:
+                output = parse_v3_x_post_analysis_output(json.dumps(response.parsed_output, ensure_ascii=False), {message.external_message_id}, {message.external_message_id: set()})
+            except SchemaError as exc:
+                raise RuntimeExecutionError("schema_error", "X post analysis failed evidence validation") from exc
+            analysis = output["analyses"][0]
+            analyses.append({
+                "post_id": message.external_message_id, "analysis_id": f"{message.external_message_id}@2", "analysis_version": 2,
+                "schema_version": "v3-x-post-analysis", "prompt_version": "v3-x-post-analysis-1", "analysis_output": analysis,
+                "blogger_viewpoint": analysis["blogger_viewpoint"], "arguments": analysis["arguments"],
+                "quoted_post_viewpoint": analysis["quoted_post_viewpoint"], "uncertainties": analysis["uncertainties"],
+                "evidence_post_ids": analysis["evidence_post_ids"], "post_link": analysis["post_link"],
+            })
+        return analyses
+
+    def _window_segment(self, replay_id: str, attempt: int, source: Mapping[str, object], analyses: list[dict[str, object]]) -> dict[str, object]:
+        source_id = str(source["source_id"])
+        analysis_ids = {str(analysis["analysis_id"]) for analysis in analyses}
+        evidence = {str(post_id) for analysis in analyses for post_id in analysis["evidence_post_ids"]}  # type: ignore[index]
+        occurred_from_at = str(source["occurred_from_at"])
+        occurred_through_at = str(source["occurred_through_at"])
+        natural_date = _shanghai_natural_date(occurred_through_at)
+        provider_context = ProviderContext(
+            chunk_id=f"{replay_id}-{attempt}-x-window-{source_id}", prompt_version="v3-x-window-1",
+            prompt_text=self._window_prompt(replay_id, natural_date, occurred_from_at, occurred_through_at, analyses), attempt=attempt,
+            operation="v3_x_window", input_message_ids=frozenset(analysis_ids),
+            allowed_analysis_evidence_post_ids=tuple(sorted((str(analysis["analysis_id"]), tuple(sorted(str(post_id) for post_id in analysis["evidence_post_ids"]))) for analysis in analyses)),
+        )
+        response = self.provider.complete(tuple(analyses), provider_context)
+        if response.status != "success" or response.parsed_output is None:
+            raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X window viewpoint")
+        try:
+            output = parse_v3_x_window_output(json.dumps(response.parsed_output, ensure_ascii=False), analysis_ids, {str(analysis["analysis_id"]): set(str(post_id) for post_id in analysis["evidence_post_ids"]) for analysis in analyses})
+        except SchemaError as exc:
+            raise RuntimeExecutionError("schema_error", "X window viewpoint failed analysis validation") from exc
+        if output["range_task_id"] != replay_id or output["natural_date"] != natural_date or output["occurred_from_at"] != occurred_from_at or output["occurred_through_at"] != occurred_through_at or set(output["evidence_post_ids"]) != evidence:
+            raise RuntimeExecutionError("schema_error", "X window viewpoint does not match frozen replay context")
+        return {
+            "occurred_from_at": occurred_from_at, "occurred_through_at": occurred_through_at,
+            "schema_version": "v3-x-window", "prompt_version": "v3-x-window-1", "segment_output": output,
+            "analysis_ids": output["analysis_ids"], "evidence_post_ids": output["evidence_post_ids"], "uncertainties": output["uncertainties"],
+        }
+
+    def _execute_daily(self, replay_id: str, attempt: int, sources: list[dict[str, object]], display_names: Mapping[str, str]) -> dict[str, object]:
+        daily_context_sources: list[dict[str, object]] = []
+        for source in sources:
+            segment = source["segment"]
+            assert isinstance(segment, Mapping)
+            analyses = source["analyses"]
+            assert isinstance(analyses, list)
+            source_id = str(source["source_id"])
+            daily_context_sources.append({"source_id": source_id, "display_name": display_names[source_id], "window_segments": [{
+                "id": f"{replay_id}:{source['source_id']}", "schema_version": segment["schema_version"], "prompt_version": segment["prompt_version"],
+                "occurred_from_at": segment["occurred_from_at"], "occurred_through_at": segment["occurred_through_at"], "segment_output": segment["segment_output"],
+                "analyses": [{"analysis_id": analysis["analysis_id"], "schema_version": analysis["schema_version"], "prompt_version": analysis["prompt_version"], "analysis_output": analysis["analysis_output"], "evidence_post_ids": analysis["evidence_post_ids"]} for analysis in analyses],
+            }]} )
+        daily_claim = {"run_id": replay_id, "attempt": attempt, "lease_expires_at": "replay", "batch": {"id": replay_id, "natural_date": "verification", "cutoff_at": "verification", "coverage_status": "complete"}}
+        daily_context = {"run_id": replay_id, "batch_id": replay_id, "attempt": attempt, "prompt_version": "v3-x-cross-blogger-1", "sources": daily_context_sources, "excluded_sources": []}
+        return XDailyJudgementRuntime(provider=self.provider, prompt_template=self.prompt_template).execute(daily_claim, daily_context)
+
+    @staticmethod
+    def _message_from_post(source_id: str, display_name: str, post: Mapping[str, object]) -> CanonicalMessage:
+        relation = {"quoted_post_id": post.get("quoted_post_id"), "reply_to_post_id": post.get("reply_to_post_id"), "reposted_post_id": post.get("reposted_post_id")}
+        post_type = str(post["post_type"])
+        expected_relation = {"quote": "quoted_post_id", "reply": "reply_to_post_id", "repost": "reposted_post_id", "original": None}.get(post_type)
+        if expected_relation is None:
+            invalid_relation = post_type != "original" or any(value is not None for value in relation.values())
+        else:
+            invalid_relation = not relation.get(expected_relation) or any(key != expected_relation and value is not None for key, value in relation.items())
+        if invalid_relation:
+            raise RuntimeExecutionError("schema_error", "verification replay post relation is invalid")
+        attachments = tuple(item for item in post["attachments"] if isinstance(item, dict))  # type: ignore[index]
+        return CanonicalMessage(source_id=source_id, external_message_id=str(post["post_id"]), author_id=source_id, author_name=display_name,
+            occurred_at=str(post["occurred_at"]), content=str(post["content"]), reply_to_message_id=post.get("reply_to_post_id") if isinstance(post.get("reply_to_post_id"), str) else None,
+            quote=None, attachments=attachments, metadata={"x": {"post_type": post_type, "post_url": str(post["post_url"]), "quoted_post_id": post.get("quoted_post_id"), "reply_to_post_id": post.get("reply_to_post_id"), "reposted_post_id": post.get("reposted_post_id"), "context_status": post["context_status"], "attachments": list(attachments)}})
+
+    def _post_prompt(self, message: CanonicalMessage) -> str:
+        payload = {"post": XWindowedRuntime._prompt_post(message), "context_post": None, "context_status": message.metadata["x"]["context_status"]}
+        return f"{self.chunk_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n输入帖子包（仅本地 Codex CLI 可见）：\n{json.dumps(payload, ensure_ascii=False)}"
+
+    def _window_prompt(self, replay_id: str, natural_date: str, occurred_from_at: str, occurred_through_at: str, analyses: list[dict[str, object]]) -> str:
+        payload = {"range_task_id": replay_id, "natural_date": natural_date, "occurred_from_at": occurred_from_at, "occurred_through_at": occurred_through_at, "post_analyses": analyses}
+        return f"{self.window_template}\n\n本地私有补充说明：\n{self.prompt_template}\n\n已验证且待持久化的逐帖分析（仅本地 Codex CLI 可见）：\n{json.dumps(payload, ensure_ascii=False)}"
+
+
 def _safe_model_reported(value: object) -> bool:
     if value is None:
         return True
@@ -1532,6 +1725,14 @@ def build_authorized_x_runtime(
 def build_authorized_x_daily_judgement_runtime(*, evidence_dir: Path, prompt_path: Path) -> XDailyJudgementRuntime:
     return XDailyJudgementRuntime(
         provider=_codex_provider(Path(evidence_dir) / "x-daily-judgements"),
+        prompt_template=Path(prompt_path).read_text(encoding="utf-8"),
+    )
+
+
+def build_authorized_x_v3_verification_replay_runtime(*, evidence_dir: Path, prompt_path: Path) -> XVerificationReplayRuntime:
+    """Build the local-only Provider boundary for an explicit replay only."""
+    return XVerificationReplayRuntime(
+        provider=_codex_provider(Path(evidence_dir) / "x-v3-verification-replay"),
         prompt_template=Path(prompt_path).read_text(encoding="utf-8"),
     )
 

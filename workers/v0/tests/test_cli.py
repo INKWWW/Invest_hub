@@ -263,6 +263,97 @@ class WorkerCliTests(unittest.TestCase):
         self.assertEqual(set(result), {"status", "resolution_status", "idempotent", "error"})
         self.assertEqual(result["error"], "real_x_requires_explicit_authorization")
 
+    def test_x_v3_verification_replay_uses_only_explicit_replay_protocol(self) -> None:
+        config = LocalWorkerConfigSet.from_mapping({
+            "control_plane_url": "https://control.example.invalid",
+            "sources": [{
+                "source_id": "x-source", "source_type": "x", "source_url": "https://x.com/fixture_handle",
+                "profile_ref": "/private/profile", "opencli_contract_version": "v2", "parameter_version": "x-standard-v2",
+            }],
+        })
+        replay_id = "11111111-1111-4111-8111-111111111111"
+
+        class ReplayProtocol:
+            credential = object()
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+            def claim_x_v3_verification_replay(self, value: str) -> dict[str, object]:
+                self.calls.append("claim")
+                self.assertEqual(value, replay_id)
+                return {"replay_id": value, "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z"}
+            def get_x_v3_verification_replay_context(self, value: str, attempt: int) -> dict[str, object]:
+                self.calls.append("context")
+                self.assertEqual((value, attempt), (replay_id, 1))
+                return {"replay_id": value, "attempt": attempt, "sources": []}
+            def complete_x_v3_verification_replay(self, completion: dict[str, object]) -> dict[str, object]:
+                self.calls.append("complete")
+                self.assertEqual(completion["replay_id"], replay_id)
+                return {"status": "succeeded"}
+            def fail_x_v3_verification_replay(self, *_args: object) -> dict[str, object]:
+                self.calls.append("failure")
+                raise AssertionError("successful replay must not fail")
+            def assertEqual(self, left: object, right: object) -> None:
+                if left != right:
+                    raise AssertionError(f"{left!r} != {right!r}")
+
+        protocol = ReplayProtocol()
+        class ReplayRuntime:
+            def execute(self, claim: dict[str, object], context: dict[str, object]) -> dict[str, object]:
+                self.assertEqual((claim["replay_id"], context["replay_id"]), (replay_id, replay_id))
+                return {"replay_id": replay_id, "attempt": 1, "provider": "codex_cli", "model_reported": None, "sources": [], "daily": {}}
+            def assertEqual(self, left: object, right: object) -> None:
+                if left != right:
+                    raise AssertionError(f"{left!r} != {right!r}")
+
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"V2_REAL_X_ACK": "authorized"}, clear=False):
+            with patch("invest_hub_worker.cli.LocalWorkerConfigSet.load", return_value=config), \
+                 patch("invest_hub_worker.cli.WorkerProtocol", return_value=protocol), \
+                 patch("invest_hub_worker.cli.build_authorized_x_v3_verification_replay_runtime", return_value=ReplayRuntime()), \
+                 patch("invest_hub_worker.cli.Worker", side_effect=AssertionError("generic Worker must not be constructed")), \
+                 patch("invest_hub_worker.cli.build_authorized_runtime_set", side_effect=AssertionError("normal runtime must not be constructed")), \
+                 patch("invest_hub_worker.cli._run_scheduled", side_effect=AssertionError("scheduler must not run")), \
+                 contextlib.redirect_stdout(output):
+                code = main([
+                    "run-x-v3-verification", "--config", "/private/config.toml", "--credential", "/private/credential.json",
+                    "--prompt-path", "/private/prompt.md", "--evidence-dir", str(Path(directory) / "evidence"), "--replay-id", replay_id,
+                ])
+        self.assertEqual(code, 0)
+        self.assertEqual(protocol.calls, ["claim", "context", "complete"])
+        self.assertEqual(json.loads(output.getvalue()), {"status": "succeeded", "error": None})
+        self.assertNotIn(replay_id, output.getvalue())
+
+    def test_x_v3_verification_schema_error_reports_only_replay_failure(self) -> None:
+        config = LocalWorkerConfigSet.from_mapping({
+            "control_plane_url": "https://control.example.invalid",
+            "sources": [{"source_id": "x-source", "source_type": "x", "source_url": "https://x.com/fixture_handle", "profile_ref": "/private/profile", "opencli_contract_version": "v2", "parameter_version": "x-standard-v2"}],
+        })
+        replay_id = "11111111-1111-4111-8111-111111111111"
+
+        class FailingProtocol:
+            credential = object()
+            def __init__(self) -> None: self.calls: list[str] = []
+            def claim_x_v3_verification_replay(self, _value: str) -> dict[str, object]: self.calls.append("claim"); return {"replay_id": replay_id, "attempt": 1, "lease_expires_at": "future"}
+            def get_x_v3_verification_replay_context(self, _value: str, _attempt: int) -> dict[str, object]: self.calls.append("context"); return {"replay_id": replay_id, "attempt": 1, "sources": []}
+            def complete_x_v3_verification_replay(self, _completion: dict[str, object]) -> dict[str, object]: self.calls.append("complete"); raise AssertionError("schema error must not complete")
+            def fail_x_v3_verification_replay(self, value: str, attempt: int, failure: str) -> dict[str, object]: self.calls.append("failure"); self.assertEqual((value, attempt, failure), (replay_id, 1, "schema_error")); return {"status": "failed"}
+            def assertEqual(self, left: object, right: object) -> None:
+                if left != right: raise AssertionError(f"{left!r} != {right!r}")
+
+        class SchemaFailingRuntime:
+            def execute(self, _claim: dict[str, object], _context: dict[str, object]) -> dict[str, object]:
+                from invest_hub_worker.runtime import RuntimeExecutionError
+                raise RuntimeExecutionError("schema_error", "fixture schema error")
+
+        protocol = FailingProtocol()
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"V2_REAL_X_ACK": "authorized"}, clear=False):
+            with patch("invest_hub_worker.cli.LocalWorkerConfigSet.load", return_value=config), patch("invest_hub_worker.cli.WorkerProtocol", return_value=protocol), patch("invest_hub_worker.cli.build_authorized_x_v3_verification_replay_runtime", return_value=SchemaFailingRuntime()), patch("invest_hub_worker.cli.Worker", side_effect=AssertionError("generic Worker must not be constructed")), contextlib.redirect_stdout(output):
+                code = main(["run-x-v3-verification", "--config", "/private/config.toml", "--credential", "/private/credential.json", "--prompt-path", "/private/prompt.md", "--evidence-dir", str(Path(directory) / "evidence"), "--replay-id", replay_id])
+        self.assertEqual(code, 1)
+        self.assertEqual(protocol.calls, ["claim", "context", "failure"])
+        self.assertEqual(json.loads(output.getvalue()), {"status": "failed", "error": "schema_error"})
+
 
 if __name__ == "__main__":
     unittest.main()

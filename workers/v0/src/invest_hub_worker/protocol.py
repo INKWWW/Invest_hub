@@ -147,6 +147,41 @@ class WorkerProtocol:
         )
         return self._object(value, "invalid x daily judgement failure acknowledgement")
 
+    def claim_x_v3_verification_replay(self, replay_id: str) -> dict[str, Any] | None:
+        self._require_credential()
+        _validate_x_v3_verification_identity(replay_id, 1, "claim")
+        status, value = self._request("POST", f"api/worker/x-v3-verification-replays/{replay_id}/claim", {})
+        if status == 204 or value is None:
+            return None
+        response = self._object(value, "invalid x v3 verification replay claim")
+        if set(response) != {"replay_id", "attempt", "lease_expires_at"} or response.get("replay_id") != replay_id or response.get("attempt") != 1 or not _non_empty_string(response.get("lease_expires_at")):
+            raise ProtocolError("invalid x v3 verification replay claim")
+        return response
+
+    def get_x_v3_verification_replay_context(self, replay_id: str, attempt: int) -> dict[str, Any]:
+        self._require_credential()
+        _validate_x_v3_verification_identity(replay_id, attempt, "context")
+        _, value = self._request("POST", f"api/worker/x-v3-verification-replays/{replay_id}/context", {"attempt": attempt})
+        return _parse_x_v3_verification_replay_context(self._object(value, "invalid x v3 verification replay context"), replay_id, attempt)
+
+    def complete_x_v3_verification_replay(self, completion: dict[str, Any]) -> dict[str, Any]:
+        self._require_credential()
+        _validate_x_v3_verification_replay_completion(completion)
+        replay_id = str(completion["replay_id"])
+        _, value = self._request("POST", f"api/worker/x-v3-verification-replays/{replay_id}/complete", completion)
+        acknowledgement = self._object(value, "invalid x v3 verification replay completion acknowledgement")
+        if acknowledgement.get("status") != "succeeded":
+            raise ProtocolError("x v3 verification replay completion was not acknowledged")
+        return acknowledgement
+
+    def fail_x_v3_verification_replay(self, replay_id: str, attempt: int, failure_class: str) -> dict[str, Any]:
+        self._require_credential()
+        _validate_x_v3_verification_identity(replay_id, attempt, "failure")
+        if failure_class not in {"timeout", "provider_failure", "empty_response", "invalid_json", "schema_error", "persistence_failure"}:
+            raise ProtocolError("invalid x v3 verification replay failure")
+        _, value = self._request("POST", f"api/worker/x-v3-verification-replays/{replay_id}/failure", {"attempt": attempt, "failure_class": failure_class})
+        return self._object(value, "invalid x v3 verification replay failure acknowledgement")
+
     def claim_x_activation(self) -> dict[str, Any] | None:
         self._require_credential()
         status, value = self._request("POST", "api/worker/x-activations/claim", {})
@@ -438,6 +473,62 @@ def _validate_x_daily_judgement_completion(value: dict[str, Any]) -> None:
             raise ProtocolError("invalid x daily judgement completion")
         if not item["analysis_ids"] or not item["evidence_post_ids"]:
             raise ProtocolError("invalid x daily judgement completion")
+
+
+def _validate_x_v3_verification_identity(replay_id: object, attempt: object, label: str) -> None:
+    if not isinstance(replay_id, str) or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", replay_id, re.IGNORECASE) or isinstance(attempt, bool) or attempt != 1:
+        raise ProtocolError(f"invalid x v3 verification replay {label} request")
+
+
+def _parse_x_v3_verification_replay_context(value: dict[str, Any], replay_id: str, attempt: int) -> dict[str, Any]:
+    if set(value) != {"replay_id", "attempt", "sources"} or value.get("replay_id") != replay_id or value.get("attempt") != attempt or not isinstance(value.get("sources"), list):
+        raise ProtocolError("invalid x v3 verification replay context")
+    source_keys = {"source_id", "display_name", "occurred_from_at", "occurred_through_at", "posts"}
+    post_keys = {"post_id", "content", "occurred_at", "post_url", "post_type", "quoted_post_id", "reply_to_post_id", "reposted_post_id", "context_status", "attachments"}
+    source_ids: set[str] = set()
+    for source in value["sources"]:
+        if not isinstance(source, dict) or set(source) != source_keys or not all(_non_empty_string(source.get(key)) for key in ("source_id", "display_name", "occurred_from_at", "occurred_through_at")) or source["source_id"] in source_ids or not isinstance(source.get("posts"), list) or not source["posts"]:
+            raise ProtocolError("invalid x v3 verification replay context")
+        source_ids.add(source["source_id"])
+        post_ids: set[str] = set()
+        for post in source["posts"]:
+            if not isinstance(post, dict) or set(post) != post_keys or not all(_non_empty_string(post.get(key)) for key in ("post_id", "occurred_at", "post_url", "post_type", "context_status")) or not isinstance(post.get("content"), str) or post["post_id"] in post_ids or post["post_type"] not in {"original", "quote", "reply", "repost"} or post["context_status"] not in {"complete", "unavailable", "deleted", "unresolved"} or not isinstance(post.get("attachments"), list):
+                raise ProtocolError("invalid x v3 verification replay context")
+            if any(post.get(key) is not None and not _non_empty_string(post.get(key)) for key in ("quoted_post_id", "reply_to_post_id", "reposted_post_id")):
+                raise ProtocolError("invalid x v3 verification replay context")
+            post_ids.add(post["post_id"])
+    if not value["sources"]:
+        raise ProtocolError("invalid x v3 verification replay context")
+    return value
+
+
+def _validate_x_v3_verification_replay_completion(value: dict[str, Any]) -> None:
+    required = {"replay_id", "attempt", "provider", "model_reported", "sources", "daily"}
+    if set(value) != required or value.get("provider") != "codex_cli" or not _safe_model_reported(value.get("model_reported")) or not isinstance(value.get("sources"), list) or not isinstance(value.get("daily"), dict):
+        raise ProtocolError("invalid x v3 verification replay completion")
+    _validate_x_v3_verification_identity(value.get("replay_id"), value.get("attempt"), "completion")
+    source_keys = {"source_id", "analyses", "segment"}
+    analysis_keys = {"post_id", "analysis_id", "analysis_version", "schema_version", "prompt_version", "analysis_output", "blogger_viewpoint", "arguments", "quoted_post_viewpoint", "uncertainties", "evidence_post_ids", "post_link"}
+    segment_keys = {"occurred_from_at", "occurred_through_at", "schema_version", "prompt_version", "segment_output", "analysis_ids", "evidence_post_ids", "uncertainties"}
+    source_ids: set[str] = set()
+    for source in value["sources"]:
+        if not isinstance(source, dict) or set(source) != source_keys or not _non_empty_string(source.get("source_id")) or source["source_id"] in source_ids or not isinstance(source.get("analyses"), list) or not source["analyses"] or not isinstance(source.get("segment"), dict) or set(source["segment"]) != segment_keys:
+            raise ProtocolError("invalid x v3 verification replay completion")
+        source_ids.add(source["source_id"])
+        segment = source["segment"]
+        if not all(_non_empty_string(segment.get(key)) for key in ("occurred_from_at", "occurred_through_at")) or segment.get("schema_version") != "v3-x-window" or segment.get("prompt_version") != "v3-x-window-1" or not isinstance(segment.get("segment_output"), dict) or segment["segment_output"].get("schema_version") != "v3-x-window" or not all(_string_array(segment.get(key)) for key in ("analysis_ids", "evidence_post_ids", "uncertainties")):
+            raise ProtocolError("invalid x v3 verification replay completion")
+        analysis_ids: set[str] = set()
+        for analysis in source["analyses"]:
+            if not isinstance(analysis, dict) or set(analysis) != analysis_keys or not _non_empty_string(analysis.get("post_id")) or analysis.get("analysis_id") != f"{analysis.get('post_id')}@2" or analysis.get("analysis_version") != 2 or analysis.get("schema_version") != "v3-x-post-analysis" or analysis.get("prompt_version") != "v3-x-post-analysis-1" or not isinstance(analysis.get("analysis_output"), dict) or analysis["analysis_output"].get("post_id") != analysis["post_id"] or analysis.get("blogger_viewpoint") is not None and not _non_empty_string(analysis.get("blogger_viewpoint")) or not _string_array(analysis.get("arguments")) or analysis.get("quoted_post_viewpoint") is not None and not _non_empty_string(analysis.get("quoted_post_viewpoint")) or not _string_array(analysis.get("uncertainties")) or not _string_array(analysis.get("evidence_post_ids")) or not _non_empty_string(analysis.get("post_link")) or analysis["analysis_id"] in analysis_ids:
+                raise ProtocolError("invalid x v3 verification replay completion")
+            analysis_ids.add(analysis["analysis_id"])
+        if set(segment["analysis_ids"]) != analysis_ids or len(segment["analysis_ids"]) != len(analysis_ids):
+            raise ProtocolError("invalid x v3 verification replay completion")
+    daily = value["daily"]
+    daily_keys = {"schema_version", "prompt_version", "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties"}
+    if set(daily) != daily_keys or daily.get("schema_version") != "v3-x-cross-blogger" or daily.get("prompt_version") != "v3-x-cross-blogger-1" or not all(isinstance(daily.get(category), list) for category in ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")) or not _string_array(daily.get("uncertainties")):
+        raise ProtocolError("invalid x v3 verification replay completion")
 
 
 def _safe_model_reported(value: object) -> bool:
