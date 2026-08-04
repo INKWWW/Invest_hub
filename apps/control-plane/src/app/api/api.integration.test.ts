@@ -49,6 +49,9 @@ const xVerificationReplayMocks = vi.hoisted(() => ({
   completeXVerificationReplay: vi.fn(),
   failXVerificationReplay: vi.fn(),
 }));
+const xVerificationAcceptanceMocks = vi.hoisted(() => ({
+  getXVerificationAcceptanceContext: vi.fn(),
+}));
 const windowedSyncMocks = vi.hoisted(() => ({
   createManualDiscordRefresh: vi.fn(),
   getSourceCoverage: vi.fn(),
@@ -99,6 +102,7 @@ vi.mock("../../lib/db/repositories/workers", () => workerRepositoryMocks);
 vi.mock("../../lib/db/repositories/tasks", () => taskMocks);
 vi.mock("../../lib/db/repositories/x-daily-judgements", () => xDailyJudgementMocks);
 vi.mock("../../lib/db/repositories/x-v3-verification-replays", () => xVerificationReplayMocks);
+vi.mock("../../lib/db/repositories/x-v3-verification-acceptance-runs", () => xVerificationAcceptanceMocks);
 vi.mock("../../lib/db/repositories/windowed-sync", () => windowedSyncMocks);
 vi.mock("../../lib/db/repositories/author-profiles", () => authorProfileMocks);
 vi.mock("../../lib/db/repositories/sources", () => sourceMocks);
@@ -145,6 +149,7 @@ import { POST as postClaimXVerificationReplay } from "./worker/x-v3-verification
 import { POST as postXVerificationReplayContext } from "./worker/x-v3-verification-replays/[replayId]/context/route";
 import { POST as postXVerificationReplayComplete } from "./worker/x-v3-verification-replays/[replayId]/complete/route";
 import { POST as postXVerificationReplayFailure } from "./worker/x-v3-verification-replays/[replayId]/failure/route";
+import { POST as postXVerificationAcceptanceContext } from "./worker/x-v3-verification-acceptance-runs/[acceptanceRunId]/context/route";
 
 function jsonRequest(path: string, body: unknown, headers: Record<string, string> = {}, method = "POST") {
   return new Request(`http://localhost${path}`, {
@@ -1558,6 +1563,25 @@ describe("v0 control-plane API authorization", () => {
     expect(xVerificationReplayMocks.claimXVerificationReplay).toHaveBeenCalledWith(replayId, "worker-1");
     expect(xVerificationReplayMocks.getXVerificationReplayContext).toHaveBeenCalledWith(replayId, 1, "worker-1");
     expect(await context.json()).toMatchObject({ replay_id: replayId, sources: [{ posts: [{ content: "frozen worker input" }] }] });
+  });
+
+  it("returns the acceptance-run field that the acceptance Worker protocol requires", async () => {
+    const acceptanceRunId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
+    xVerificationAcceptanceMocks.getXVerificationAcceptanceContext.mockResolvedValue({
+      replay_id: acceptanceRunId,
+      attempt: 1,
+      sources: [],
+    });
+
+    const response = await postXVerificationAcceptanceContext(
+      jsonRequest(`/api/worker/x-v3-verification-acceptance-runs/${acceptanceRunId}/context`, { attempt: 1 }),
+      { params: Promise.resolve({ acceptanceRunId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ acceptance_run_id: acceptanceRunId, attempt: 1, sources: [] });
+    expect(xVerificationAcceptanceMocks.getXVerificationAcceptanceContext).toHaveBeenCalledWith(acceptanceRunId, 1, "worker-1");
   });
 
   it("rejects unauthenticated Workers and client-supplied schedule ranges", async () => {
