@@ -1,5 +1,13 @@
 # X 跨博主当日判断总结：最终边界本地验收记录
 
+## v3 completion 修复与独立验收上线（2026-08-04）
+
+真实 08:00 v3 replay 的终态失败经最小回归确认：Worker 发送的 `daily` 同时携带 wire-level `schema_version` 与 `prompt_version`，而数据库 validator 只接受纯输出，导致有效结果在 completion 边界被拒绝。`20260804180100_x_v3_replay_completion_wire_contract.sql` 在验证和版本写入前仅剥离这两个元字段，保留版本列、冻结输入、证据闭包、租约及原子性约束。原 replay 不重试、不改写。
+
+为验证修复，`20260804180200_x_v3_replay_acceptance_run.sql` 增加仅能关联 failed parent replay 的单次 acceptance lifecycle；它读取父 replay 的既有冻结来源/帖子，不进入采集、OpenCLI、Browser、launchd 或 scheduler。生产应用两条 additive migration，并部署 Control Plane；稳定 `/x` 别名已指向 Ready deployment。随后以管理员受限 RPC 仅创建一条 acceptance run，显式 Worker 命令仅执行一次。该 run 成功写入 3 个 acceptance segment 与 1 个 acceptance version；3 个冻结来源均被处理。父 replay 仍为 attempt 1 的 `failed/persistence_failure`，原 source batch 仍为 `judgement_failed`，原 daily-run 数不变；该 acceptance 执行窗口内新建 sync task 为 0。
+
+已认证正式 `/x` 验收同时看到原 08:00 失败状态和“验证恢复（非定时任务）”标识；Reader 未显示内部 ID、Prompt、路径或 telemetry。完整本地发布门禁通过：39 个 pgTAP 文件 / 622 项、185 个 Worker 测试、42 个 Control Plane 测试文件 / 238 项、lint、production build、`git diff --check` 与 redaction check。提交为 `6e9890b`、`0287b7c`、`43d98c3`，均已推送至 `main`。
+
 ## 08:00 v3 一次性验证回放生产执行（2026-08-04）
 
 production 已应用 `20260804081609_x_v3_verification_replay_0800.sql`，并确认四张 replay 表和 completion RPC 存在。Control Plane 的 v3 replay API 已在 Vercel production Ready 部署中上线，稳定 `/x` 别名已切换到该部署；为解除平台阻断，Git author 已改为 GitHub 账户已验证邮箱后以无内容提交重新触发部署。该 author 修复不改动应用、数据库或定时任务。

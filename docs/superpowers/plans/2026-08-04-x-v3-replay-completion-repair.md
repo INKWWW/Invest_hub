@@ -170,7 +170,7 @@
 - Modify: `docs/engineering-journal/2026-08-01-x-cross-blogger-daily-judgements.md`
 - Modify: `docs/project-status.md` only if its stated status changes
 
-- [ ] **Step 1: Run the complete local release gate**
+- [x] **Step 1: Run the complete local release gate**
 
   Run:
 
@@ -184,18 +184,24 @@
 
   Expected: all commands exit zero; no secret, raw-content or formatting leak is introduced.
 
-- [ ] **Step 2: Release code and migration**
+- [x] **Step 2: Release code and migration**
 
   Push `main`, apply only the two new migrations to the linked production database, deploy the Control Plane to Vercel production, and verify the stable `/x` deployment resolves to the released commit. Do not load or alter any Worker scheduler service.
 
-- [ ] **Step 3: Run one production acceptance command**
+- [x] **Step 3: Run one production acceptance command**
 
   Through the authenticated admin endpoint, create exactly one acceptance run for the known failed replay. Execute exactly one `run-x-v3-verification-acceptance` invocation with the existing owner-only X Worker config/credential and `V2_REAL_X_ACK=authorized`. It must not receive an OpenCLI executable argument. If it fails, stop and record the terminal result without retry.
 
-- [ ] **Step 4: Read-only production and UI acceptance**
+- [x] **Step 4: Read-only production and UI acceptance**
 
   Query only aggregate/status fields to prove: the parent replay remains `failed`; original batch/run counts and statuses did not change; no new sync/scheduled task was created; acceptance has three frozen sources, v3 analyses, three acceptance segments and one acceptance version. In an authenticated browser, open production `/x` and verify the original failure remains plus the “验证恢复（非定时任务）” card, categories and no internal-field leakage.
 
-- [ ] **Step 5: Record and publish evidence**
+- [x] **Step 5: Record and publish evidence**
+
+## Execution record (2026-08-04)
+
+`6e9890b` normalized the v3 completion wire payload; `0287b7c` added the isolated acceptance lifecycle, Worker path and Reader projection; `43d98c3` corrected the acceptance context response to the Worker protocol. The two additive migrations are applied to production. Local gates passed: 39 pgTAP files / 622 assertions, 185 Worker tests, 42 Control Plane files / 238 tests, lint, production build, `git diff --check`, and redaction check.
+
+One acceptance run was created from the already terminal failed replay and executed exactly once. It succeeded with 3 frozen sources, 3 acceptance segments and 1 acceptance version. The parent replay remains failed on attempt 1 with its original `persistence_failure`, the original source batch remains `judgement_failed` with its original daily-run count, and the acceptance window created 0 sync tasks. Authenticated production `/x` retains the original failure and displays `验证恢复（非定时任务）` without internal fields.
 
   Check completed Plan steps, append the real outcome and bounded counts to the engineering journal, run `git diff --check` and the redaction check again, commit the record, and push `main`.
