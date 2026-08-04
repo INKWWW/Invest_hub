@@ -12,6 +12,12 @@ function failureClass(details: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function failureStage(details: unknown): string | null {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return null;
+  const value = (details as Record<string, unknown>).failure_stage;
+  return typeof value === "string" ? value : null;
+}
+
 export function TaskTimeline({ events }: { events: TimelineEvent[] }) {
   if (events.length === 0) return <p>No task events recorded.</p>;
   return (
@@ -21,10 +27,9 @@ export function TaskTimeline({ events }: { events: TimelineEvent[] }) {
           <time dateTime={event.occurred_at}>{event.occurred_at}</time>{" "}
           <strong>{event.event_type}</strong>{" "}
           <span>attempt {event.attempt}</span>
-          {failureClass(event.details) ? <span> ({failureClass(event.details)})</span> : null}
+          {failureClass(event.details) ? <span> ({failureClass(event.details)}{failureStage(event.details) ? ` / ${failureStage(event.details)}` : ""})</span> : null}
         </li>
       ))}
     </ol>
   );
 }
-

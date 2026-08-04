@@ -887,6 +887,10 @@ export interface Database {
         Args: { p_source_id: string; p_parameter_version: string; p_requested_by: string; p_start_at: string; p_end_at: string };
         Returns: Json;
       };
+      create_x_terminal_recovery_task: {
+        Args: { p_failed_task_id: string; p_requested_by: string };
+        Returns: Json;
+      };
       resolve_x_source_identity: {
         Args: { p_source_id: string; p_worker_id: string; p_parameter_version: string; p_account_id: string };
         Returns: Json;
