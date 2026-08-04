@@ -1,6 +1,6 @@
 begin;
 
-select plan(17);
+select plan(20);
 
 select has_table('public', 'x_v3_verification_replays', 'verification replay lifecycle is persisted separately from scheduled batches');
 select has_table('public', 'x_v3_verification_replay_sources', 'verification replay freezes its eligible sources');
@@ -92,6 +92,7 @@ create function pg_temp.valid_completion() returns jsonb language sql as $$
       )
     )),
     'daily', jsonb_build_object(
+      'schema_version', 'v3-x-cross-blogger', 'prompt_version', 'v3-x-cross-blogger-1',
       'security_industry_viewpoints', jsonb_build_array(jsonb_build_object(
         'statement', 'Synthetic replay relation', 'action_intent', 'watch', 'action_scope', 'Synthetic scope', 'conditions', '[]'::jsonb,
         'supporting_source_ids', jsonb_build_array('00000000-0000-0000-0000-000000033101', '00000000-0000-0000-0000-000000033102', '00000000-0000-0000-0000-000000033103'),
@@ -108,6 +109,9 @@ create function pg_temp.valid_completion() returns jsonb language sql as $$
 $$;
 select is((select public.complete_x_v3_verification_replay((select (payload->>'replay_id')::uuid from replay_seed), 1, '00000000-0000-0000-0000-000000033001', pg_temp.valid_completion())->>'status'), 'succeeded', 'a complete v3 replay atomically persists its independent result');
 select is((select count(*)::text from public.x_v3_verification_versions where replay_id = (select (payload->>'replay_id')::uuid from replay_seed)), '1', 'successful replay writes one immutable daily version');
+select is((select output ? 'schema_version' or output ? 'prompt_version' from public.x_v3_verification_versions where replay_id = (select (payload->>'replay_id')::uuid from replay_seed)), false, 'stored replay output excludes wire-only schema and prompt metadata');
+select is((select schema_version from public.x_v3_verification_versions where replay_id = (select (payload->>'replay_id')::uuid from replay_seed)), 'v3-x-cross-blogger', 'stored replay version retains its schema column');
+select is((select prompt_version from public.x_v3_verification_versions where replay_id = (select (payload->>'replay_id')::uuid from replay_seed)), 'v3-x-cross-blogger-1', 'stored replay version retains its prompt column');
 
 select * from finish();
 rollback;
