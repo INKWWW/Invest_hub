@@ -209,6 +209,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .topic-card + .topic-card { border-top: 1px solid #dce4e0; padding-top: 1.15rem; }
 
+.x-reader-viewpoint-group { display: grid; gap: 0.65rem; margin-top: 1rem; }
+
+.reader-content .x-reader-viewpoint-group h4 { border-left: 4px solid #1f6570; background: #e7f0ec; padding: 0.55rem 0.8rem; color: #254b53; font-family: inherit; font-size: 0.94rem; font-weight: 850; letter-spacing: 0; }
+
+.x-reader-viewpoint-list { display: grid; gap: 0.65rem; }
+
+.x-reader-viewpoint-card { display: grid; gap: 0.7rem; border: 1px solid #d5e0dd; background: #fffefa; padding: 0.9rem 1rem; }
+
+.x-reader-viewpoint-card header p { margin: 0; color: #547077; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+
+.x-reader-viewpoint-statement { margin: 0; color: #17252d; font-size: 1.02rem; font-weight: 600; line-height: 1.7; }
+
+.x-reader-viewpoint-meta { display: grid; gap: 0.45rem; margin: 0; padding-top: 0.7rem; border-top: 1px solid #dce4e0; }
+
+.x-reader-viewpoint-meta div { display: grid; grid-template-columns: 4.7rem minmax(0, 1fr); gap: 0.6rem; }
+
+.x-reader-viewpoint-meta dt { color: #547077; font-size: 0.82rem; font-weight: 800; }
+
+.x-reader-viewpoint-meta dd { margin: 0; color: #27434a; line-height: 1.55; }
+
+.x-reader-viewpoint-card .topic-uncertainty { margin: 0; border-top: 1px solid #eadccf; padding-top: 0.7rem; }
+
 .x-viewpoints { display: grid; gap: 0.55rem; margin: 0; padding-left: 1.2rem; line-height: 1.6; }
 .x-evidence { background: #f8faf6; border: 1px solid #dce4e0; padding: 0.85rem 1rem; }
 .x-analysis { border-top: 1px solid #dce4e0; margin-top: 0.8rem; padding-top: 0.8rem; }
