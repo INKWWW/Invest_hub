@@ -16,7 +16,7 @@
 
 - [ ] 先写 pgTAP：管理员授权、only failed X window、exact watermark gate、single replacement、range/snapshot preservation、original immutability、scheduler defer/release。
 - [ ] 用 `supabase migration new x_terminal_source_recovery` 创建追加 migration：允许 recovery trigger、增加 `recovered_from_task_id` 与唯一约束、创建和收紧 recovery RPC grants。
-- [ ] 更新 Worker claim validation 以接受 `recovery` 且禁止 scheduled window key；更新生成 DB 类型和最小控制面 repository（无新 UI）。
+- [x] 更新 Worker claim validation 以接受 `recovery` 且禁止 scheduled window key；同步 `task-claim`、`window-range-completion` 与控制面镜像契约，防止服务端租约先成立而 Worker 因 claim response 不可解析进入循环；更新生成 DB 类型和最小控制面 repository（无新 UI）。
 - [ ] 跑全部相关 pgTAP 和 Worker tests。
 
 ### Task 3: Release and source recovery

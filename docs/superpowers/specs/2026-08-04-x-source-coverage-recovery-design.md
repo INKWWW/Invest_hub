@@ -18,6 +18,8 @@
 
 Worker 在本地 runtime 与远程持久化边界捕获并上报阶段；控制面把它写入既有 `task_attempts.failure` payload 和 `task_events.details`，管理员任务时间线可展示该安全标签。保留原有 broad `failure_class` 与 retry 策略，阶段不改变安全/重试语义。
 
+`recovery` 是 window range 的正式触发器，因此它必须同时出现在 Worker 用于解析 claim response 的 `task-claim` 契约、Worker 用于提交完成结果的 `window-range-completion` 契约，以及控制面对应的镜像契约中。仅让 runtime 的 range parser 接受该值不足以构成可执行协议；否则服务端已经租出任务而 Worker 会在领取响应校验时失去 task ID，造成租约到期循环。
+
 ### 终态窗口的 replacement recovery
 
 新增 admin/service-role 受限的 `create_x_terminal_recovery_task(failed_task_id, requested_by)`。它只接受满足所有条件的 X `window` 终态失败任务：请求者为管理员、来源仍已启用/已解析、失败 range 起点仍严格等于该来源连续水位、没有活动 X task、原 task 未有 replacement。它创建一个新的 `x_sync` task，范围、来源快照、参数版本和 overlap 均来自原失败窗口，`capture_range.trigger = recovery`，并通过 `sync_tasks.recovered_from_task_id` 与原 task 建立只读关系。

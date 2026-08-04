@@ -129,7 +129,7 @@ class WorkerProtocolTests(unittest.TestCase):
             "collection_scope": {"mode": "window"},
             "capture_range": {
                 "mode": "window",
-                "trigger": "manual",
+                "trigger": "recovery",
                 "timezone": "Asia/Shanghai",
                 "start_at": "2099-01-01T00:00:00Z",
                 "end_at": "2099-01-01T08:00:00Z",
@@ -148,7 +148,9 @@ class WorkerProtocolTests(unittest.TestCase):
             protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
             protocol.enrol("one-time-enrolment-code")
 
-            self.assertEqual(protocol.claim()["coverage_snapshot"]["last_completed_task_id"], None)
+            recovered_claim = protocol.claim()
+            self.assertEqual(recovered_claim["coverage_snapshot"]["last_completed_task_id"], None)
+            self.assertEqual(recovered_claim["capture_range"]["trigger"], "recovery")
 
     def test_persist_validates_contract_and_uses_the_task_scoped_endpoint(self) -> None:
         payload = {

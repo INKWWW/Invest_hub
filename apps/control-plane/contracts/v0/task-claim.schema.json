@@ -63,7 +63,7 @@
           "required": ["mode", "trigger", "timezone", "start_at", "end_at", "scheduled_window_key"],
           "properties": {
             "mode": { "const": "window" },
-            "trigger": { "enum": ["scheduled", "manual", "bootstrap"] },
+            "trigger": { "enum": ["scheduled", "manual", "bootstrap", "recovery"] },
             "timezone": { "const": "Asia/Shanghai" },
             "start_at": { "type": "string", "format": "date-time" },
             "end_at": { "type": "string", "format": "date-time" },
