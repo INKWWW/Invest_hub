@@ -437,6 +437,41 @@ class WorkerProtocolTests(unittest.TestCase):
 
             self.assertEqual(len(transport.calls), 2)
 
+    def test_x_verification_replay_protocol_uses_only_replay_scoped_endpoints(self) -> None:
+        replay_id = "11111111-1111-4111-8111-111111111111"
+        context = {
+            "replay_id": replay_id, "attempt": 1, "sources": [{
+                "source_id": "source-a", "display_name": "A", "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z", "posts": [{
+                    "post_id": "post-a", "content": "fixture", "occurred_at": "2099-01-01T01:00:00Z", "post_url": "https://x.com/a/status/post-a", "post_type": "original",
+                    "quoted_post_id": None, "reply_to_post_id": None, "reposted_post_id": None, "context_status": "complete", "attachments": [],
+                }],
+            }],
+        }
+        completion = {
+            "replay_id": replay_id, "attempt": 1, "provider": "codex_cli", "model_reported": None,
+            "sources": [{"source_id": "source-a", "analyses": [{
+                "post_id": "post-a", "analysis_id": "post-a@2", "analysis_version": 2, "schema_version": "v3-x-post-analysis", "prompt_version": "v3-x-post-analysis-1",
+                "analysis_output": {"post_id": "post-a"}, "blogger_viewpoint": None, "arguments": [], "quoted_post_viewpoint": None, "uncertainties": [], "evidence_post_ids": ["post-a"], "post_link": "https://x.com/a/status/post-a",
+            }], "segment": {"occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z", "schema_version": "v3-x-window", "prompt_version": "v3-x-window-1", "segment_output": {"schema_version": "v3-x-window"}, "analysis_ids": ["post-a@2"], "evidence_post_ids": ["post-a"], "uncertainties": []}}],
+            "daily": {"schema_version": "v3-x-cross-blogger", "prompt_version": "v3-x-cross-blogger-1", "security_industry_viewpoints": [], "market_structure_viewpoints": [], "strategy_mindset_viewpoints": [], "uncertainties": []},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()), (200, {"replay_id": replay_id, "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z"}),
+                (200, context), (200, {"status": "succeeded"}), (200, {"status": "failed"}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(protocol.claim_x_v3_verification_replay(replay_id)["attempt"], 1)
+            self.assertEqual(protocol.get_x_v3_verification_replay_context(replay_id, 1)["sources"][0]["posts"][0]["post_id"], "post-a")
+            self.assertEqual(protocol.complete_x_v3_verification_replay(completion)["status"], "succeeded")
+            self.assertEqual(protocol.fail_x_v3_verification_replay(replay_id, 1, "schema_error")["status"], "failed")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith(f"/api/worker/x-v3-verification-replays/{replay_id}/claim"))
+            self.assertTrue(str(transport.calls[2]["url"]).endswith(f"/api/worker/x-v3-verification-replays/{replay_id}/context"))
+            self.assertTrue(str(transport.calls[3]["url"]).endswith(f"/api/worker/x-v3-verification-replays/{replay_id}/complete"))
+            self.assertTrue(str(transport.calls[4]["url"]).endswith(f"/api/worker/x-v3-verification-replays/{replay_id}/failure"))
+
 
 if __name__ == "__main__":
     unittest.main()
