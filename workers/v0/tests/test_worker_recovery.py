@@ -161,6 +161,23 @@ class WorkerRecoveryTests(unittest.TestCase):
 
         self.assertEqual(protocol.reported_failures[0]["failure_stage"], "remote_page_persist")
 
+    def test_x_failure_retries_without_stage_for_an_older_control_plane(self) -> None:
+        class LegacyProtocol(FakeProtocol):
+            def report_failure(self, failure: dict[str, object]) -> dict[str, object]:
+                self.reported_failures.append(failure)
+                if "failure_stage" in failure:
+                    raise ProtocolError("invalid task failure")
+                return {"status": "retryable_failed"}
+
+        protocol = LegacyProtocol()
+        protocol.claim_value = {**CLAIM, "task_type": "x_sync", "source_id": "x-source"}
+        Worker(protocol, execute=lambda _claim: (_ for _ in ()).throw(
+            RuntimeExecutionError("persistence_failure", "remote persistence failed", failure_stage="remote_page_persist")
+        )).run_once()
+
+        self.assertEqual(len(protocol.reported_failures), 2)
+        self.assertNotIn("failure_stage", protocol.reported_failures[1])
+
     def test_x_transient_failure_stops_retrying_after_the_third_attempt(self) -> None:
         protocol = FakeProtocol()
         protocol.claim_value = {**CLAIM, "task_type": "x_sync", "source_id": "x-source", "attempt": 3}
