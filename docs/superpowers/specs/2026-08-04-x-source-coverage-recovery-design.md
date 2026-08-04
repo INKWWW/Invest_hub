@@ -22,6 +22,8 @@ Worker 在本地 runtime 与远程持久化边界捕获并上报阶段；控制�
 
 X 一个 Collection range 可能返回大量帖子，但 post analysis 需要逐条调用 Provider。Worker 必须在每条分析成功后续租同一 task attempt，直到最终 range completion；不能只在原始采集页持久化后续租一次，否则长窗口会在证据已持久化、分析尚未提交时因十分钟 lease 过期而重复执行。
 
+Collection receipt 的边界证明与可持久化帖子是两件事。X timeline 可在边界范围外混入置顶帖子；Runtime 必须保留原 receipt 以证明已到达 lower boundary，但仅将 `(overlap_start_at, end_at]` 内、属于该来源的帖子写入 raw/canonical/context 和 analysis。早于 overlap 的帖子既不应作为本窗口观点，也不得在后续窗口重新写入并与已有不可变事实冲突。
+
 ### 终态窗口的 replacement recovery
 
 新增 admin/service-role 受限的 `create_x_terminal_recovery_task(failed_task_id, requested_by)`。它只接受满足所有条件的 X `window` 终态失败任务：请求者为管理员、来源仍已启用/已解析、失败 range 起点仍严格等于该来源连续水位、没有活动 X task、原 task 未有 replacement。它创建一个新的 `x_sync` task，范围、来源快照、参数版本和 overlap 均来自原失败窗口，`capture_range.trigger = recovery`，并通过 `sync_tasks.recovered_from_task_id` 与原 task 建立只读关系。

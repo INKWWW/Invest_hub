@@ -1110,11 +1110,30 @@ class XWindowedRuntime:
             failure_stage = "page_mapping"
             mapped = self.canonicalizer.map(page)
             failure_stage = "page_boundary_validation"
-            page_times = [_required_instant(message.occurred_at, "X post occurred_at") for message in mapped]
-            if any(occurred_at > capture_range.end_at for occurred_at in page_times):
+            mapped_with_times = [
+                (message, _required_instant(message.occurred_at, "X post occurred_at"))
+                for message in mapped
+            ]
+            if any(occurred_at > capture_range.end_at for _, occurred_at in mapped_with_times):
                 raise RuntimeExecutionError("opencli_contract", "X page contains a post after its fixed end_at")
             if any(message.author_id != source_snapshot["account_id"] for message in mapped):
                 raise RuntimeExecutionError("opencli_contract", "X page author does not match the task source snapshot")
+            # Collection receipts prove that pagination reached the lower
+            # boundary, but X can include pinned posts older than that
+            # boundary.  They must not become range evidence or be written
+            # again through a later window's page-persistence transaction.
+            mapped_with_times = [
+                (message, occurred_at)
+                for message, occurred_at in mapped_with_times
+                if overlap_start < occurred_at <= capture_range.end_at
+            ]
+            persisted_ids = {message.external_message_id for message, _ in mapped_with_times}
+            page = replace(
+                page,
+                messages=tuple(message for message in page.messages if str(message.get("id")) in persisted_ids),
+            )
+            mapped = tuple(message for message, _ in mapped_with_times)
+            page_times = [occurred_at for _, occurred_at in mapped_with_times]
             failure_stage = "local_evidence_persistence"
             self.evidence.persist_raw(page)
             local_counts = self.evidence.persist_canonical(mapped)

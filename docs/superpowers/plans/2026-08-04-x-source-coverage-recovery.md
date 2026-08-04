@@ -18,6 +18,7 @@
 - [ ] 用 `supabase migration new x_terminal_source_recovery` 创建追加 migration：允许 recovery trigger、增加 `recovered_from_task_id` 与唯一约束、创建和收紧 recovery RPC grants。
 - [x] 更新 Worker claim validation 以接受 `recovery` 且禁止 scheduled window key；同步 `task-claim`、`window-range-completion` 与控制面镜像契约，防止服务端租约先成立而 Worker 因 claim response 不可解析进入循环；更新生成 DB 类型和最小控制面 repository（无新 UI）。
 - [x] 为 X 长窗口增加逐条 post analysis 的 lease renewal；保留每个 capture page 持久化后的 renewal，避免 64 条以上的恢复窗口在最终 completion 前过期。
+- [x] 收紧 X range evidence：receipt 仍验证完整 Collection 边界，但过滤早于 overlap 的置顶/历史混入帖子，避免其跨窗口重复落库并触发 canonical/context 冲突；补回归测试。
 - [ ] 跑全部相关 pgTAP 和 Worker tests。
 
 ### Task 3: Release and source recovery
