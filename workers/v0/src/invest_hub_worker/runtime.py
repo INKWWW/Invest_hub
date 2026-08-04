@@ -1084,6 +1084,7 @@ class XWindowedRuntime:
         claim: dict[str, Any],
         *,
         on_capture_page: Callable[[dict[str, Any]], None] | None = None,
+        on_post_analysis: Callable[[str], None] | None = None,
         load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
         resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
@@ -1144,7 +1145,7 @@ class XWindowedRuntime:
             raise RuntimeExecutionError("persistence_failure", "X bounded execution failed", failure_stage=failure_stage) from exc
 
         messages = sorted(candidate_by_id.values(), key=lambda item: (_required_instant(item.occurred_at, "X post occurred_at"), item.external_message_id))
-        analyses, retries, elapsed_ms = self._post_analyses(claim, messages)
+        analyses, retries, elapsed_ms = self._post_analyses(claim, messages, on_post_analysis=on_post_analysis)
         segment, window_retries, window_elapsed = self._window_segment(claim, capture_range, messages, analyses)
         completion = {
             "contract_version": "v0",
@@ -1252,7 +1253,13 @@ class XWindowedRuntime:
             "capture_segment": {"contract_version": "v0", "task_id": str(claim["task_id"]), "attempt": int(claim["attempt"]), "capture_segment": segment},
         }
 
-    def _post_analyses(self, claim: Mapping[str, Any], messages: list[CanonicalMessage]) -> tuple[list[dict[str, Any]], int, int]:
+    def _post_analyses(
+        self,
+        claim: Mapping[str, Any],
+        messages: list[CanonicalMessage],
+        *,
+        on_post_analysis: Callable[[str], None] | None = None,
+    ) -> tuple[list[dict[str, Any]], int, int]:
         analyses: list[dict[str, Any]] = []
         retries = elapsed_ms = 0
         for message in messages:
@@ -1285,6 +1292,8 @@ class XWindowedRuntime:
                 "evidence_post_ids": analysis["evidence_post_ids"], "post_link": analysis["post_link"],
                 "analysis_id": f"{message.external_message_id}@2",
             })
+            if on_post_analysis is not None:
+                on_post_analysis(message.external_message_id)
         return analyses, retries, elapsed_ms
 
     def _window_segment(
@@ -1401,15 +1410,18 @@ class AuthorizedDiscordRuntimeSet:
         claim: dict[str, Any],
         *,
         on_capture_page: Callable[[dict[str, Any]], None],
+        on_post_analysis: Callable[[str], None] | None = None,
         load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
         resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        return self._runtime_for(claim).execute_windowed(
-            claim,
-            on_capture_page=on_capture_page,
-            load_daily_fact_context=load_daily_fact_context,
-            resolve_author_profiles=resolve_author_profiles,
-        )
+        execution_kwargs: dict[str, Any] = {
+            "on_capture_page": on_capture_page,
+            "load_daily_fact_context": load_daily_fact_context,
+            "resolve_author_profiles": resolve_author_profiles,
+        }
+        if on_post_analysis is not None:
+            execution_kwargs["on_post_analysis"] = on_post_analysis
+        return self._runtime_for(claim).execute_windowed(claim, **execution_kwargs)
 
 
 def build_authorized_discord_runtime(

@@ -414,7 +414,7 @@ class WindowedRuntimeTests(unittest.TestCase):
 
     def test_worker_confirms_each_page_segment_before_renewing_and_finalizing_the_range(self) -> None:
         events: list[str] = []
-        claim = {**window_claim(), "lease_expires_at": "2099-01-01T00:10:00Z"}
+        claim = {**window_claim(), "task_type": "x_sync", "lease_expires_at": "2099-01-01T00:10:00Z"}
         test_case = self
 
         class Protocol:
@@ -445,7 +445,7 @@ class WindowedRuntimeTests(unittest.TestCase):
                 raise AssertionError("windowed success must not report failure")
 
         class StreamingRuntime:
-            def execute_windowed(self, _claim: dict[str, object], *, on_capture_page: object) -> dict[str, object]:
+            def execute_windowed(self, _claim: dict[str, object], *, on_capture_page: object, on_post_analysis: object | None = None) -> dict[str, object]:
                 on_capture_page({
                     "persistence": {
                         "contract_version": "v0", "task_id": "window-task-1", "attempt": 1,
@@ -462,6 +462,8 @@ class WindowedRuntimeTests(unittest.TestCase):
                         "response_matched": True, "response_fresh": True,
                     }},
                 })
+                if on_post_analysis is not None:
+                    on_post_analysis("post-1")
                 return {
                     "persistence": {
                         "contract_version": "v0", "task_id": "window-task-1", "attempt": 1,
@@ -481,7 +483,7 @@ class WindowedRuntimeTests(unittest.TestCase):
         outcome = worker.run_once()
 
         self.assertEqual(outcome.status, "succeeded")
-        self.assertEqual(events, ["page-persist", "renew", "final-persist", "complete"])
+        self.assertEqual(events, ["page-persist", "renew", "renew", "final-persist", "complete"])
 
     def test_worker_refuses_a_window_claim_when_no_streaming_executor_is_configured(self) -> None:
         failures: list[dict[str, object]] = []

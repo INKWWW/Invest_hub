@@ -164,11 +164,21 @@ class Worker:
         if not isinstance(task_id, str) or not task_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
             raise RuntimeError("invalid bounded range task identity")
         execution_kwargs: dict[str, Any] = {"on_capture_page": self._persist_windowed_capture_page}
+        if claim.get("task_type") == "x_sync":
+            execution_kwargs["on_post_analysis"] = lambda _post_id: self._renew_x_analysis_lease(task_id, attempt)
         if callable(daily_context):
             execution_kwargs["load_daily_fact_context"] = lambda: daily_context(task_id, attempt)
         if callable(author_resolver):
             execution_kwargs["resolve_author_profiles"] = lambda: author_resolver(task_id, attempt)
         return self.execute_windowed(claim, **execution_kwargs)
+
+    def _renew_x_analysis_lease(self, task_id: str, attempt: int) -> None:
+        """Keep an X window lease alive while sequential post analyses run."""
+
+        try:
+            self.protocol.renew(task_id, attempt)
+        except Exception as exc:
+            raise RuntimeExecutionError("persistence_failure", "control plane X analysis lease renewal failed", failure_stage="lease_renewal") from exc
 
     def _persist_windowed_capture_page(self, page_execution: dict[str, Any]) -> None:
         persistence = page_execution.get("persistence")
