@@ -150,24 +150,36 @@ class XDailyJudgementRuntime:
             if not isinstance(segments, list):
                 raise ValueError("segments are invalid")
             for segment in segments:
-                if not isinstance(segment, Mapping) or set(segment) != {"id", "occurred_from_at", "occurred_through_at", "viewpoints", "uncertainties", "analyses"} or not isinstance(segment.get("analyses"), list):
+                if not isinstance(segment, Mapping) or set(segment) != {"id", "schema_version", "prompt_version", "occurred_from_at", "occurred_through_at", "segment_output", "analyses"} or not isinstance(segment.get("analyses"), list):
                     raise ValueError("segment is invalid")
                 segment_id = segment.get("id")
-                if not isinstance(segment_id, str) or not segment_id or segment_id in segment_ids:
+                segment_output = segment.get("segment_output")
+                if not isinstance(segment_id, str) or not segment_id or segment_id in segment_ids or segment.get("schema_version") != "v3-x-window" or segment.get("prompt_version") != "v3-x-window-1" or not isinstance(segment_output, Mapping) or segment_output.get("schema_version") != "v3-x-window":
                     raise ValueError("segment identity is invalid")
                 segment_ids.add(segment_id)
+                segment_analysis_ids = segment_output.get("analysis_ids")
+                segment_evidence_ids = segment_output.get("evidence_post_ids")
+                if not isinstance(segment_analysis_ids, list) or not isinstance(segment_evidence_ids, list):
+                    raise ValueError("segment v3 coverage is invalid")
+                observed_analysis_ids: set[str] = set()
+                observed_evidence_ids: set[str] = set()
                 for analysis in segment["analyses"]:
-                    if not isinstance(analysis, Mapping):
+                    if not isinstance(analysis, Mapping) or set(analysis) != {"analysis_id", "schema_version", "prompt_version", "analysis_output", "evidence_post_ids"}:
                         raise ValueError("analysis is invalid")
-                    analysis_id = analysis.get("post_id")
+                    analysis_id = analysis.get("analysis_id")
                     evidence = analysis.get("evidence_post_ids")
-                    if not isinstance(analysis_id, str) or not analysis_id or analysis_id in analysis_ids or not isinstance(evidence, list) or not all(isinstance(post_id, str) and post_id for post_id in evidence):
+                    analysis_output = analysis.get("analysis_output")
+                    if not isinstance(analysis_id, str) or not analysis_id or analysis_id in analysis_ids or not isinstance(evidence, list) or not all(isinstance(post_id, str) and post_id for post_id in evidence) or analysis.get("schema_version") != "v3-x-post-analysis" or analysis.get("prompt_version") != "v3-x-post-analysis-1" or not isinstance(analysis_output, Mapping) or analysis_output.get("post_id") != analysis_id.removesuffix("@2") or analysis_id != f"{analysis_output.get('post_id')}@2" or set(analysis_output.get("evidence_post_ids", [])) != set(evidence):
                         raise ValueError("analysis evidence is invalid")
                     analysis_ids.add(analysis_id)
                     evidence_ids = set(evidence)
+                    observed_analysis_ids.add(analysis_id)
+                    observed_evidence_ids.update(evidence_ids)
                     post_ids.update(evidence_ids)
                     analysis_source_ids[analysis_id] = source_id
                     analysis_evidence_post_ids[analysis_id] = evidence_ids
+                if set(segment_analysis_ids) != observed_analysis_ids or set(segment_evidence_ids) != observed_evidence_ids:
+                    raise ValueError("segment v3 coverage is invalid")
         excluded_ids: set[str] = set()
         for source in excluded_sources:
             if not isinstance(source, Mapping) or set(source) != {"source_id", "display_name", "reason"}:
