@@ -1071,6 +1071,14 @@ export interface Database {
         Args: { p_worker_id: string; p_now: string };
         Returns: Json;
       };
+      create_x_manual_recovery_run: {
+        Args: { p_requested_by: string; p_now: string };
+        Returns: Json;
+      };
+      advance_x_manual_recovery_runs: {
+        Args: { p_worker_id: string; p_now: string };
+        Returns: Json;
+      };
       ensure_due_x_collection_batches: {
         Args: { p_worker_id: string; p_now: string };
         Returns: Json;

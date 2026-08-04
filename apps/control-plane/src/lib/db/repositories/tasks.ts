@@ -1,6 +1,6 @@
 import { createSupabaseAdminClient } from "../supabase-server";
 import type { Database, Json } from "../types";
-import { ensureDueXCollectionBatches } from "./x-daily-judgements";
+import { advanceXManualRecoveryRuns, ensureDueXCollectionBatches } from "./x-daily-judgements";
 
 export type TaskScope = {
   mode: "incremental" | "history";
@@ -114,6 +114,11 @@ export async function scheduleDueSourceTasks(workerId: string, now = new Date())
       && "settlement_dispatch_failed" in judgementDispatch
       && judgementDispatch.settlement_dispatch_failed === true,
     );
+  } catch {
+    judgementDispatchFailed = true;
+  }
+  try {
+    await advanceXManualRecoveryRuns(workerId, now);
   } catch {
     judgementDispatchFailed = true;
   }

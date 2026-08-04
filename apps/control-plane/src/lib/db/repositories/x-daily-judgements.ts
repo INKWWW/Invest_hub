@@ -81,6 +81,13 @@ export type XDailyJudgementRegeneration = {
   attempt: 0;
 };
 
+export type XManualRecoveryRun = {
+  id: string;
+  status: "queued" | "collecting" | "summarizing" | "succeeded" | "failed";
+  targetCutoffAt: string;
+  idempotent: boolean;
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
@@ -109,6 +116,13 @@ function parseClaim(value: unknown): XDailyJudgementClaim | null {
 function parseRegeneration(value: unknown): XDailyJudgementRegeneration | null {
   if (!isObject(value) || typeof value.run_id !== "string" || value.status !== "queued" || value.attempt !== 0) return null;
   return { runId: value.run_id, status: value.status, attempt: value.attempt };
+}
+
+function parseManualRecoveryRun(value: unknown): XManualRecoveryRun | null {
+  if (!isObject(value) || typeof value.id !== "string" || typeof value.target_cutoff_at !== "string"
+    || typeof value.idempotent !== "boolean"
+    || !["queued", "collecting", "summarizing", "succeeded", "failed"].includes(String(value.status))) return null;
+  return { id: value.id, status: value.status as XManualRecoveryRun["status"], targetCutoffAt: value.target_cutoff_at, idempotent: value.idempotent };
 }
 
 function parseAnalysis(value: unknown): XDailyJudgementAnalysis | null {
@@ -187,6 +201,24 @@ export async function ensureDueXCollectionBatches(workerId: string, now = new Da
   });
   if (error) throw error;
   return data;
+}
+
+export async function advanceXManualRecoveryRuns(workerId: string, now = new Date()) {
+  const { data, error } = await createSupabaseAdminClient().rpc("advance_x_manual_recovery_runs", {
+    p_worker_id: workerId, p_now: now.toISOString(),
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function createManualXRecoveryRun(actorId: string, now = new Date()): Promise<XManualRecoveryRun> {
+  const { data, error } = await createSupabaseAdminClient().rpc("create_x_manual_recovery_run", {
+    p_requested_by: actorId, p_now: now.toISOString(),
+  });
+  if (error) throw error;
+  const run = parseManualRecoveryRun(data);
+  if (!run) throw new Error("invalid_x_manual_recovery_run");
+  return run;
 }
 
 export async function getXDailyJudgementContext(runId: string, attempt: number, workerId: string): Promise<XDailyJudgementContext> {
