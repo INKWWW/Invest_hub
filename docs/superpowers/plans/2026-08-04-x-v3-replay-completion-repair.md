@@ -37,7 +37,7 @@
 
 - [ ] **Step 2: Verify RED**
 
-  Run: `supabase test db --file supabase/tests/033_x_v3_verification_replay_0800.sql`
+  Run: `supabase test db --local supabase/tests/033_x_v3_verification_replay_0800.sql`
 
   Expected: the existing RPC rejects the valid wire payload with `invalid_v3_x_daily_judgement_output`.
 
@@ -54,7 +54,7 @@
 
 - [ ] **Step 4: Verify GREEN and commit**
 
-  Run: `supabase test db --file supabase/tests/033_x_v3_verification_replay_0800.sql`
+  Run: `supabase test db --local supabase/tests/033_x_v3_verification_replay_0800.sql`
 
   Expected: all assertions pass, including no metadata in `output`.
 
@@ -77,7 +77,7 @@
 
 - [ ] **Step 2: Verify RED**
 
-  Run: `supabase test db --file supabase/tests/034_x_v3_replay_acceptance_run.sql`
+  Run: `supabase test db --local supabase/tests/034_x_v3_replay_acceptance_run.sql`
 
   Expected: failure because acceptance tables/RPCs do not exist.
 
@@ -89,7 +89,7 @@
 
 - [ ] **Step 4: Generate types, verify GREEN, and commit**
 
-  Run: `supabase test db --file supabase/tests/034_x_v3_replay_acceptance_run.sql`
+  Run: `supabase test db --local supabase/tests/034_x_v3_replay_acceptance_run.sql`
 
   Then regenerate `apps/control-plane/src/lib/db/types.ts` with the repository’s existing Supabase type-generation command and verify the new functions/tables are represented.
 
