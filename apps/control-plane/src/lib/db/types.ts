@@ -806,6 +806,116 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["x_daily_judgement_versions"]["Insert"]>;
         Relationships: [];
       };
+      x_v3_verification_replays: {
+        Row: {
+          id: string;
+          source_batch_id: string;
+          requested_by: string;
+          status: "queued" | "running" | "succeeded" | "failed";
+          attempt: number;
+          lease_owner: string | null;
+          lease_expires_at: string | null;
+          failure_class: string | null;
+          created_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          source_batch_id: string;
+          requested_by: string;
+          status?: "queued" | "running" | "succeeded" | "failed";
+          attempt?: number;
+          lease_owner?: string | null;
+          lease_expires_at?: string | null;
+          failure_class?: string | null;
+          created_at?: string;
+          started_at?: string | null;
+          completed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_v3_verification_replays"]["Insert"]>;
+        Relationships: [];
+      };
+      x_v3_verification_replay_sources: {
+        Row: {
+          replay_id: string;
+          source_id: string;
+          display_name: string;
+          original_range_task_id: string;
+          original_segment_id: string;
+          occurred_from_at: string;
+          occurred_through_at: string;
+          posts: Json;
+        };
+        Insert: {
+          replay_id: string;
+          source_id: string;
+          display_name: string;
+          original_range_task_id: string;
+          original_segment_id: string;
+          occurred_from_at: string;
+          occurred_through_at: string;
+          posts: Json;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_v3_verification_replay_sources"]["Insert"]>;
+        Relationships: [];
+      };
+      x_v3_verification_segments: {
+        Row: {
+          id: string;
+          replay_id: string;
+          source_id: string;
+          occurred_from_at: string;
+          occurred_through_at: string;
+          schema_version: "v3-x-window";
+          prompt_version: "v3-x-window-1";
+          segment_output: Json;
+          post_analysis_refs: Json;
+          evidence_refs: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          replay_id: string;
+          source_id: string;
+          occurred_from_at: string;
+          occurred_through_at: string;
+          schema_version: "v3-x-window";
+          prompt_version: "v3-x-window-1";
+          segment_output: Json;
+          post_analysis_refs: Json;
+          evidence_refs: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_v3_verification_segments"]["Insert"]>;
+        Relationships: [];
+      };
+      x_v3_verification_versions: {
+        Row: {
+          id: string;
+          replay_id: string;
+          input_snapshot: Json;
+          output: Json;
+          provider: "codex_cli";
+          model_reported: string | null;
+          prompt_version: "v3-x-cross-blogger-1";
+          schema_version: "v3-x-cross-blogger";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          replay_id: string;
+          input_snapshot: Json;
+          output: Json;
+          provider: "codex_cli";
+          model_reported?: string | null;
+          prompt_version: "v3-x-cross-blogger-1";
+          schema_version: "v3-x-cross-blogger";
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_v3_verification_versions"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Enums: Record<string, never>;
@@ -973,6 +1083,26 @@ export interface Database {
       };
       regenerate_x_daily_judgement: {
         Args: { p_batch_id: string; p_requested_by: string };
+        Returns: Json;
+      };
+      create_x_v3_verification_replay: {
+        Args: { p_source_batch_id: string; p_requested_by: string };
+        Returns: Json;
+      };
+      claim_x_v3_verification_replay: {
+        Args: { p_replay_id: string; p_worker_id: string };
+        Returns: Json | null;
+      };
+      get_x_v3_verification_replay_context: {
+        Args: { p_replay_id: string; p_attempt: number; p_worker_id: string };
+        Returns: Json;
+      };
+      complete_x_v3_verification_replay: {
+        Args: { p_replay_id: string; p_attempt: number; p_worker_id: string; p_payload: Json };
+        Returns: Json;
+      };
+      fail_x_v3_verification_replay: {
+        Args: { p_replay_id: string; p_attempt: number; p_worker_id: string; p_failure_class: string };
         Returns: Json;
       };
       get_window_daily_fact_context: {

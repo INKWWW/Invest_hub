@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 
 import type { ReaderJudgement, XReaderBlogger, XReaderDate, XReaderJudgementRevision } from "../../lib/db/repositories/reader";
 import { ReaderStatus } from "./ReaderStatus";
@@ -25,7 +25,7 @@ function validOrAll(value: string | undefined, values: string[]) {
 
 function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches"] }) {
   if (!batches.length) return <p className="summary-empty">本时段没有形成新的跨博主判断。</p>;
-  return <div className="x-reader-judgements">{batches.map((batch, index) => <details className="x-reader-judgement" key={batch.cutoffAt} open={index === 0}>
+  return <div className="x-reader-judgements">{batches.flatMap((batch, index) => [<details className="x-reader-judgement" key={batch.cutoffAt} open={index === 0}>
     <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(batch.cutoffAt))} · {batch.status === "succeeded" ? batch.coverageStatus === "partial" && batch.timedOutSourceCount > 0 && !batch.stockViewpoints.length && !batch.marketIndustryViewpoints.length && !(batch.strategyMindsetViewpoints?.length) ? "采集超时，未形成判断" : "已更新" : batch.status === "judgement_pending" ? "判断处理中" : "判断失败"}</summary>
     {batch.status === "succeeded" ? <div className="reader-section">
       <p>输入覆盖：{batch.includedSourceCount} 位博主观点已纳入，{batch.noNewSourceCount} 位无新增信息，{batch.excludedSourceCount} 位未纳入。下方主题仅列出直接支持或反对该主题的博主。</p>
@@ -35,7 +35,12 @@ function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches
         <JudgementRevision revision={revision} excludedSourceCount={batch.excludedSourceCount} timedOutSourceCount={batch.timedOutSourceCount} />
       </details>)}
     </div> : <p className="summary-empty">{batch.status === "judgement_pending" ? "当日判断仍在处理中。" : "当日判断未能完成，稍后会重试。"}</p>}
-  </details>)}</div>;
+  </details>, batch.verificationRecovery ? <details className="x-reader-verification-recovery" key={`${batch.cutoffAt}-verification-recovery`}>
+    <summary>验证恢复（非定时任务）</summary>
+    <div className="reader-section"><p>基于该失败窗口已冻结的输入完成 v3 验证，不影响既有定时任务或原始失败记录。</p>
+      <JudgementRevision revision={{ revision: 1, coverageStatus: null, ...batch.verificationRecovery }} excludedSourceCount={0} timedOutSourceCount={0} />
+    </div>
+  </details> : null].filter((item): item is ReactElement => item !== null))}</div>;
 }
 
 function JudgementRevision({ revision, excludedSourceCount, timedOutSourceCount }: {

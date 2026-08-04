@@ -113,6 +113,12 @@ export type XReaderDate = {
       excludedSourceCount: number;
       timedOutSourceCount: number;
       revisionHistory: XReaderJudgementRevision[];
+      verificationRecovery?: {
+        stockViewpoints: ReaderJudgement[];
+        marketIndustryViewpoints: ReaderJudgement[];
+        strategyMindsetViewpoints?: ReaderJudgement[];
+        uncertainties: string[];
+      };
     }>;
   };
   bloggers: XReaderBlogger[];
@@ -319,14 +325,29 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const orderedBatches = [...batches].sort((left, right) => right.cutoff_at.localeCompare(left.cutoff_at));
   const batchIds = orderedBatches.map((batch) => batch.id);
   const batchIdChunks = chunkValues(batchIds, READER_QUERY_BATCH_SIZE);
-  const [versions, allBatchSources] = await Promise.all([
+  const [versions, allBatchSources, replays] = await Promise.all([
     readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_daily_judgement_versions")
       .select("batch_id,revision,coverage_status,output").in("batch_id", ids)
       .order("batch_id", { ascending: true }).order("revision", { ascending: false }).range(from, to)),
     readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_collection_batch_sources")
       .select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status,exclusion_code").in("batch_id", ids)
       .order("batch_id", { ascending: true }).order("source_id", { ascending: true }).range(from, to)),
+    readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_v3_verification_replays")
+      .select("id,source_batch_id,status").eq("status", "succeeded").in("source_batch_id", ids)
+      .order("source_batch_id", { ascending: true }).order("id", { ascending: true }).range(from, to)),
   ]);
+
+  const succeededReplays = replays.filter((replay) => replay.status === "succeeded" && typeof replay.id === "string" && typeof replay.source_batch_id === "string");
+  const replayIds = succeededReplays.map((replay) => replay.id);
+  const verificationVersions = await readAllChunkPages(chunkValues(replayIds, READER_QUERY_BATCH_SIZE), (ids, from, to) => supabase.from("x_v3_verification_versions")
+    .select("replay_id,output,schema_version,prompt_version").in("replay_id", ids)
+    .order("replay_id", { ascending: true }).range(from, to));
+  const verificationVersionByReplayId = new Map(verificationVersions
+    .filter((version) => version.schema_version === "v3-x-cross-blogger" && version.prompt_version === "v3-x-cross-blogger-1" && typeof version.replay_id === "string")
+    .map((version) => [version.replay_id, version]));
+  const succeededReplayByBatchId = new Map(succeededReplays
+    .filter((replay) => verificationVersionByReplayId.has(replay.id))
+    .map((replay) => [replay.source_batch_id, replay]));
 
   const batchSources = allBatchSources.filter((row) => sourceIdSet.has(row.source_id));
   const batchSourcesByBatch = new Map<string, typeof batchSources>();
@@ -382,6 +403,17 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       ...current,
       revisionHistory: batchVersions.slice(1).map((version) => judgementRevision(version, displayNamesBySourceId)),
     };
+    const replay = succeededReplayByBatchId.get(batch.id);
+    const verificationVersion = replay ? verificationVersionByReplayId.get(replay.id) : undefined;
+    if (batch.status === "judgement_failed" && verificationVersion) {
+      const recovery = judgementRevision({ revision: 1, coverage_status: "complete", output: verificationVersion.output }, displayNamesBySourceId);
+      judgement.verificationRecovery = {
+        stockViewpoints: recovery.stockViewpoints,
+        marketIndustryViewpoints: recovery.marketIndustryViewpoints,
+        strategyMindsetViewpoints: recovery.strategyMindsetViewpoints,
+        uncertainties: recovery.uncertainties,
+      };
+    }
     batchesByDate.set(batch.natural_date, [...(batchesByDate.get(batch.natural_date) ?? []), judgement]);
   }
 
