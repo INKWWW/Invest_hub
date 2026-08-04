@@ -638,6 +638,9 @@ export interface Database {
         Row: {
           canonical_message_id: string;
           analysis_version: number;
+          schema_version: string;
+          prompt_version: string;
+          analysis_output: Json | null;
           blogger_viewpoint: string | null;
           arguments: Json;
           quoted_post_viewpoint: string | null;
@@ -648,6 +651,9 @@ export interface Database {
         Insert: {
           canonical_message_id: string;
           analysis_version: number;
+          schema_version?: string;
+          prompt_version?: string;
+          analysis_output?: Json | null;
           blogger_viewpoint?: string | null;
           arguments: Json;
           quoted_post_viewpoint?: string | null;
@@ -667,6 +673,9 @@ export interface Database {
           segment_version: number;
           occurred_from_at: string;
           occurred_through_at: string;
+          schema_version: string;
+          prompt_version: string;
+          segment_output: Json | null;
           window_viewpoints: Json;
           post_analysis_refs: Json;
           evidence_refs: Json;
@@ -680,6 +689,9 @@ export interface Database {
           segment_version: number;
           occurred_from_at: string;
           occurred_through_at: string;
+          schema_version?: string;
+          prompt_version?: string;
+          segment_output?: Json | null;
           window_viewpoints: Json;
           post_analysis_refs: Json;
           evidence_refs: Json;

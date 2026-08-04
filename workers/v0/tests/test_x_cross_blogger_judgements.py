@@ -65,6 +65,50 @@ def valid_v3_output() -> dict[str, object]:
     }
 
 
+def v3_context(context: dict[str, object]) -> dict[str, object]:
+    """Convert the old synthetic fixture shape into the v3-only RPC shape."""
+    for source in context.get("sources", []):  # type: ignore[union-attr]
+        for segment in source["window_segments"]:
+            if segment.get("schema_version") == "v3-x-window":
+                continue
+            segment_id = segment["id"]
+            occurred_from_at = segment["occurred_from_at"]
+            occurred_through_at = segment["occurred_through_at"]
+            analyses = []
+            evidence_ids = []
+            for legacy in segment["analyses"]:
+                post_id = legacy["post_id"].removesuffix("@1")
+                analysis_id = f"{post_id}@2"
+                evidence = legacy["evidence_post_ids"]
+                analyses.append({
+                    "analysis_id": analysis_id,
+                    "schema_version": "v3-x-post-analysis",
+                    "prompt_version": "v3-x-post-analysis-1",
+                    "analysis_output": {"schema_version": "v3-x-post-analysis", "post_id": post_id, "evidence_post_ids": evidence},
+                    "evidence_post_ids": evidence,
+                })
+                evidence_ids.extend(evidence)
+            segment.clear()
+            segment.update({
+                "id": segment_id,
+                "schema_version": "v3-x-window",
+                "prompt_version": "v3-x-window-1",
+                "occurred_from_at": occurred_from_at,
+                "occurred_through_at": occurred_through_at,
+                "segment_output": {"schema_version": "v3-x-window", "analysis_ids": [item["analysis_id"] for item in analyses], "evidence_post_ids": evidence_ids},
+                "analyses": analyses,
+            })
+    return context
+
+
+def runtime_v3_output() -> dict[str, object]:
+    output = valid_v3_output()
+    for category in ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints"):
+        for item in output[category]:
+            item["analysis_ids"] = [analysis_id.removesuffix("@1") + "@2" for analysis_id in item["analysis_ids"]]
+    return output
+
+
 class XCrossBloggerJudgementV3SchemaTests(unittest.TestCase):
     def parse(self, output: dict[str, object]) -> dict[str, object]:
         parser = getattr(structured, "parse_v3_x_cross_blogger_output", None)
@@ -307,7 +351,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                     status="success", provider="codex_cli", model_reported="gpt-fixture",
                     prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
                     raw_ref="/private/evidence/raw.json", parsed_output_ref="/private/evidence/structured.json",
-                    parsed_output=valid_v3_output(),
+                    parsed_output=runtime_v3_output(),
                 )
 
             def assertEqual(self, left: object, right: object) -> None:
@@ -335,7 +379,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         self.assertIsNotNone(runtime_type, "daily judgement runtime must be public")
         result = runtime_type(provider=provider, prompt_template="private supplement").execute(  # type: ignore[misc]
             {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z", "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"}},
-            context_payload,
+            v3_context(context_payload),
         )
         self.assertEqual(result["provider"], "codex_cli")
         self.assertEqual(result["model_reported"], "gpt-fixture")
@@ -372,7 +416,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(runtime.RuntimeExecutionError, "no included source"):
             runtime.XDailyJudgementRuntime(provider=provider, prompt_template="private").execute(
                 {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z", "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"}},
-                context_payload,
+                v3_context(context_payload),
             )
         self.assertFalse(provider.called, "a no-new judgement must never reach the Provider")
 
@@ -401,7 +445,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                 {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
                  "batch": {"id": "batch-1", "natural_date": "2099-01-01",
                            "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "no_new_information"}},
-                context_payload,
+                v3_context(context_payload),
             )
         self.assertFalse(provider.called, "a no-new claim must never reach the Provider")
 
@@ -431,7 +475,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         with self.assertRaisesRegex(runtime.RuntimeExecutionError, "model telemetry"):
             runtime.XDailyJudgementRuntime(provider=UnsafeTelemetryProvider(), prompt_template="private").execute(
                 {"run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z", "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"}},
-                context_payload,
+                v3_context(context_payload),
             )
 
     def test_runtime_rejects_batch_run_and_segment_ids_in_every_natural_language_field(self) -> None:
@@ -471,7 +515,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                         case_variant=rendered_opaque_id != opaque_id,
                         natural_language_field=natural_language_field,
                     ):
-                        output = valid_v3_output()
+                        output = runtime_v3_output()
                         if natural_language_field == "statement":
                             output["security_industry_viewpoints"][0]["statement"] = f"{rendered_opaque_id} 表示估值仍需观察。"
                         elif natural_language_field == "item_uncertainty":
@@ -490,7 +534,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
                         with self.assertRaisesRegex(runtime.RuntimeExecutionError, "evidence validation"):
                             runtime.XDailyJudgementRuntime(provider=OpaqueContextProvider(), prompt_template="private").execute(
                                 claim,
-                                context_payload,
+                                v3_context(context_payload),
                             )
 
     def test_standard_worker_claim_completes_one_regeneration_without_touching_source_state(self) -> None:
