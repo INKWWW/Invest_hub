@@ -88,6 +88,15 @@ def late_day_quote_post() -> dict[str, object]:
     }
 
 
+def before_overlap_quote_post() -> dict[str, object]:
+    return {
+        **quote_post(),
+        "id": "post-before-overlap",
+        "created_at": "2026-07-22T22:30:00Z",
+        "url": "https://x.com/fixture/status/3",
+    }
+
+
 def midnight_cutoff_claim() -> dict[str, object]:
     value = claim()
     value["capture_range"] = {
@@ -195,6 +204,22 @@ class XWindowedRuntimeTests(unittest.TestCase):
         self.assertEqual(segment["schema_version"], "v3-x-window")
         self.assertEqual(segment["segment_output"]["security_industry_viewpoints"][0]["action_intent"], "buy")
         self.assertEqual(provider.operations, ["v3_x_post_analysis", "v3_x_window"])
+
+    def test_post_before_overlap_is_not_persisted_or_analyzed(self) -> None:
+        class Connector:
+            def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
+                return RawPage(
+                    page_id="x-before-overlap", source_id="x-source", source_type="x", cursor_before=None, cursor_after=None,
+                    raw_payload_ref="local://x/x-before-overlap", telemetry=receipt_telemetry("time_boundary_reached", "2026-07-22T22:30:00Z"),
+                    messages=(before_overlap_quote_post(), quote_post()),
+                )
+
+        pages: list[dict[str, object]] = []
+        with tempfile.TemporaryDirectory() as directory:
+            completion = self.runtime(Connector(), directory).execute_windowed(claim(), on_capture_page=pages.append)["range_completion"]
+
+        self.assertEqual([row["external_message_id"] for row in pages[0]["persistence"]["raw_messages"]], ["post-new"])
+        self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
 
     def test_runtime_reports_each_completed_post_analysis_for_lease_renewal(self) -> None:
         class Connector:
