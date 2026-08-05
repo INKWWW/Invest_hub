@@ -31,14 +31,14 @@ def enrolment_response() -> dict[str, object]:
     }
 
 
-def valid_v3_completion() -> dict[str, object]:
+def valid_v4_completion() -> dict[str, object]:
     return {
         "run_id": "judgement-run-1", "attempt": 1,
-        "schema_version": "v3-x-cross-blogger", "provider": "codex_cli",
-        "model_reported": None, "prompt_version": "v3-x-cross-blogger-1",
+        "schema_version": "v4-x-cross-blogger", "provider": "codex_cli",
+        "model_reported": None, "prompt_version": "v4-x-cross-blogger-1",
         "security_industry_viewpoints": [{
             "statement": "博主对公开 fixture 标的表达了条件性观点。",
-            "action_intent": "watch", "action_scope": "公开 fixture 标的", "conditions": ["等待公开条件确认"],
+            "action_intent": "watch", "action_scope_status": "specified", "action_scope": "公开 fixture 标的", "conditions": ["等待公开条件确认"],
             "supporting_source_ids": ["source-a"], "dissenting_source_ids": [],
             "analysis_ids": ["post-a@1"], "evidence_post_ids": ["post-a"], "uncertainties": [],
         }],
@@ -47,18 +47,18 @@ def valid_v3_completion() -> dict[str, object]:
     }
 
 
-def valid_v3_context() -> dict[str, object]:
+def valid_v4_context() -> dict[str, object]:
     return {
         "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
-        "prompt_version": "v3-x-cross-blogger-1",
+        "prompt_version": "v4-x-cross-blogger-1",
         "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
-            "id": "segment-1", "schema_version": "v3-x-window", "prompt_version": "v3-x-window-1",
+            "id": "segment-1", "schema_version": "v4-x-window", "prompt_version": "v4-x-window-1",
             "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
             "segment_output": {
-                "schema_version": "v3-x-window", "analysis_ids": ["post-a@2"], "evidence_post_ids": ["post-a"],
+                "schema_version": "v4-x-window", "analysis_ids": ["post-a@2"], "evidence_post_ids": ["post-a"],
             },
             "analyses": [{
-                "analysis_id": "post-a@2", "schema_version": "v3-x-post-analysis", "prompt_version": "v3-x-post-analysis-1",
+                "analysis_id": "post-a@2", "schema_version": "v4-x-post-analysis", "prompt_version": "v4-x-post-analysis-1",
                 "analysis_output": {"post_id": "post-a", "evidence_post_ids": ["post-a"]}, "evidence_post_ids": ["post-a"],
             }],
         }]}],
@@ -365,8 +365,8 @@ class WorkerProtocolTests(unittest.TestCase):
             "run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
             "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"},
         }
-        context = valid_v3_context()
-        completion = valid_v3_completion()
+        context = valid_v4_context()
+        completion = valid_v4_completion()
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()), (200, claim), (200, context), (200, {"status": "succeeded"}), (200, {"status": "retryable_failed"}))
             protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
@@ -386,7 +386,7 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertTrue(str(transport.calls[4]["url"]).endswith("/api/worker/x-daily-judgements/judgement-run-1/failure"))
 
     def test_x_daily_judgement_completion_rejects_unsafe_item_before_transport(self) -> None:
-        completion = valid_v3_completion()
+        completion = valid_v4_completion()
         completion["security_industry_viewpoints"] = [{"statement": "only this"}]
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()))
@@ -399,7 +399,7 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(len(transport.calls), 1)
 
     def test_x_daily_judgement_completion_rejects_unsafe_model_telemetry_before_transport(self) -> None:
-        completion = valid_v3_completion()
+        completion = valid_v4_completion()
         completion["model_reported"] = "C:\\private\\model"
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()))
@@ -412,7 +412,7 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(len(transport.calls), 1)
 
     def test_x_daily_judgement_completion_rejects_non_string_top_level_uncertainty_before_transport(self) -> None:
-        completion = valid_v3_completion()
+        completion = valid_v4_completion()
         completion["uncertainties"] = [1]
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()))

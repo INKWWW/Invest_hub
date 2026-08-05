@@ -69,8 +69,142 @@ V3_X_WINDOW_ITEM_FIELDS = frozenset({"statement", "action_intent", "action_scope
 V3_X_CROSS_BLOGGER_FIELDS = frozenset({"schema_version", "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties"})
 V3_X_CROSS_BLOGGER_ITEM_FIELDS = frozenset({"statement", "action_intent", "action_scope", "conditions", "supporting_source_ids", "dissenting_source_ids", "analysis_ids", "evidence_post_ids", "uncertainties"})
 V3_X_ACTION_INTENTS = frozenset({"build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid", "none"})
+V4_X_POST_FIELDS = V3_X_POST_FIELDS
+V4_X_POST_ANALYSIS_FIELDS = V3_X_POST_ANALYSIS_FIELDS | frozenset({"action_scope_status"})
+V4_X_WINDOW_FIELDS = V3_X_WINDOW_FIELDS
+V4_X_WINDOW_ITEM_FIELDS = V3_X_WINDOW_ITEM_FIELDS | frozenset({"action_scope_status"})
+V4_X_CROSS_BLOGGER_FIELDS = V3_X_CROSS_BLOGGER_FIELDS
+V4_X_CROSS_BLOGGER_ITEM_FIELDS = V3_X_CROSS_BLOGGER_ITEM_FIELDS | frozenset({"action_scope_status"})
+V4_X_ACTION_SCOPE_STATUSES = frozenset({"specified", "unspecified", "not_applicable"})
 _IMPERATIVE_INVESTMENT_RECOMMENDATION = re.compile(r"(?:系统\s*)?(?:建议|应当|应该|必须|请|立即).{0,24}(?:买入|卖出|加仓|减仓|建仓|清仓|抄底|追涨)")
 _STRONG_CONSENSUS_WORDING = re.compile(r"(?:共识|一致认为|共同认为|市场(?:已经|已)?确认)")
+_UNSPECIFIED_SCOPE_WORDING = re.compile(r"(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知).{0,24}(?:标的|对象|资产|范围)|(?:标的|对象|资产|范围).{0,24}(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知)")
+
+
+def _validate_v4_action_scope(value: Mapping[str, Any]) -> str:
+    action_intent = value.get("action_intent")
+    action_scope_status = value.get("action_scope_status")
+    action_scope = value.get("action_scope")
+    if action_intent not in V3_X_ACTION_INTENTS or action_scope_status not in V4_X_ACTION_SCOPE_STATUSES or not isinstance(action_scope, str):
+        raise SchemaError("action scope", "action intent, scope status, or scope is invalid")
+    if action_intent == "none":
+        if action_scope_status != "not_applicable" or action_scope:
+            raise SchemaError("action scope", "none action must use not_applicable with an empty scope")
+    elif action_scope_status == "specified":
+        if not action_scope.strip() or _UNSPECIFIED_SCOPE_WORDING.search(action_scope):
+            raise SchemaError("action scope", "specified action scope must be an explicit object, not a missing-object explanation")
+    elif action_scope_status == "unspecified":
+        if action_scope:
+            raise SchemaError("action scope", "unspecified action scope must be empty")
+    else:
+        raise SchemaError("action scope", "non-none action must have specified or unspecified scope status")
+    return str(action_scope_status)
+
+
+def _v4_payload_for_v3_validation(
+    text: str,
+    *,
+    root_fields: frozenset[str],
+    item_fields: frozenset[str],
+    v4_schema_version: str,
+    v3_schema_version: str,
+    item_groups: tuple[str, ...],
+    error_code: str,
+) -> tuple[str, list[str]]:
+    """Validate v4's action-scope state before reusing v3 evidence checks.
+
+    v3 has the same evidence, ownership and safety rules, but requires a
+    non-empty scope for every non-none action.  The private sentinel exists
+    only in this in-memory handoff and is restored to an empty scope before
+    the v4 result leaves this module.
+    """
+
+    payload = _json_object(text)
+    _require_exact_fields(payload, root_fields, error_code)
+    if payload.get("schema_version") != v4_schema_version:
+        raise SchemaError(error_code, "schema version is invalid")
+    normalized = dict(payload)
+    statuses: list[str] = []
+    for group in item_groups:
+        values = payload.get(group)
+        if not isinstance(values, list):
+            raise SchemaError(error_code, "viewpoints must be arrays")
+        normalized_items: list[dict[str, Any]] = []
+        for value in values:
+            if not isinstance(value, Mapping):
+                raise SchemaError(error_code, "analysis or viewpoint item must be an object")
+            _require_exact_fields(value, item_fields, error_code)
+            status = _validate_v4_action_scope(value)
+            statuses.append(status)
+            normalized_value = dict(value)
+            normalized_value.pop("action_scope_status")
+            if status == "unspecified":
+                normalized_value["action_scope"] = "scope unspecified in source"
+            normalized_items.append(normalized_value)
+        normalized[group] = normalized_items
+    normalized["schema_version"] = v3_schema_version
+    return json.dumps(normalized, ensure_ascii=False), statuses
+
+
+def _restore_v4_action_scope_status(output: dict[str, Any], *, schema_version: str, item_groups: tuple[str, ...], statuses: list[str]) -> dict[str, Any]:
+    status_iter = iter(statuses)
+    for group in item_groups:
+        for item in output[group]:
+            status = next(status_iter)
+            item["action_scope_status"] = status
+            if status == "unspecified":
+                item["action_scope"] = ""
+    output["schema_version"] = schema_version
+    return output
+
+
+def parse_v4_x_post_analysis_output(
+    text: str,
+    allowed_post_ids: set[str],
+    allowed_context_post_ids: Mapping[str, set[str]] | set[str],
+) -> dict[str, Any]:
+    normalized, statuses = _v4_payload_for_v3_validation(
+        text, root_fields=V4_X_POST_FIELDS, item_fields=V4_X_POST_ANALYSIS_FIELDS,
+        v4_schema_version="v4-x-post-analysis", v3_schema_version="v3-x-post-analysis",
+        item_groups=("analyses",), error_code="invalid_v4_x_post",
+    )
+    return _restore_v4_action_scope_status(
+        parse_v3_x_post_analysis_output(normalized, allowed_post_ids, allowed_context_post_ids),
+        schema_version="v4-x-post-analysis", item_groups=("analyses",), statuses=statuses,
+    )
+
+
+def parse_v4_x_window_output(
+    text: str,
+    allowed_analysis_ids: set[str],
+    analysis_evidence_post_ids: Mapping[str, set[str]],
+) -> dict[str, Any]:
+    groups = ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")
+    normalized, statuses = _v4_payload_for_v3_validation(
+        text, root_fields=V4_X_WINDOW_FIELDS, item_fields=V4_X_WINDOW_ITEM_FIELDS,
+        v4_schema_version="v4-x-window", v3_schema_version="v3-x-window", item_groups=groups,
+        error_code="invalid_v4_x_window",
+    )
+    return _restore_v4_action_scope_status(
+        parse_v3_x_window_output(normalized, allowed_analysis_ids, analysis_evidence_post_ids),
+        schema_version="v4-x-window", item_groups=groups, statuses=statuses,
+    )
+
+
+def parse_v4_x_cross_blogger_output(
+    text: str,
+    **kwargs: Any,
+) -> dict[str, object]:
+    groups = ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")
+    normalized, statuses = _v4_payload_for_v3_validation(
+        text, root_fields=V4_X_CROSS_BLOGGER_FIELDS, item_fields=V4_X_CROSS_BLOGGER_ITEM_FIELDS,
+        v4_schema_version="v4-x-cross-blogger", v3_schema_version="v3-x-cross-blogger", item_groups=groups,
+        error_code="invalid_v4_x_cross_blogger",
+    )
+    return _restore_v4_action_scope_status(
+        parse_v3_x_cross_blogger_output(normalized, **kwargs),
+        schema_version="v4-x-cross-blogger", item_groups=groups, statuses=statuses,
+    )
 
 
 def parse_v3_x_post_analysis_output(

@@ -21,6 +21,9 @@ from ..structured import (
     parse_v2_x_window_output,
     parse_v3_x_post_analysis_output,
     parse_v3_x_window_output,
+    parse_v4_x_cross_blogger_output,
+    parse_v4_x_post_analysis_output,
+    parse_v4_x_window_output,
     validate_structured_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -262,8 +265,20 @@ class CodexCLIProvider:
                 set(context.input_message_ids),
                 {post_id: set(context.visible_context_post_ids) for post_id in context.input_message_ids},
             )
+        if context.operation == "v4_x_post_analysis":
+            return parse_v4_x_post_analysis_output(
+                raw_text,
+                set(context.input_message_ids),
+                {post_id: set(context.visible_context_post_ids) for post_id in context.input_message_ids},
+            )
         if context.operation == "v3_x_window":
             return parse_v3_x_window_output(
+                raw_text,
+                set(context.input_message_ids),
+                {analysis_id: set(post_ids) for analysis_id, post_ids in context.allowed_analysis_evidence_post_ids},
+            )
+        if context.operation == "v4_x_window":
+            return parse_v4_x_window_output(
                 raw_text,
                 set(context.input_message_ids),
                 {analysis_id: set(post_ids) for analysis_id, post_ids in context.allowed_analysis_evidence_post_ids},
@@ -279,6 +294,15 @@ class CodexCLIProvider:
             )
         if context.operation == "v3_x_cross_blogger":
             return parse_v3_x_cross_blogger_output(
+                raw_text,
+                allowed_source_ids=set(context.allowed_source_ids),
+                allowed_analysis_ids=set(context.allowed_analysis_ids),
+                allowed_post_ids=set(context.allowed_post_ids),
+                analysis_source_ids=dict(context.allowed_analysis_source_ids),
+                analysis_evidence_post_ids={analysis_id: set(post_ids) for analysis_id, post_ids in context.allowed_analysis_evidence_post_ids},
+            )
+        if context.operation == "v4_x_cross_blogger":
+            return parse_v4_x_cross_blogger_output(
                 raw_text,
                 allowed_source_ids=set(context.allowed_source_ids),
                 allowed_analysis_ids=set(context.allowed_analysis_ids),

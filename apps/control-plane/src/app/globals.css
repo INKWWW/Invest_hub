@@ -135,17 +135,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .reader-day-card:first-child { border-top: 0; padding-top: 0; }
 
-.x-reader-judgement-section, .x-reader-bloggers { display: grid; gap: 0.85rem; }
+.x-reader-judgement-section, .x-reader-bloggers { display: grid; gap: 0.85rem; padding: 1rem; }
 
-.x-reader-judgement-section { border-top: 1px solid #d5e0dd; padding-top: 1.15rem; }
+.x-reader-judgement-section { background: #eff5f2; }
 
-.x-reader-bloggers { border-top: 1px solid #d5e0dd; padding-top: 1.15rem; }
+.x-reader-bloggers { background: #f7f4ee; }
+
+.x-reader-judgement-section > h2, .x-reader-bloggers > h2 { margin: -1rem -1rem 0; padding: 0.8rem 1rem; color: #244b53; font-size: 1.25rem; font-weight: 850; }
 
 .x-reader-blogger { display: grid; gap: 0.85rem; border-top: 1px solid #dce4e0; padding-top: 1rem; }
 
 .x-reader-blogger:first-of-type { border-top: 0; padding-top: 0; }
 
-.x-reader-judgement, .x-reader-segment { background: #f8faf6; border: 1px solid #dce4e0; padding: 0.85rem 1rem; }
+.x-reader-judgement, .x-reader-segment { background: transparent; border: 0; border-top: 1px solid #dce4e0; padding: 0.85rem 0; }
 
 .reader-eyebrow { margin: 0 0 0.4rem; color: #547077; font-size: 0.86rem; font-weight: 700; }
 
@@ -211,13 +213,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .x-reader-viewpoint-group { display: grid; gap: 0.65rem; margin-top: 1rem; }
 
-.reader-content .x-reader-viewpoint-group h4 { border-left: 4px solid #1f6570; background: #e7f0ec; padding: 0.55rem 0.8rem; color: #254b53; font-family: inherit; font-size: 0.94rem; font-weight: 850; letter-spacing: 0; }
+.reader-content .x-reader-viewpoint-group h3 { margin: 0; color: #254b53; font-family: inherit; font-size: 1rem; font-weight: 850; letter-spacing: 0; }
 
 .x-reader-viewpoint-list { display: grid; gap: 0.65rem; }
 
-.x-reader-viewpoint-card { display: grid; gap: 0.7rem; border: 1px solid #d5e0dd; background: #fffefa; padding: 0.9rem 1rem; }
+.x-reader-viewpoint-card { display: grid; gap: 0.7rem; border: 0; background: transparent; padding: 0.9rem 0; }
 
-.x-reader-viewpoint-card header p { margin: 0; color: #547077; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.x-reader-viewpoint-number { margin: 0; color: #547077; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 
 .x-reader-viewpoint-statement { margin: 0; color: #17252d; font-size: 1.02rem; font-weight: 600; line-height: 1.7; }
 

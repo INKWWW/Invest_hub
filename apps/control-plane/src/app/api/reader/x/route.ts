@@ -13,6 +13,28 @@ function readerSafeCoverageStatus(value: unknown, revision: number) {
   return value === "complete" || value === "partial" || value === "no_new_information" ? value : null;
 }
 
+function readerSafeJudgement(viewpoint: {
+  statement: string;
+  actionIntent?: string | null;
+  actionScope?: string;
+  actionScopeStatus?: string;
+  conditions?: string[];
+  supportingDisplayNames: string[];
+  dissentingDisplayNames: string[];
+  uncertainties: string[];
+}) {
+  return {
+    statement: viewpoint.statement,
+    actionIntent: viewpoint.actionIntent ?? null,
+    actionScope: viewpoint.actionScope ?? "",
+    actionScopeStatus: viewpoint.actionScopeStatus ?? null,
+    conditions: [...(viewpoint.conditions ?? [])],
+    supportingDisplayNames: [...viewpoint.supportingDisplayNames],
+    dissentingDisplayNames: [...viewpoint.dissentingDisplayNames],
+    uncertainties: [...viewpoint.uncertainties],
+  };
+}
+
 /** Runtime JSON boundary: even a future repository DTO regression cannot expose internal fields. */
 function readerSafeXDays(days: XReaderDate[]) {
   return days.map((day) => ({
@@ -24,35 +46,17 @@ function readerSafeXDays(days: XReaderDate[]) {
         coverageStatus: readerSafeCoverageStatus(batch.coverageStatus, batch.revision),
         status: batch.status,
         revision: batch.revision,
-        stockViewpoints: batch.stockViewpoints.map((viewpoint) => ({
-          statement: viewpoint.statement,
-          supportingDisplayNames: [...viewpoint.supportingDisplayNames],
-          dissentingDisplayNames: [...viewpoint.dissentingDisplayNames],
-          uncertainties: [...viewpoint.uncertainties],
-        })),
-        marketIndustryViewpoints: batch.marketIndustryViewpoints.map((viewpoint) => ({
-          statement: viewpoint.statement,
-          supportingDisplayNames: [...viewpoint.supportingDisplayNames],
-          dissentingDisplayNames: [...viewpoint.dissentingDisplayNames],
-          uncertainties: [...viewpoint.uncertainties],
-        })),
+        stockViewpoints: batch.stockViewpoints.map(readerSafeJudgement),
+        marketIndustryViewpoints: batch.marketIndustryViewpoints.map(readerSafeJudgement),
+        strategyMindsetViewpoints: (batch.strategyMindsetViewpoints ?? []).map(readerSafeJudgement),
         uncertainties: [...batch.uncertainties],
         excludedSourceCount: batch.excludedSourceCount,
         revisionHistory: (batch.revisionHistory ?? []).map((revision) => ({
           revision: revision.revision,
           coverageStatus: readerSafeCoverageStatus(revision.coverageStatus, revision.revision),
-          stockViewpoints: revision.stockViewpoints.map((viewpoint) => ({
-            statement: viewpoint.statement,
-            supportingDisplayNames: [...viewpoint.supportingDisplayNames],
-            dissentingDisplayNames: [...viewpoint.dissentingDisplayNames],
-            uncertainties: [...viewpoint.uncertainties],
-          })),
-          marketIndustryViewpoints: revision.marketIndustryViewpoints.map((viewpoint) => ({
-            statement: viewpoint.statement,
-            supportingDisplayNames: [...viewpoint.supportingDisplayNames],
-            dissentingDisplayNames: [...viewpoint.dissentingDisplayNames],
-            uncertainties: [...viewpoint.uncertainties],
-          })),
+          stockViewpoints: revision.stockViewpoints.map(readerSafeJudgement),
+          marketIndustryViewpoints: revision.marketIndustryViewpoints.map(readerSafeJudgement),
+          strategyMindsetViewpoints: (revision.strategyMindsetViewpoints ?? []).map(readerSafeJudgement),
           uncertainties: [...revision.uncertainties],
         })),
       })),
@@ -68,6 +72,10 @@ function readerSafeXDays(days: XReaderDate[]) {
         analyses: segment.analyses.map((analysis) => ({
           postLink: analysis.postLink,
           bloggerViewpoint: analysis.bloggerViewpoint,
+          actionIntent: analysis.actionIntent ?? null,
+          actionScope: analysis.actionScope ?? "",
+          actionScopeStatus: analysis.actionScopeStatus ?? null,
+          conditions: [...(analysis.conditions ?? [])],
           arguments: [...analysis.arguments],
           quotedPostViewpoint: analysis.quotedPostViewpoint,
           uncertainties: [...analysis.uncertainties],

@@ -66,10 +66,11 @@ def valid_v3_output() -> dict[str, object]:
 
 
 def v3_context(context: dict[str, object]) -> dict[str, object]:
-    """Convert the old synthetic fixture shape into the v3-only RPC shape."""
+    """Convert the old synthetic fixture shape into the current v4 RPC shape."""
+    context["prompt_version"] = "v4-x-cross-blogger-1"
     for source in context.get("sources", []):  # type: ignore[union-attr]
         for segment in source["window_segments"]:
-            if segment.get("schema_version") == "v3-x-window":
+            if segment.get("schema_version") == "v4-x-window":
                 continue
             segment_id = segment["id"]
             occurred_from_at = segment["occurred_from_at"]
@@ -82,20 +83,20 @@ def v3_context(context: dict[str, object]) -> dict[str, object]:
                 evidence = legacy["evidence_post_ids"]
                 analyses.append({
                     "analysis_id": analysis_id,
-                    "schema_version": "v3-x-post-analysis",
-                    "prompt_version": "v3-x-post-analysis-1",
-                    "analysis_output": {"schema_version": "v3-x-post-analysis", "post_id": post_id, "evidence_post_ids": evidence},
+                    "schema_version": "v4-x-post-analysis",
+                    "prompt_version": "v4-x-post-analysis-1",
+                    "analysis_output": {"schema_version": "v4-x-post-analysis", "post_id": post_id, "evidence_post_ids": evidence},
                     "evidence_post_ids": evidence,
                 })
                 evidence_ids.extend(evidence)
             segment.clear()
             segment.update({
                 "id": segment_id,
-                "schema_version": "v3-x-window",
-                "prompt_version": "v3-x-window-1",
+                "schema_version": "v4-x-window",
+                "prompt_version": "v4-x-window-1",
                 "occurred_from_at": occurred_from_at,
                 "occurred_through_at": occurred_through_at,
-                "segment_output": {"schema_version": "v3-x-window", "analysis_ids": [item["analysis_id"] for item in analyses], "evidence_post_ids": evidence_ids},
+                "segment_output": {"schema_version": "v4-x-window", "analysis_ids": [item["analysis_id"] for item in analyses], "evidence_post_ids": evidence_ids},
                 "analyses": analyses,
             })
     return context
@@ -103,9 +104,11 @@ def v3_context(context: dict[str, object]) -> dict[str, object]:
 
 def runtime_v3_output() -> dict[str, object]:
     output = valid_v3_output()
+    output["schema_version"] = "v4-x-cross-blogger"
     for category in ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints"):
         for item in output[category]:
             item["analysis_ids"] = [analysis_id.removesuffix("@1") + "@2" for analysis_id in item["analysis_ids"]]
+            item["action_scope_status"] = "not_applicable" if item["action_intent"] == "none" else "specified"
     return output
 
 
@@ -384,7 +387,7 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         self.assertEqual(result["provider"], "codex_cli")
         self.assertEqual(result["model_reported"], "gpt-fixture")
         self.assertNotIn("raw_ref", result)
-        self.assertEqual(provider.context.operation, "v3_x_cross_blogger")
+        self.assertEqual(provider.context.operation, "v4_x_cross_blogger")
 
     def test_runtime_rejects_no_new_context_without_calling_provider(self) -> None:
         class NoNewProvider:

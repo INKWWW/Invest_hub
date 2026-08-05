@@ -51,9 +51,9 @@ function JudgementRevision({ revision, excludedSourceCount, timedOutSourceCount 
   timedOutSourceCount: number;
 }) {
   return <div className="x-reader-revision-content">
-    {revision.stockViewpoints.length ? <section><h3>个股与产业判断</h3>{revision.stockViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`stock-${judgementIndex}`} judgement={judgement} />)}</section> : null}
-    {revision.marketIndustryViewpoints.length ? <section><h3>市场结构判断</h3>{revision.marketIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} />)}</section> : null}
-    {revision.strategyMindsetViewpoints?.length ? <section><h3>投资策略与心态</h3>{revision.strategyMindsetViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`strategy-${judgementIndex}`} judgement={judgement} />)}</section> : null}
+    {revision.stockViewpoints.length ? <section><h3>个股与产业判断</h3>{revision.stockViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`stock-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</section> : null}
+    {revision.marketIndustryViewpoints.length ? <section><h3>市场结构判断</h3>{revision.marketIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</section> : null}
+    {revision.strategyMindsetViewpoints?.length ? <section><h3>投资策略与心态</h3>{revision.strategyMindsetViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`strategy-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</section> : null}
     {!revision.stockViewpoints.length && !revision.marketIndustryViewpoints.length && !(revision.strategyMindsetViewpoints?.length) ? <p className="summary-empty">本窗口没有形成新的跨博主判断。</p> : null}
     {revision.coverageStatus === "partial" ? <p className="topic-uncertainty">本次判断未纳入 {excludedSourceCount} 位博主的完整信息。{timedOutSourceCount > 0 ? `其中 ${timedOutSourceCount} 位因采集未在结算截止前完成。` : ""}</p> : null}
     {revision.coverageStatus === "no_new_information" ? <p className="summary-empty">本窗口没有新的可判断信息。</p> : null}
@@ -61,23 +61,33 @@ function JudgementRevision({ revision, excludedSourceCount, timedOutSourceCount 
   </div>;
 }
 
-function JudgementCard({ judgement }: { judgement: ReaderJudgement }) {
-  return <section className="topic-card"><p>{judgement.statement}</p>
-    {judgement.actionIntent ? <p>博主倾向：{ACTION_INTENT_LABELS[judgement.actionIntent]}（{judgement.actionScope}）</p> : null}
+function actionText(judgement: ReaderJudgement) {
+  if (!judgement.actionIntent) return null;
+  return judgement.actionScopeStatus === "unspecified" ? `操作表述：${ACTION_INTENT_LABELS[judgement.actionIntent]}；对象：未明确，不可据此执行` : `操作表述：${ACTION_INTENT_LABELS[judgement.actionIntent]}（${judgement.actionScope}）`;
+}
+
+function analysisActionText(analysis: XReaderBlogger["segments"][number]["analyses"][number]) {
+  if (!analysis.actionIntent) return null;
+  return analysis.actionScopeStatus === "unspecified" ? `操作表述：${ACTION_INTENT_LABELS[analysis.actionIntent]}；对象：未明确，不可据此执行` : `操作表述：${ACTION_INTENT_LABELS[analysis.actionIntent]}（${analysis.actionScope}）`;
+}
+
+function JudgementCard({ judgement, index }: { judgement: ReaderJudgement; index: number }) {
+  return <article className="topic-card"><p className="x-reader-viewpoint-number">观点 {String(index + 1).padStart(2, "0")}</p><p className="x-reader-viewpoint-statement">{judgement.statement}</p>
+    {actionText(judgement) ? <p>{actionText(judgement)}</p> : null}
     {judgement.conditions?.length ? <p>条件：{judgement.conditions.join("；")}</p> : null}
     {judgement.supportingDisplayNames.length ? <p>支持观点：{judgement.supportingDisplayNames.join("、")}</p> : null}
     {judgement.dissentingDisplayNames.length ? <p>不同观点：{judgement.dissentingDisplayNames.join("、")}</p> : null}
     {judgement.uncertainties.length ? <p className="topic-uncertainty">不确定性：{judgement.uncertainties.join("；")}</p> : null}
-  </section>;
+  </article>;
 }
 
 function BloggerViewpointList({ title, viewpoints }: { title: string; viewpoints: ReaderJudgement[] | undefined }) {
   if (!viewpoints?.length) return null;
-  return <section className="x-reader-viewpoint-group"><h4>{title}</h4><div className="x-reader-viewpoint-list">{viewpoints.map((viewpoint, index) => <article className="x-reader-viewpoint-card" key={index}>
-    <header><p>观点 {String(index + 1).padStart(2, "0")}</p></header>
+  return <section className="x-reader-viewpoint-group"><h3>{title}</h3><div className="x-reader-viewpoint-list">{viewpoints.map((viewpoint, index) => <article className="topic-card" key={index}>
+    <p className="x-reader-viewpoint-number">观点 {String(index + 1).padStart(2, "0")}</p>
     <p className="x-reader-viewpoint-statement">{viewpoint.statement}</p>
     {viewpoint.actionIntent || viewpoint.conditions?.length ? <dl className="x-reader-viewpoint-meta">
-      {viewpoint.actionIntent ? <div><dt>博主倾向</dt><dd>{ACTION_INTENT_LABELS[viewpoint.actionIntent]}（{viewpoint.actionScope}）</dd></div> : null}
+      {actionText(viewpoint) ? <div><dt>操作表述</dt><dd>{actionText(viewpoint)}</dd></div> : null}
       {viewpoint.conditions?.length ? <div><dt>条件</dt><dd>{viewpoint.conditions.join("；")}</dd></div> : null}
     </dl> : null}
     {viewpoint.uncertainties.length ? <p className="topic-uncertainty">不确定性：{viewpoint.uncertainties.join("；")}</p> : null}
@@ -100,7 +110,7 @@ function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
       {segment.analyses.map((analysis, analysisIndex) => <article className="x-analysis" key={analysisIndex}>
         <p><a href={analysis.postLink} target="_blank" rel="noreferrer">原始 X 帖子</a></p>
         <p><strong>博主观点：</strong>{analysis.bloggerViewpoint ?? "未表达（例如普通 repost）"}</p>
-        {analysis.actionIntent ? <p><strong>博主倾向：</strong>{ACTION_INTENT_LABELS[analysis.actionIntent]}（{analysis.actionScope}）</p> : null}
+        {analysisActionText(analysis) ? <p><strong>操作表述：</strong>{analysisActionText(analysis)?.replace(/^操作表述：/, "")}</p> : null}
         {analysis.conditions?.length ? <p><strong>条件：</strong>{analysis.conditions.join("；")}</p> : null}
         {analysis.arguments.length ? <p><strong>论据：</strong>{analysis.arguments.join("；")}</p> : null}
         {analysis.quotedPostViewpoint ? <p><strong>引用帖观点：</strong>{analysis.quotedPostViewpoint}</p> : null}
