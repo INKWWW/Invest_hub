@@ -193,7 +193,7 @@ describe("X reader date projection", () => {
     const batch = result[0]?.judgement.batches[0] as unknown as { status: string; verificationRecovery?: { stockViewpoints: Array<{ statement: string }> } };
 
     expect(batch.status).toBe("judgement_failed");
-    expect(batch.verificationRecovery?.stockViewpoints).toEqual([{ statement: "恢复后的 v3 判断", actionIntent: "watch", actionScope: "测试标的", conditions: [], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: [] }]);
+    expect(batch.verificationRecovery?.stockViewpoints).toEqual([{ statement: "恢复后的 v3 判断", actionIntent: "watch", actionScope: "测试标的", actionScopeStatus: "specified", conditions: [], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: [] }]);
     expect(JSON.stringify(batch)).not.toContain("acceptance-succeeded");
     expect(JSON.stringify(batch)).not.toContain("private-analysis");
     expect(JSON.stringify(batch)).not.toContain("private-evidence");

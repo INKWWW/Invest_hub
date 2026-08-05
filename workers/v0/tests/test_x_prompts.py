@@ -25,6 +25,17 @@ class XPromptContractTests(unittest.TestCase):
             self.assertIn(field, window)
         self.assertIn("完整 v3 单帖分析", daily)
 
+    def test_v4_upstream_prompts_publish_scope_status_and_no_placeholder_scope(self) -> None:
+        post = (PROMPT_ROOT / "v4_x_post_analysis.md").read_text(encoding="utf-8")
+        window = (PROMPT_ROOT / "v4_x_window.md").read_text(encoding="utf-8")
+        daily = (PROMPT_ROOT / "v4_x_cross_blogger.md").read_text(encoding="utf-8")
+
+        for prompt, version in ((post, "v4-x-post-analysis"), (window, "v4-x-window"), (daily, "v4-x-cross-blogger")):
+            self.assertIn(f'"schema_version": "{version}"', prompt)
+            self.assertIn("action_scope_status", prompt)
+            self.assertIn("unspecified", prompt)
+            self.assertIn("绝不能", prompt)
+
     def test_chunk_prompt_names_every_required_analysis_field(self) -> None:
         prompt = (PROMPT_ROOT / "v2_x_chunk.md").read_text(encoding="utf-8")
 

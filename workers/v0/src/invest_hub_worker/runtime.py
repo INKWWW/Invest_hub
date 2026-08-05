@@ -24,6 +24,9 @@ from .structured import (
     parse_v3_x_cross_blogger_output,
     parse_v3_x_post_analysis_output,
     parse_v3_x_window_output,
+    parse_v4_x_cross_blogger_output,
+    parse_v4_x_post_analysis_output,
+    parse_v4_x_window_output,
     parse_v2_x_window_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -46,7 +49,8 @@ class XDailyJudgementRuntime:
             raise ValueError("prompt_template must be non-empty")
         self.provider = provider
         self.prompt_template = prompt_template
-        self.public_template = _read_public_prompt("v3_x_cross_blogger.md")
+        self.public_template = _read_public_prompt("v4_x_cross_blogger.md")
+        self.v3_public_template = _read_public_prompt("v3_x_cross_blogger.md")
 
     def execute(self, claim: dict[str, object], context: dict[str, object]) -> dict[str, object]:
         run_id = claim.get("run_id")
@@ -73,15 +77,16 @@ class XDailyJudgementRuntime:
             raise RuntimeExecutionError("schema_error", "daily judgement context is invalid") from exc
         if not allowed_source_ids:
             raise RuntimeExecutionError("schema_error", "daily judgement context has no included source")
+        is_v3_replay = context.get("prompt_version") == "v3-x-cross-blogger-1"
         provider_context = ProviderContext(
             chunk_id=run_id,
-            prompt_version="v3-x-cross-blogger-1",
+            prompt_version="v3-x-cross-blogger-1" if is_v3_replay else "v4-x-cross-blogger-1",
             prompt_text=(
-                f"{self.public_template}\n\n本地私有补充说明：\n{self.prompt_template}"
+                f"{self.v3_public_template if is_v3_replay else self.public_template}\n\n本地私有补充说明：\n{self.prompt_template}"
                 f"\n\n已验证的跨博主上下文（仅本地 Codex CLI 可见）：\n{json.dumps(context, ensure_ascii=False)}"
             ),
             attempt=attempt,
-            operation="v3_x_cross_blogger",
+            operation="v3_x_cross_blogger" if is_v3_replay else "v4_x_cross_blogger",
             allowed_source_ids=frozenset(allowed_source_ids),
             allowed_analysis_ids=frozenset(allowed_analysis_ids),
             allowed_post_ids=frozenset(allowed_post_ids),
@@ -97,7 +102,7 @@ class XDailyJudgementRuntime:
         if not _safe_model_reported(response.model_reported):
             raise RuntimeExecutionError("schema_error", "model telemetry is unsafe")
         try:
-            parsed = parse_v3_x_cross_blogger_output(
+            parsed = (parse_v3_x_cross_blogger_output if is_v3_replay else parse_v4_x_cross_blogger_output)(
                 json.dumps(response.parsed_output, ensure_ascii=False),
                 allowed_source_ids=allowed_source_ids,
                 allowed_analysis_ids=allowed_analysis_ids,
@@ -112,10 +117,10 @@ class XDailyJudgementRuntime:
         return {
             "run_id": run_id,
             "attempt": attempt,
-            "schema_version": "v3-x-cross-blogger",
+            "schema_version": "v3-x-cross-blogger" if is_v3_replay else "v4-x-cross-blogger",
             "provider": "codex_cli",
             "model_reported": response.model_reported,
-            "prompt_version": "v3-x-cross-blogger-1",
+            "prompt_version": "v3-x-cross-blogger-1" if is_v3_replay else "v4-x-cross-blogger-1",
             "security_industry_viewpoints": parsed["security_industry_viewpoints"],
             "market_structure_viewpoints": parsed["market_structure_viewpoints"],
             "strategy_mindset_viewpoints": parsed["strategy_mindset_viewpoints"],
@@ -126,7 +131,8 @@ class XDailyJudgementRuntime:
     def _validate_context(
         context: Mapping[str, object], run_id: str, batch_id: str, attempt: int
     ) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]], set[str], set[str]]:
-        if set(context) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") != "v3-x-cross-blogger-1":
+        is_v3_replay = context.get("prompt_version") == "v3-x-cross-blogger-1"
+        if set(context) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") not in {"v3-x-cross-blogger-1", "v4-x-cross-blogger-1"}:
             raise ValueError("context identity is invalid")
         if context.get("batch_id") != batch_id:
             raise ValueError("context batch identity is invalid")
@@ -155,7 +161,9 @@ class XDailyJudgementRuntime:
                     raise ValueError("segment is invalid")
                 segment_id = segment.get("id")
                 segment_output = segment.get("segment_output")
-                if not isinstance(segment_id, str) or not segment_id or segment_id in segment_ids or segment.get("schema_version") != "v3-x-window" or segment.get("prompt_version") != "v3-x-window-1" or not isinstance(segment_output, Mapping) or segment_output.get("schema_version") != "v3-x-window":
+                expected_window = "v3-x-window" if is_v3_replay else "v4-x-window"
+                expected_window_prompt = "v3-x-window-1" if is_v3_replay else "v4-x-window-1"
+                if not isinstance(segment_id, str) or not segment_id or segment_id in segment_ids or segment.get("schema_version") != expected_window or segment.get("prompt_version") != expected_window_prompt or not isinstance(segment_output, Mapping) or segment_output.get("schema_version") != expected_window:
                     raise ValueError("segment identity is invalid")
                 segment_ids.add(segment_id)
                 segment_analysis_ids = segment_output.get("analysis_ids")
@@ -170,7 +178,9 @@ class XDailyJudgementRuntime:
                     analysis_id = analysis.get("analysis_id")
                     evidence = analysis.get("evidence_post_ids")
                     analysis_output = analysis.get("analysis_output")
-                    if not isinstance(analysis_id, str) or not analysis_id or analysis_id in analysis_ids or not isinstance(evidence, list) or not all(isinstance(post_id, str) and post_id for post_id in evidence) or analysis.get("schema_version") != "v3-x-post-analysis" or analysis.get("prompt_version") != "v3-x-post-analysis-1" or not isinstance(analysis_output, Mapping) or analysis_output.get("post_id") != analysis_id.removesuffix("@2") or analysis_id != f"{analysis_output.get('post_id')}@2" or set(analysis_output.get("evidence_post_ids", [])) != set(evidence):
+                    expected_post = "v3-x-post-analysis" if is_v3_replay else "v4-x-post-analysis"
+                    expected_post_prompt = "v3-x-post-analysis-1" if is_v3_replay else "v4-x-post-analysis-1"
+                    if not isinstance(analysis_id, str) or not analysis_id or analysis_id in analysis_ids or not isinstance(evidence, list) or not all(isinstance(post_id, str) and post_id for post_id in evidence) or analysis.get("schema_version") != expected_post or analysis.get("prompt_version") != expected_post_prompt or not isinstance(analysis_output, Mapping) or analysis_output.get("post_id") != analysis_id.removesuffix("@2") or analysis_id != f"{analysis_output.get('post_id')}@2" or set(analysis_output.get("evidence_post_ids", [])) != set(evidence):
                         raise ValueError("analysis evidence is invalid")
                     analysis_ids.add(analysis_id)
                     evidence_ids = set(evidence)
@@ -1261,8 +1271,8 @@ class XWindowedRuntime:
         self.canonicalizer = canonicalizer
         self.provider = provider
         self.prompt_template = prompt_template
-        self.chunk_template = _read_public_prompt("v3_x_post_analysis.md")
-        self.window_template = _read_public_prompt("v3_x_window.md")
+        self.chunk_template = _read_public_prompt("v4_x_post_analysis.md")
+        self.window_template = _read_public_prompt("v4_x_window.md")
         self.retry_policy = retry_policy or RetryPolicy(max_attempts=3, timeout_seconds=240)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
@@ -1477,9 +1487,9 @@ class XWindowedRuntime:
         for message in messages:
             context = self._context_for_prompt(message)
             provider_context = ProviderContext(
-                chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-post-{message.external_message_id}", prompt_version="v3-x-post-analysis-1",
+                chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-post-{message.external_message_id}", prompt_version="v4-x-post-analysis-1",
                 prompt_text=self._chunk_prompt(message, context), input_message_ids=frozenset({message.external_message_id}),
-                operation="v3_x_post_analysis", visible_context_post_ids=frozenset({context["id"]}) if context is not None else frozenset(),
+                operation="v4_x_post_analysis", visible_context_post_ids=frozenset({context["id"]}) if context is not None else frozenset(),
             )
             response = self.retry_policy.execute(self.provider, (message,), provider_context)
             retries += max(0, response.attempt - 1)
@@ -1487,7 +1497,7 @@ class XWindowedRuntime:
             if response.status != "success" or response.parsed_output is None:
                 raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X post analysis")
             try:
-                output = parse_v3_x_post_analysis_output(
+                output = parse_v4_x_post_analysis_output(
                     json.dumps(response.parsed_output, ensure_ascii=False),
                     {message.external_message_id},
                     {message.external_message_id: set(provider_context.visible_context_post_ids)},
@@ -1497,7 +1507,7 @@ class XWindowedRuntime:
             analysis = output["analyses"][0]
             analyses.append({
                 "post_id": message.external_message_id, "analysis_version": 2,
-                "schema_version": "v3-x-post-analysis", "prompt_version": "v3-x-post-analysis-1",
+                "schema_version": "v4-x-post-analysis", "prompt_version": "v4-x-post-analysis-1",
                 "analysis_output": analysis,
                 "blogger_viewpoint": analysis["blogger_viewpoint"], "arguments": analysis["arguments"],
                 "quoted_post_viewpoint": analysis["quoted_post_viewpoint"], "uncertainties": analysis["uncertainties"],
@@ -1523,15 +1533,15 @@ class XWindowedRuntime:
             if context is not None:
                 visible_evidence.add(context["id"])
         provider_context = ProviderContext(
-            chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-window", prompt_version="v3-x-window-1",
-            prompt_text=self._window_prompt(claim, capture_range, analyses, natural_date), input_message_ids=frozenset(analysis_ids), operation="v3_x_window",
+            chunk_id=f"{claim['task_id']}-{claim['attempt']}-x-window", prompt_version="v4-x-window-1",
+            prompt_text=self._window_prompt(claim, capture_range, analyses, natural_date), input_message_ids=frozenset(analysis_ids), operation="v4_x_window",
             allowed_analysis_evidence_post_ids=tuple(sorted((str(analysis["analysis_id"]), tuple(sorted(analysis["evidence_post_ids"]))) for analysis in analyses)),
         )
         response = self.retry_policy.execute(self.provider, tuple(analyses), provider_context)
         if response.status != "success" or response.parsed_output is None:
             raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X window viewpoint")
         try:
-            output = parse_v3_x_window_output(
+            output = parse_v4_x_window_output(
                 json.dumps(response.parsed_output, ensure_ascii=False),
                 analysis_ids,
                 {str(analysis["analysis_id"]): set(analysis["evidence_post_ids"]) for analysis in analyses},
@@ -1543,7 +1553,7 @@ class XWindowedRuntime:
         return {
             "natural_date": natural_date, "occurred_from_at": _instant_text(min(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
             "occurred_through_at": _instant_text(max(_required_instant(message.occurred_at, "X post occurred_at") for message in messages)),
-            "schema_version": "v3-x-window", "prompt_version": "v3-x-window-1", "segment_output": output,
+            "schema_version": "v4-x-window", "prompt_version": "v4-x-window-1", "segment_output": output,
             "window_viewpoints": [], "analysis_ids": output["analysis_ids"], "evidence_post_ids": output["evidence_post_ids"],
             "uncertainties": output["uncertainties"],
         }, max(0, response.attempt - 1), response.elapsed_ms

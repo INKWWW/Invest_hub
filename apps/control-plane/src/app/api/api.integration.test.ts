@@ -1021,7 +1021,7 @@ describe("v0 control-plane API authorization", () => {
       run_id: "11111111-1111-4111-8111-111111111111",
       batch_id: "22222222-2222-4222-8222-222222222222",
       attempt: 1,
-      prompt_version: "v3-x-cross-blogger-1",
+      prompt_version: "v4-x-cross-blogger-1",
       sources: [{ source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher", window_segments: [] }],
       excluded_sources: [{ source_id: "44444444-4444-4444-8444-444444444444", display_name: "Excluded fixture", reason: "deadline_elapsed" }],
     });
@@ -1096,19 +1096,19 @@ describe("v0 control-plane API authorization", () => {
       sources: [{
         source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher",
         window_segments: [{
-          id: "44444444-4444-4444-8444-444444444444", schema_version: "v3-x-window", prompt_version: "v3-x-window-1",
+          id: "44444444-4444-4444-8444-444444444444", schema_version: "v4-x-window", prompt_version: "v4-x-window-1",
           occurred_from_at: "2099-01-01T00:00:00.000Z", occurred_through_at: "2099-01-01T00:01:00.000Z",
-          segment_output: { schema_version: "v3-x-window", analysis_ids: ["post-a@2"], evidence_post_ids: ["post-a"] },
-          analyses: [{ analysis_id: "post-a@2", schema_version: "v3-x-post-analysis", prompt_version: "v3-x-post-analysis-1", analysis_output: { post_id: "post-a", evidence_post_ids: ["post-a"] }, evidence_post_ids: ["post-a"] }],
+          segment_output: { schema_version: "v4-x-window", analysis_ids: ["post-a@2"], evidence_post_ids: ["post-a"] },
+          analyses: [{ analysis_id: "post-a@2", schema_version: "v4-x-post-analysis", prompt_version: "v4-x-post-analysis-1", analysis_output: { post_id: "post-a", evidence_post_ids: ["post-a"] }, evidence_post_ids: ["post-a"] }],
         }],
       }], excluded_sources: [],
     });
     xDailyJudgementMocks.completeXDailyJudgement.mockResolvedValue({ status: "succeeded" });
     const completion = {
-      run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v3-x-cross-blogger",
-      provider: "codex_cli", model_reported: null, prompt_version: "v3-x-cross-blogger-1",
+      run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v4-x-cross-blogger",
+      provider: "codex_cli", model_reported: null, prompt_version: "v4-x-cross-blogger-1",
       security_industry_viewpoints: [{
-        statement: "一位博主明确倾向买入该标的。", action_intent: "buy", action_scope: "该标的", conditions: ["需求改善"],
+        statement: "明确倾向买入该标的。", action_intent: "buy", action_scope_status: "specified", action_scope: "该标的", conditions: ["需求改善"],
         supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
         dissenting_source_ids: [], analysis_ids: ["post-a@2"], evidence_post_ids: ["post-a"], uncertainties: [],
       }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [],
@@ -1460,8 +1460,8 @@ describe("v0 control-plane API authorization", () => {
     xDailyJudgementMocks.completeXDailyJudgement.mockRejectedValue({ code: "PT409", message: "lease_mismatch" });
     const stale = await postXDailyJudgementComplete(
       jsonRequest("/api/worker/x-daily-judgements/11111111-1111-4111-8111-111111111111/complete", {
-        run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v3-x-cross-blogger",
-        provider: "codex_cli", model_reported: null, prompt_version: "v3-x-cross-blogger-1",
+        run_id: "11111111-1111-4111-8111-111111111111", attempt: 1, schema_version: "v4-x-cross-blogger",
+        provider: "codex_cli", model_reported: null, prompt_version: "v4-x-cross-blogger-1",
         security_industry_viewpoints: [], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [],
       }),
       { params: Promise.resolve({ runId: "11111111-1111-4111-8111-111111111111" }) },

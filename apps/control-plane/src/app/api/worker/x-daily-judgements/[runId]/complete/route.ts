@@ -47,12 +47,12 @@ function isJudgementItem(value: unknown): value is XDailyJudgementItem {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
   return Object.keys(item).sort().join(",") === [
-    "action_intent", "action_scope", "analysis_ids", "conditions", "dissenting_source_ids", "evidence_post_ids", "statement", "supporting_source_ids", "uncertainties",
+    "action_intent", "action_scope", "action_scope_status", "analysis_ids", "conditions", "dissenting_source_ids", "evidence_post_ids", "statement", "supporting_source_ids", "uncertainties",
   ].sort().join(",")
     && typeof item.statement === "string" && item.statement.length > 0 && item.statement.length <= 1000
     && ["build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid", "none"].includes(String(item.action_intent))
     && typeof item.action_scope === "string" && item.action_scope.length <= 300
-    && ((item.action_intent === "none" && item.action_scope === "") || (item.action_intent !== "none" && item.action_scope.trim().length > 0))
+    && ((item.action_intent === "none" && item.action_scope_status === "not_applicable" && item.action_scope === "") || (item.action_intent !== "none" && ((item.action_scope_status === "specified" && item.action_scope.trim().length > 0) || (item.action_scope_status === "unspecified" && item.action_scope === ""))))
     && isStringArray(item.conditions)
     && isStringArray(item.supporting_source_ids, 128) && isStringArray(item.dissenting_source_ids, 128)
     && isStringArray(item.analysis_ids, 128) && isStringArray(item.evidence_post_ids, 128)
@@ -65,9 +65,9 @@ function isCompletion(value: unknown): value is XDailyJudgementCompletion {
   return Object.keys(completion).sort().join(",") === completionKeys.join(",")
     && typeof completion.run_id === "string" && typeof completion.attempt === "number"
     && Number.isInteger(completion.attempt) && completion.attempt > 0
-    && completion.schema_version === "v3-x-cross-blogger" && completion.provider === "codex_cli"
+    && completion.schema_version === "v4-x-cross-blogger" && completion.provider === "codex_cli"
     && isSafeModelReported(completion.model_reported)
-    && completion.prompt_version === "v3-x-cross-blogger-1"
+    && completion.prompt_version === "v4-x-cross-blogger-1"
     && Array.isArray(completion.security_industry_viewpoints) && completion.security_industry_viewpoints.every(isJudgementItem)
     && Array.isArray(completion.market_structure_viewpoints) && completion.market_structure_viewpoints.every(isJudgementItem)
     && Array.isArray(completion.strategy_mindset_viewpoints) && completion.strategy_mindset_viewpoints.every(isJudgementItem)

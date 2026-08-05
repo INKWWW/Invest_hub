@@ -62,14 +62,14 @@ describe("XReader", () => {
     expect(html).toContain("输入覆盖：4 位博主观点已纳入，2 位无新增信息，1 位未纳入。");
     expect(html).toContain("下方主题仅列出直接支持或反对该主题的博主。");
     expect(html).toContain("投资策略与心态");
-    expect(html).toContain("博主倾向：观望（高波动市场）");
+    expect(html).toContain("操作表述：观望（高波动市场）");
     expect(html).toContain("个股与产业观点");
     expect(html).toContain('class="x-reader-viewpoint-group"');
-    expect(html).toContain('class="x-reader-viewpoint-card"');
+    expect(html).toContain('class="topic-card"');
     expect(html).toContain("观点 01");
     expect(html).toContain('class="x-reader-viewpoint-statement"');
     expect(html).toContain('class="x-reader-viewpoint-meta"');
-    expect(html).toContain("博主倾向");
+    expect(html).toContain("操作表述");
     expect(html).toContain("买入（测试标的）");
     expect(html).toContain("条件");
     expect(html).toContain("等待趋势确认");

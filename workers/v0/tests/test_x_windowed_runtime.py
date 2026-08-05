@@ -124,13 +124,13 @@ class Provider:
                 "quoted_post_viewpoint": "被引用观点", "uncertainties": [],
                 "evidence_post_ids": [post_id, "context-1"], "post_link": "https://x.com/fixture/status/1",
             }]}
-        elif context.operation == "v3_x_post_analysis":
+        elif context.operation == "v4_x_post_analysis":
             post_id = next(iter(context.input_message_ids))
             self.post_ids.append(post_id)
-            output = {"schema_version": "v3-x-post-analysis", "analyses": [{
+            output = {"schema_version": "v4-x-post-analysis", "analyses": [{
                 "post_id": post_id, "investment_relevance": "investment_related",
                 "investment_categories": ["security_industry"], "blogger_viewpoint": "作者明确倾向买入。",
-                "action_intent": "buy", "action_scope": "测试标的", "conditions": ["需求改善"],
+                "action_intent": "buy", "action_scope_status": "specified", "action_scope": "测试标的", "conditions": ["需求改善"],
                 "arguments": ["帖子论据"], "quoted_post_viewpoint": "被引用观点", "uncertainties": [],
                 "evidence_post_ids": [post_id, "context-1"], "post_link": "https://x.com/fixture/status/1",
             }]}
@@ -143,14 +143,14 @@ class Provider:
                       "occurred_from_at": prompt_payload["occurred_from_at"], "occurred_through_at": prompt_payload["occurred_through_at"],
                       "window_viewpoints": ["本窗口综合观点"], "analysis_ids": analysis_ids,
                       "evidence_post_ids": [*self.post_ids, "context-1"], "uncertainties": []}
-        elif context.operation == "v3_x_window":
+        elif context.operation == "v4_x_window":
             prompt_payload = json.loads(context.prompt_text.rsplit("\n", 1)[-1])
             analyses = prompt_payload["post_analyses"]
             analysis_ids = sorted(context.input_message_ids)
             evidence_post_ids = sorted({evidence_id for analysis in analyses for evidence_id in analysis["evidence_post_ids"]})
-            output = {"schema_version": "v3-x-window", "natural_date": prompt_payload["natural_date"], "range_task_id": "x-window-1",
+            output = {"schema_version": "v4-x-window", "natural_date": prompt_payload["natural_date"], "range_task_id": "x-window-1",
                       "occurred_from_at": prompt_payload["occurred_from_at"], "occurred_through_at": prompt_payload["occurred_through_at"],
-                      "security_industry_viewpoints": [{"statement": "博主看好测试标的。", "action_intent": "buy", "action_scope": "测试标的",
+                      "security_industry_viewpoints": [{"statement": "看好测试标的。", "action_intent": "buy", "action_scope_status": "specified", "action_scope": "测试标的",
                           "conditions": ["需求改善"], "analysis_ids": analysis_ids, "evidence_post_ids": evidence_post_ids, "uncertainties": []}],
                       "market_structure_viewpoints": [], "strategy_mindset_viewpoints": [],
                       "analysis_ids": analysis_ids, "evidence_post_ids": evidence_post_ids, "uncertainties": []}
@@ -185,7 +185,7 @@ class XWindowedRuntimeTests(unittest.TestCase):
         self.assertEqual(completion["boundary"]["observed_at"], "2026-07-22T23:29:00Z")
         self.assertEqual([row["post_id"] for row in completion["x_post_analyses"]], ["post-new"])
 
-    def test_runtime_emits_v3_analysis_and_window_payloads(self) -> None:
+    def test_runtime_emits_v4_analysis_and_window_payloads(self) -> None:
         class Connector:
             def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:
                 return RawPage(
@@ -200,10 +200,10 @@ class XWindowedRuntimeTests(unittest.TestCase):
 
         analysis = completion["x_post_analyses"][0]
         segment = completion["x_daily_segments"][0]
-        self.assertEqual((analysis["analysis_version"], analysis["schema_version"], analysis["prompt_version"]), (2, "v3-x-post-analysis", "v3-x-post-analysis-1"))
-        self.assertEqual(segment["schema_version"], "v3-x-window")
+        self.assertEqual((analysis["analysis_version"], analysis["schema_version"], analysis["prompt_version"]), (2, "v4-x-post-analysis", "v4-x-post-analysis-1"))
+        self.assertEqual(segment["schema_version"], "v4-x-window")
         self.assertEqual(segment["segment_output"]["security_industry_viewpoints"][0]["action_intent"], "buy")
-        self.assertEqual(provider.operations, ["v3_x_post_analysis", "v3_x_window"])
+        self.assertEqual(provider.operations, ["v4_x_post_analysis", "v4_x_window"])
 
     def test_post_before_overlap_is_not_persisted_or_analyzed(self) -> None:
         class Connector:

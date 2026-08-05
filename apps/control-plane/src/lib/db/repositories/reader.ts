@@ -48,11 +48,13 @@ export type ReaderDay = {
 
 type ReaderActionIntent = "build_position" | "buy" | "add" | "hold" | "reduce" | "sell" | "watch" | "avoid";
 type InputActionIntent = ReaderActionIntent | "none";
+type ReaderActionScopeStatus = "specified" | "unspecified";
 
 export type ReaderJudgement = {
   statement: string;
   actionIntent?: ReaderActionIntent | null;
   actionScope?: string;
+  actionScopeStatus?: ReaderActionScopeStatus;
   conditions?: string[];
   supportingDisplayNames: string[];
   dissentingDisplayNames: string[];
@@ -72,6 +74,7 @@ type XReaderSegment = {
     bloggerViewpoint: string | null;
     actionIntent?: ReaderActionIntent | null;
     actionScope?: string;
+    actionScopeStatus?: ReaderActionScopeStatus;
     conditions?: string[];
     arguments: string[];
     quotedPostViewpoint: string | null;
@@ -197,6 +200,13 @@ function inputActionIntent(value: unknown): InputActionIntent | null {
     ? value as InputActionIntent : null;
 }
 
+function actionScopeStatus(intent: InputActionIntent, scope: string, value: unknown, uncertainties: string[]): ReaderActionScopeStatus | null {
+  if (intent === "none") return null;
+  if (value === "specified" && scope) return "specified";
+  if (value === "unspecified" && !scope) return "unspecified";
+  return !scope || /(?:未|不|无法)(?:明确|说明|提供|确认).{0,24}(?:标的|对象|资产|范围)|(?:标的|对象|资产|范围).{0,24}(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知)/.test(scope) || uncertainties.some((item) => /(?:未|不|无法)(?:明确|说明|提供|确认).{0,24}(?:标的|对象|资产|范围)|(?:标的|对象|资产|范围).{0,24}(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知)/.test(item)) ? "unspecified" : "specified";
+}
+
 function judgementItems(value: unknown, displayNames: Map<string, string>): ReaderJudgement[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
@@ -205,15 +215,18 @@ function judgementItems(value: unknown, displayNames: Map<string, string>): Read
     const actionIntent = inputActionIntent(judgement.action_intent) ?? "none";
     const actionScope = typeof judgement.action_scope === "string" ? judgement.action_scope : "";
     const conditions = strings(judgement.conditions);
-    const validAction = actionIntent === "none" ? actionScope === "" : actionScope !== "";
+    const uncertainties = strings(judgement.uncertainties);
+    const scopeStatus = actionScopeStatus(actionIntent, actionScope, judgement.action_scope_status, uncertainties);
+    const validAction = actionIntent === "none" ? actionScope === "" : scopeStatus !== null;
     return [{
       statement: judgement.statement,
       actionIntent: validAction && actionIntent !== "none" ? actionIntent : null,
       actionScope: validAction ? actionScope : "",
+      actionScopeStatus: validAction ? scopeStatus ?? undefined : undefined,
       conditions: validAction ? conditions : [],
       supportingDisplayNames: strings(judgement.supporting_source_ids).flatMap((sourceId) => displayNames.has(sourceId) ? [displayNames.get(sourceId)!] : []),
       dissentingDisplayNames: strings(judgement.dissenting_source_ids).flatMap((sourceId) => displayNames.has(sourceId) ? [displayNames.get(sourceId)!] : []),
-      uncertainties: strings(judgement.uncertainties),
+      uncertainties,
     }];
   });
 }
@@ -225,9 +238,11 @@ function bloggerViewpointItems(value: unknown): ReaderJudgement[] {
     const actionIntent = inputActionIntent(viewpoint?.action_intent) ?? "none";
     const actionScope = typeof viewpoint?.action_scope === "string" ? viewpoint.action_scope : "";
     const statement = typeof viewpoint?.statement === "string" ? viewpoint.statement : "";
-    if (!statement || (actionIntent === "none" ? actionScope !== "" : actionScope === "")) return [];
-    return [{ statement, actionIntent: actionIntent === "none" ? null : actionIntent, actionScope,
-      conditions: strings(viewpoint?.conditions), supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: strings(viewpoint?.uncertainties) }];
+    const uncertainties = strings(viewpoint?.uncertainties);
+    const scopeStatus = actionScopeStatus(actionIntent, actionScope, viewpoint?.action_scope_status, uncertainties);
+    if (!statement || (actionIntent === "none" ? actionScope !== "" : !scopeStatus)) return [];
+    return [{ statement, actionIntent: actionIntent === "none" ? null : actionIntent, actionScope, actionScopeStatus: scopeStatus ?? undefined,
+      conditions: strings(viewpoint?.conditions), supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties }];
   });
 }
 
@@ -459,24 +474,26 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
         const analyses = refs.flatMap((ref) => {
           const postId = ref && typeof ref === "object" ? (ref as Record<string, unknown>).post_id : undefined;
           const referencedVersion = ref && typeof ref === "object" ? (ref as Record<string, unknown>).analysis_version : undefined;
-          const analysisVersion = typeof referencedVersion === "number" ? referencedVersion : segment.schema_version === "v3-x-window" ? undefined : 1;
+          const analysisVersion = typeof referencedVersion === "number" ? referencedVersion : ["v3-x-window", "v4-x-window"].includes(String(segment.schema_version)) ? undefined : 1;
           if (typeof postId !== "string" || typeof analysisVersion !== "number") return [];
           const canonical = canonicalByExternalId.get(`${sourceId}:${postId}`);
           if (!canonical) return [];
           const analysis = analysisByCanonicalId.get(`${canonical.id}:${analysisVersion}`);
           const context = contextByCanonicalId.get(canonical.id);
           if (!analysis || !context) return [];
-          const output = analysis.schema_version === "v3-x-post-analysis" && analysis.prompt_version === "v3-x-post-analysis-1" ? object(analysis.analysis_output) : null;
+          const output = (["v3-x-post-analysis", "v4-x-post-analysis"].includes(String(analysis.schema_version)) && ["v3-x-post-analysis-1", "v4-x-post-analysis-1"].includes(String(analysis.prompt_version))) ? object(analysis.analysis_output) : null;
           if (analysisVersion === 2 && !output) return [];
           const actionIntent = inputActionIntent(output?.action_intent) ?? "none";
           const actionScope = typeof output?.action_scope === "string" ? output.action_scope : "";
-          const validAction = actionIntent === "none" ? actionScope === "" : actionScope !== "";
+          const uncertainties = strings(analysis.uncertainties);
+          const scopeStatus = actionScopeStatus(actionIntent, actionScope, output?.action_scope_status, uncertainties);
+          const validAction = actionIntent === "none" ? actionScope === "" : scopeStatus !== null;
           return [{ postLink: context.post_url, bloggerViewpoint: output && typeof output.blogger_viewpoint === "string" ? output.blogger_viewpoint : analysis.blogger_viewpoint,
-            actionIntent: validAction && actionIntent !== "none" ? actionIntent : null, actionScope: validAction ? actionScope : "", conditions: validAction ? strings(output?.conditions) : [],
+            actionIntent: validAction && actionIntent !== "none" ? actionIntent : null, actionScope: validAction ? actionScope : "", actionScopeStatus: validAction ? scopeStatus ?? undefined : undefined, conditions: validAction ? strings(output?.conditions) : [],
             arguments: strings(analysis.arguments), quotedPostViewpoint: analysis.quoted_post_viewpoint,
-            uncertainties: strings(analysis.uncertainties) }];
+            uncertainties }];
         });
-        const segmentOutput = segment.schema_version === "v3-x-window" && segment.prompt_version === "v3-x-window-1" ? object(segment.segment_output) : null;
+        const segmentOutput = (["v3-x-window", "v4-x-window"].includes(String(segment.schema_version)) && ["v3-x-window-1", "v4-x-window-1"].includes(String(segment.prompt_version))) ? object(segment.segment_output) : null;
         return { occurredFromAt: segment.occurred_from_at, occurredThroughAt: segment.occurred_through_at,
           viewpoints: segmentOutput ? [] : strings(segment.window_viewpoints),
           securityIndustryViewpoints: bloggerViewpointItems(segmentOutput?.security_industry_viewpoints),
