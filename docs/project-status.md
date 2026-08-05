@@ -1,12 +1,14 @@
 # Project Status
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 ## Current phase
 
 **V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、真实持久化范围闭环、X 专用本机常驻 Worker 的实际自动窗口完成，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：自动增量链路已验证，但真实关系类别与可恢复失败恢复仍未完整覆盖，因此不得标记为“V2 X 正式可用”或无人值守 SLA。**
 
 **X 当日判断 Worker Protocol v3 修复（2026-08-04）：** 已批准的 [修复设计](superpowers/specs/2026-08-04-x-daily-judgement-worker-protocol-v3-design.md) 与 [Implementation Plan](superpowers/plans/2026-08-04-x-daily-judgement-worker-protocol-v3.md) 将 Worker 的 context/completion 本地校验从 v2 切换为当前 Runtime 与控制面已使用的 `v3-x-cross-blogger-1` / `v3-x-cross-blogger`。有效 v3 三类观点回执可通过既有 worker endpoint；v2 payload、不完整字段和不安全 telemetry 均在网络请求前被拒绝；ProtocolError 现在报告 `schema_error`，不再错误显示为 `persistence_failure`。本地聚焦测试与完整 Worker 回归 168 tests 已通过；提交 `4b6ba4a` 已推送至 `origin/main`，`com.investhub.x-worker` 已重启并从同一 checkout 运行。只读数据库核验没有创建新 judgement，保留 2026-08-03 20:00 与次日 00:00 的不可变历史失败记录；本次不回刷或恢复它们。控制面、数据库和 Reader 均无代码变更，因此没有 Vercel deployment；下一次正常 scheduler judgement 是生产端到端 v3 成功的唯一新增证据。
+
+**X 当日判断 v3 context 断层（2026-08-05）：** 08:00 与 12:00 的来源采集完成后，Worker 在 Provider 调用前因 `ProtocolError` 终态失败。已确认此前 Protocol 仅升级顶层 v3 version，却保留 v2 内部 context 字段；production RPC 已返回 Runtime 所要求的 v3 segment/analysis 结构。修复代码与完整 Worker 185 项回归已在本地完成，当前待提交、发布、Worker reload 和受控恢复；在这些生产步骤有独立证据前，两个失败窗口仍视为未恢复。
 
 **X v3 completion 修复与独立验收（2026-08-04）：** 已上线的 [修复设计](superpowers/specs/2026-08-04-x-v3-replay-completion-repair-design.md) 与 [Implementation Plan](superpowers/plans/2026-08-04-x-v3-replay-completion-repair.md) 修复了真实 replay completion payload 的 metadata/纯输出边界，并新增仅关联终态失败 replay 的一次性 acceptance lifecycle。两条 additive migration 已在 production 应用，Control Plane Ready deployment 已绑定稳定 `/x`。唯一 acceptance run 以既有 3 个冻结来源执行一次并成功持久化 3 个 segment 与 1 个 daily version；父 replay 仍为 attempt 1 的 failed/persistence_failure，原 batch 仍为 judgement_failed，执行窗口内未创建 sync task。已认证生产 `/x` 同时保留原失败并展示“验证恢复（非定时任务）”。该闭环是受控、非定时的 v3 生产验收，不改变正常 scheduler 或历史事实采集。
 
