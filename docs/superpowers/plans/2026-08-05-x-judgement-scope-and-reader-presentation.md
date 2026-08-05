@@ -36,31 +36,31 @@
 - Consumes: v3 parser inputs, existing canonical post/context evidence catalogs and `ProviderContext`.
 - Produces: `parse_v4_x_post_analysis_output(...)`, `parse_v4_x_window_output(...)`, `parse_v4_x_cross_blogger_output(...)` and active normal-path Provider operations `v4_x_post_analysis`, `v4_x_window`, `v4_x_cross_blogger`.
 
-- [ ] **Step 1: 写出三个失败的 v4 合同测试。**
+- [x] **Step 1: 写出三个失败的 v4 合同测试。**
 
   在 `test_x_structured_output.py` 为单帖、窗口和跨博主各增加公开合成条目：`action_intent = "build_position"`、`action_scope_status = "unspecified"`、`action_scope = ""`、不确定性为“对象未说明”。断言三种 parser 均接受该条目。再为每层添加反例：`unspecified` 带非空 scope、`specified` 带空 scope、`none` 非 `not_applicable`、或对象缺失说明被写进 scope，均抛出 `SchemaError`。
 
-- [ ] **Step 2: 运行聚焦测试，确认当前 v3 parser 缺少字段而失败。**
+- [x] **Step 2: 运行聚焦测试，确认当前 v3 parser 缺少字段而失败。**
 
   Run: `PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_x_structured_output.py' -v`
 
   Expected: 新增 v4 成功样例因 parser/版本不存在而失败；既有 v3 测试仍通过。
 
-- [ ] **Step 3: 新增 v4 Prompt 与严格 parser。**
+- [x] **Step 3: 新增 v4 Prompt 与严格 parser。**
 
   三份 v4 Prompt 从 v3 的职责边界复制，不修改 v3 文件；每份 JSON item 都新增 `action_scope_status`。明确要求 `statement` 直接陈述事实，不以“博主认为”“一位博主表示”开头。`structured.py` 新增 `V4_X_*` 字段集、`V4_X_ACTION_SCOPE_STATUSES` 和共享的三态校验函数；v4 parser 必须执行现有完整字段、投资相关性、证据、来源、强共识、系统建议和 opaque ID 校验，不能透传 JSON。将正常 `XWindowedRuntime` 的公共 Prompt 文件、operation 名和 parser 调用改为 v4；保留 `XVerificationReplayRuntime` 使用 v3 文件与 v3 parser。
 
-- [ ] **Step 4: 扩展 Prompt 与 Runtime 回归。**
+- [x] **Step 4: 扩展 Prompt 与 Runtime 回归。**
 
   在 `test_x_prompts.py` 断言三份 v4 Prompt 存在、包含 v4 schema/version、`action_scope_status`、对象缺失规则、直接陈述规则和注入防护。更新 `test_x_windowed_runtime.py` 的 Recording Provider：正常路径的 operation 序列必须为 `v4_x_post_analysis → v4_x_window`，完成 payload 的 v4 schema/prompt/version 与每个分析/窗口输出一致；v3 verification replay 测试保持 v3 operation 不变。
 
-- [ ] **Step 5: 运行 Worker 聚焦测试，确认通过。**
+- [x] **Step 5: 运行 Worker 聚焦测试，确认通过。**
 
   Run: `PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_x_structured_output.py' -v && PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_x_prompts.py' -v && PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_x_windowed_runtime.py' -v`
 
   Expected: 所有聚焦 Worker 测试通过，且 replay 仍固定 v3。
 
-- [ ] **Step 6: 提交本任务。**
+- [x] **Step 6: 提交本任务。**
 
   ```bash
   git add workers/v0/prompts/v4_x_post_analysis.md workers/v0/prompts/v4_x_window.md workers/v0/prompts/v4_x_cross_blogger.md workers/v0/src/invest_hub_worker/structured.py workers/v0/src/invest_hub_worker/runtime.py workers/v0/tests/test_x_structured_output.py workers/v0/tests/test_x_prompts.py workers/v0/tests/test_x_windowed_runtime.py
@@ -78,19 +78,19 @@
 - Consumes: Task 1 的 v4 completion payload 与既有 `complete_windowed_capture_range`、`get_x_daily_judgement_context`、`complete_x_daily_judgement` RPC 名称。
 - Produces: 正常采集仅将 v4 单帖/窗口输出持久化，daily context 仅为全 v4 冻结输入生成 `v4-x-cross-blogger-1`，并以 v4 validator 写入 daily version。
 
-- [ ] **Step 1: 用 CLI 创建 migration 与 pgTAP 红灯用例。**
+- [x] **Step 1: 用 CLI 创建 migration 与 pgTAP 红灯用例。**
 
   Run: `supabase migration new x_judgement_scope_v4`
 
   在 CLI 新建的 migration 中只替换相关 check constraint 与函数定义；在 `036_x_judgement_scope_v4.sql` 建立公开合成 source/post/window/batch。先写 pgTAP：有效 `unspecified` 正常完成并生成 v4 context；三种非法组合被拒绝；v3 冻结 batch 仍走旧 v3 分支或被新 normal v4 path 安全拒绝，不发生写入。
 
-- [ ] **Step 2: 运行新增 pgTAP，确认 v4 尚未被数据库接受。**
+- [x] **Step 2: 运行新增 pgTAP，确认 v4 尚未被数据库接受。**
 
   Run: `supabase test db --file supabase/tests/036_x_judgement_scope_v4.sql`
 
   Expected: v4 schema/prompt 或 `action_scope_status` 尚不被允许，新增成功用例失败。
 
-- [ ] **Step 3: 最小化改造正常 RPC。**
+- [x] **Step 3: 最小化改造正常 RPC。**
 
   在新 migration 中：
 
@@ -101,17 +101,17 @@
   - 将普通 `complete_x_daily_judgement`、daily version trigger/authority 分支扩展为 v4；持久化 `schema_version = 'v4-x-cross-blogger'` 和 `prompt_version = 'v4-x-cross-blogger-1'`。
   - 维持 service-role grants/revokes，且不修改 v3 verification replay RPC/table/function。
 
-- [ ] **Step 4: 完成 SQL 合同回归。**
+- [x] **Step 4: 完成 SQL 合同回归。**
 
   在 pgTAP 中额外断言：v4 payload 的对象缺失文本在 `uncertainties` 可存、在 `action_scope` 必拒绝；`specified` 条目保留 scope；`none/not_applicable` 不能携带 scope；非法的 extra field、未知 enum、跨分析/帖子证据和 opaque ID 均失败。断言已有 v3 fixture 继续可读。
 
-- [ ] **Step 5: 运行全部数据库相关回归。**
+- [x] **Step 5: 运行全部数据库相关回归。**
 
   Run: `supabase test db --file supabase/tests/032_x_upstream_prompt_v3_alignment.sql && supabase test db --file supabase/tests/036_x_judgement_scope_v4.sql && supabase test db`
 
   Expected: v3 兼容测试、v4 新测试和全量 pgTAP 均通过。
 
-- [ ] **Step 6: 提交本任务。**
+- [x] **Step 6: 提交本任务。**
 
   ```bash
   git add supabase/migrations/*_x_judgement_scope_v4.sql supabase/tests/036_x_judgement_scope_v4.sql workers/v0/tests/test_x_windowed_runtime.py
@@ -130,27 +130,27 @@
 - Consumes: Task 2 返回的 v4 daily context 和 Task 1 的 v4 runtime completion。
 - Produces: 正常 Worker endpoint 只接受 `v4-x-cross-blogger` / `v4-x-cross-blogger-1` 且严格校验每个 v4 judgement item；独立 v3 replay endpoint 不变。
 
-- [ ] **Step 1: 写出 Worker 与 HTTP 边界的失败测试。**
+- [x] **Step 1: 写出 Worker 与 HTTP 边界的失败测试。**
 
   在 `test_protocol.py` 构造完整公开合成 v4 context/completion，包含 `unspecified` 条目，断言本地解析与 completion 校验通过。再断言缺 `action_scope_status`、非法三态组合、v3 context/completion、额外字段和不安全 `model_reported` 在发 HTTP 前抛出 `ProtocolError`。在 `api.integration.test.ts` 为 normal completion route 加等价的 422 拒绝和一次 200 成功断言。
 
-- [ ] **Step 2: 运行聚焦测试，确认现有 v3 normal endpoint 拒绝 v4。**
+- [x] **Step 2: 运行聚焦测试，确认现有 v3 normal endpoint 拒绝 v4。**
 
   Run: `PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_protocol.py' -v && npm --prefix apps/control-plane test -- src/app/api/api.integration.test.ts`
 
   Expected: 有效 v4 fixture 因 v3 version/field 集被拒绝。
 
-- [ ] **Step 3: 实现 normal v4 Protocol/route 校验。**
+- [x] **Step 3: 实现 normal v4 Protocol/route 校验。**
 
   把 normal daily judgement 的 context version、segment/analysis version、completion version和 item field 集切换为 v4，并以同一三态规则验证。保留当前 source/analysis/evidence ownership、opaque-ID、强共识和 lease 错误处理；不要放宽为 JSON 透传。只修改 normal daily endpoint；`x-v3-verification-replays` 路由与 replay Protocol 分支继续严格接受 v3。
 
-- [ ] **Step 4: 运行聚焦边界回归。**
+- [x] **Step 4: 运行聚焦边界回归。**
 
   Run: `PYTHONPATH=workers/v0/src workers/v0/.venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_protocol.py' -v && npm --prefix apps/control-plane test -- src/app/api/api.integration.test.ts`
 
   Expected: 有效 v4 completion 成功；所有非法组合与 v3 normal completion 拒绝；v3 replay 相关测试仍通过。
 
-- [ ] **Step 5: 提交本任务。**
+- [x] **Step 5: 提交本任务。**
 
   ```bash
   git add workers/v0/src/invest_hub_worker/protocol.py workers/v0/tests/test_protocol.py apps/control-plane/src/app/api/worker/x-daily-judgements/[runId]/complete/route.ts apps/control-plane/src/app/api/api.integration.test.ts
@@ -171,17 +171,17 @@
 - Consumes: v2/v3/v4 Reader output JSON，以及 v4 `action_scope_status`。
 - Produces: `ReaderJudgement` 的安全 `actionScopeStatus: "specified" | "unspecified" | "not_applicable"` 投影和统一的观点显示组件。
 
-- [ ] **Step 1: 先写 Reader DTO 与组件失败测试。**
+- [x] **Step 1: 先写 Reader DTO 与组件失败测试。**
 
   为 repository/route fixture 添加 v4 `unspecified` item，断言 API 只输出安全展示字段、不会输出内部 ID，且 `actionScope` 为空。添加已存 v3 fixture：scope 为对象缺失占位说明、uncertainty 明确对象缺失，断言投影为 `unspecified`，而没有证据的 v3 item 不被猜测。组件测试断言：显示“操作表述：建仓”“对象：未明确，不可据此执行”；对象明确时显示对象；正文不显示精确可剥离的“博主认为”前缀。
 
-- [ ] **Step 2: 运行 Reader 测试，确认当前组件直出伪对象且布局不一致。**
+- [x] **Step 2: 运行 Reader 测试，确认当前组件直出伪对象且布局不一致。**
 
   Run: `npm --prefix apps/control-plane test -- src/app/api/reader/x/route.test.ts src/components/reader/XReader.test.tsx`
 
   Expected: 新的 v4 字段未投影，`unspecified` 显示和统一观点结构断言失败。
 
-- [ ] **Step 3: 实现安全投影与展示 helper。**
+- [x] **Step 3: 实现安全投影与展示 helper。**
 
   在 `reader.ts` 解析 `action_scope_status`；只接受 v4 三态组合。为历史 v3 设计单一、可测试的 `legacyActionScopeStatus` helper：只有 scope 本身为明确占位标记，或 uncertainty 明确对象/资产/范围缺失时才返回 `unspecified`；否则不推断。将页面和 API DTO 都携带最小的 `actionIntent/actionScope/actionScopeStatus/conditions` 展示字段。
 
@@ -189,13 +189,13 @@
 
   在 `globals.css` 将连环 `.topic-card`/作者卡片改为平铺编辑式布局：两个全宽、浅色中文模块标题带；细分割线与留白；单博主标题行加粗；没有嵌套卡片、粗边线或新的横向滚动。
 
-- [ ] **Step 4: 运行 UI/API 测试、lint 与 production build。**
+- [x] **Step 4: 运行 UI/API 测试、lint 与 production build。**
 
   Run: `npm --prefix apps/control-plane test -- src/app/api/reader/x/route.test.ts src/components/reader/XReader.test.tsx src/app/api/api.integration.test.ts && npm --prefix apps/control-plane run lint && npm --prefix apps/control-plane run build`
 
   Expected: Reader safe DTO、v2/v3 兼容、v4 三态和布局组件测试均通过；lint 与 production build 成功。
 
-- [ ] **Step 5: 提交本任务。**
+- [x] **Step 5: 提交本任务。**
 
   ```bash
   git add apps/control-plane/src/lib/db/repositories/reader.ts apps/control-plane/src/components/reader/XReader.tsx apps/control-plane/src/app/globals.css apps/control-plane/src/app/api/reader/x/route.ts apps/control-plane/src/components/reader/XReader.test.tsx apps/control-plane/src/app/api/reader/x/route.test.ts
@@ -213,7 +213,7 @@
 - Consumes: Tasks 1–4 的已提交工作树、v4 migration、Worker 与 control-plane 构件。
 - Produces: 已部署的 normal v4 路径、已重启的 X Worker、稳定 `/x` 只读验收和可审计发布记录。
 
-- [ ] **Step 1: 执行全量本地验证并保存命令/结果。**
+- [x] **Step 1: 执行全量本地验证并保存命令/结果。**
 
   Run:
 
@@ -229,7 +229,7 @@
 
   Expected: 所有命令成功；若既有环境问题阻断默认 build，记录准确失败原因并仅在与上次已知基线一致、独立 webpack build 成功时继续评估，不将其误报为本次功能回归。
 
-- [ ] **Step 2: 在同一待发布提交上应用 v4 migration。**
+- [x] **Step 2: 在同一待发布提交上应用 v4 migration。**
 
   先以只读 `supabase migration list` 确认远端 history 和目标项目；运行本地 dry-run/测试后应用仅 Task 2 新生成的 migration。随后只读查询 migration history 与 v4 function/constraint 存在性；不得使用 `migration repair`、`db pull` 或直接 DML 修改历史 judgement。
 
