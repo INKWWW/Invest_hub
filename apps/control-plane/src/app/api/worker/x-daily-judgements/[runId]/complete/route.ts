@@ -91,11 +91,11 @@ function referencesFrozenContext(completion: XDailyJudgementCompletion, judgemen
       if (segmentIds.has(segment.id)) return false;
       segmentIds.add(segment.id);
       for (const analysis of segment.analyses) {
-        if (analysisSourceIds.has(analysis.post_id) || analysis.evidence_post_ids.length === 0
+        if (analysisSourceIds.has(analysis.analysis_id) || analysis.evidence_post_ids.length === 0
           || !isUnique(analysis.evidence_post_ids)) return false;
-        analysisSourceIds.set(analysis.post_id, source.source_id);
+        analysisSourceIds.set(analysis.analysis_id, source.source_id);
         const analysisEvidence = new Set(analysis.evidence_post_ids);
-        analysisEvidencePostIds.set(analysis.post_id, analysisEvidence);
+        analysisEvidencePostIds.set(analysis.analysis_id, analysisEvidence);
         for (const evidencePostId of analysisEvidence) evidencePostIds.add(evidencePostId);
       }
     }
