@@ -464,11 +464,21 @@ def _parse_x_daily_judgement_context(value: dict[str, Any], run_id: str, attempt
             raise ProtocolError("invalid x daily judgement context")
         source_ids.add(source["source_id"])
         for segment in source["window_segments"]:
-            if not isinstance(segment, dict) or set(segment) != {"id", "occurred_from_at", "occurred_through_at", "viewpoints", "uncertainties", "analyses"} or not all(_non_empty_string(segment.get(key)) for key in ("id", "occurred_from_at", "occurred_through_at")) or not _string_array(segment.get("viewpoints")) and segment.get("viewpoints") != [] or not isinstance(segment.get("uncertainties"), list) or not isinstance(segment.get("analyses"), list):
+            if not isinstance(segment, dict) or set(segment) != {"id", "schema_version", "prompt_version", "occurred_from_at", "occurred_through_at", "segment_output", "analyses"} or not all(_non_empty_string(segment.get(key)) for key in ("id", "occurred_from_at", "occurred_through_at")) or segment.get("schema_version") != "v3-x-window" or segment.get("prompt_version") != "v3-x-window-1" or not isinstance(segment.get("segment_output"), dict) or segment["segment_output"].get("schema_version") != "v3-x-window" or not isinstance(segment.get("analyses"), list):
                 raise ProtocolError("invalid x daily judgement context")
+            segment_analysis_ids = segment["segment_output"].get("analysis_ids")
+            segment_evidence_ids = segment["segment_output"].get("evidence_post_ids")
+            if not _string_array(segment_analysis_ids) or not _string_array(segment_evidence_ids):
+                raise ProtocolError("invalid x daily judgement context")
+            analysis_ids: set[str] = set()
+            evidence_ids: set[str] = set()
             for analysis in segment["analyses"]:
-                if not isinstance(analysis, dict) or set(analysis) != {"post_id", "blogger_viewpoint", "arguments", "quoted_post_viewpoint", "uncertainties", "evidence_post_ids"} or not _non_empty_string(analysis.get("post_id")) or analysis.get("blogger_viewpoint") is not None and not _non_empty_string(analysis.get("blogger_viewpoint")) or analysis.get("quoted_post_viewpoint") is not None and not _non_empty_string(analysis.get("quoted_post_viewpoint")) or not isinstance(analysis.get("arguments"), list) or not isinstance(analysis.get("uncertainties"), list) or not _string_array(analysis.get("evidence_post_ids")):
+                if not isinstance(analysis, dict) or set(analysis) != {"analysis_id", "schema_version", "prompt_version", "analysis_output", "evidence_post_ids"} or not _non_empty_string(analysis.get("analysis_id")) or analysis.get("analysis_id") in analysis_ids or analysis.get("schema_version") != "v3-x-post-analysis" or analysis.get("prompt_version") != "v3-x-post-analysis-1" or not isinstance(analysis.get("analysis_output"), dict) or analysis["analysis_output"].get("post_id") != analysis["analysis_id"].removesuffix("@2") or analysis["analysis_id"] != f"{analysis['analysis_output'].get('post_id')}@2" or not _string_array(analysis.get("evidence_post_ids")) or set(analysis["analysis_output"].get("evidence_post_ids", [])) != set(analysis["evidence_post_ids"]):
                     raise ProtocolError("invalid x daily judgement context")
+                analysis_ids.add(analysis["analysis_id"])
+                evidence_ids.update(analysis["evidence_post_ids"])
+            if set(segment_analysis_ids) != analysis_ids or set(segment_evidence_ids) != evidence_ids:
+                raise ProtocolError("invalid x daily judgement context")
     for source in excluded:
         if not isinstance(source, dict) or set(source) != {"source_id", "display_name", "reason"} or not all(_non_empty_string(source.get(key)) for key in ("source_id", "display_name", "reason")):
             raise ProtocolError("invalid x daily judgement context")

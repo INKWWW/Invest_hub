@@ -47,6 +47,25 @@ def valid_v3_completion() -> dict[str, object]:
     }
 
 
+def valid_v3_context() -> dict[str, object]:
+    return {
+        "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
+        "prompt_version": "v3-x-cross-blogger-1",
+        "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
+            "id": "segment-1", "schema_version": "v3-x-window", "prompt_version": "v3-x-window-1",
+            "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
+            "segment_output": {
+                "schema_version": "v3-x-window", "analysis_ids": ["post-a@2"], "evidence_post_ids": ["post-a"],
+            },
+            "analyses": [{
+                "analysis_id": "post-a@2", "schema_version": "v3-x-post-analysis", "prompt_version": "v3-x-post-analysis-1",
+                "analysis_output": {"post_id": "post-a", "evidence_post_ids": ["post-a"]}, "evidence_post_ids": ["post-a"],
+            }],
+        }]}],
+        "excluded_sources": [{"source_id": "source-z", "display_name": "Z", "reason": "no_new_information"}],
+    }
+
+
 class WorkerProtocolTests(unittest.TestCase):
     def test_enrol_persists_secret_but_never_the_raw_code(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -346,17 +365,7 @@ class WorkerProtocolTests(unittest.TestCase):
             "run_id": "judgement-run-1", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
             "batch": {"id": "batch-1", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"},
         }
-        context = {
-            "run_id": "judgement-run-1", "batch_id": "batch-1", "attempt": 1,
-            "prompt_version": "v3-x-cross-blogger-1",
-            "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
-                "id": "segment-1", "occurred_from_at": "2099-01-01T00:00:00Z", "occurred_through_at": "2099-01-01T08:00:00Z",
-                "viewpoints": ["观点"], "uncertainties": [], "analyses": [{
-                    "post_id": "post-a@1", "blogger_viewpoint": "观点", "arguments": [], "quoted_post_viewpoint": None,
-                    "uncertainties": [], "evidence_post_ids": ["post-a"],
-                }],
-            }]}], "excluded_sources": [{"source_id": "source-z", "display_name": "Z", "reason": "no_new_information"}],
-        }
+        context = valid_v3_context()
         completion = valid_v3_completion()
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()), (200, claim), (200, context), (200, {"status": "succeeded"}), (200, {"status": "retryable_failed"}))
