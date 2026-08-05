@@ -1,12 +1,12 @@
 # X 跨博主当日判断总结：最终边界本地验收记录
 
-## v3 context 内部结构断层修复（2026-08-05，待发布）
+## v3 context 内部结构断层修复（2026-08-05，已发布；恢复待管理员启动）
 
 2026-08-05 的 08:00 与 12:00 正常 X 采集均在来源窗口完成后进入 judgement claim，但分别三次在本机 `WorkerProtocol.get_x_daily_judgement_context()` 处以 `ProtocolError` 终态失败。该错误发生在调用 Codex CLI 前，因而不是采集、Provider 或 Reader 故障。
 
 根因是此前 Protocol 修复只把顶层 `prompt_version` 切换为 v3，内部却仍要求 v2 的 `viewpoints` 和逐帖字段；production RPC 已返回 v3 的 `schema_version`、`prompt_version`、`segment_output`、`analysis_id`、`analysis_output` 与 `evidence_post_ids`。同一 Worker 的 `XDailyJudgementRuntime` 已严格使用该 v3 形状，造成 HTTP 边界与 Runtime 的合同断层。
 
-本次先以完整人工构造 v3 context 更新 Protocol endpoint 测试，确认旧实现必然报 `invalid x daily judgement context`，再将 Protocol 解析器收紧到该真实 v3 形状，并校验 segment/analysis 的版本、ID、逐条证据与聚合 coverage 一致性。聚焦 Protocol 19 项、Worker recovery 15 项及完整 Worker 185 项测试通过。此记录不表示已发布或已恢复当天失败 batch；提交、推送、Worker reload 和冻结输入恢复须以本节之后的实际生产证据为准。
+本次先以完整人工构造 v3 context 更新 Protocol endpoint 测试，确认旧实现必然报 `invalid x daily judgement context`，再将 Protocol 解析器收紧到该真实 v3 形状，并校验 segment/analysis 的版本、ID、逐条证据与聚合 coverage 一致性。聚焦 Protocol 19 项、Worker recovery 15 项及完整 Worker 185 项测试通过；`cd9a9e0` 已推送至 `origin/main`，本机 `com.investhub.x-worker` 已 reload，控制面 production deployment 已 Ready 并由稳定别名承载。既有两个终态失败 batch 保持不可变；应由管理员在稳定 `/admin` 的“补采并重新生成 X 总结”创建新的受审计恢复 run。当前执行环境的浏览器安全策略拒绝访问该生产管理页，故本记录不宣称已创建 run 或已恢复当天判断。
 
 ## v3 completion 修复与独立验收上线（2026-08-04）
 
