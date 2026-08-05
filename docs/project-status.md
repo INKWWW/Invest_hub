@@ -6,6 +6,8 @@ Last updated: 2026-08-05
 
 **V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、真实持久化范围闭环、X 专用本机常驻 Worker 的实际自动窗口完成，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：自动增量链路已验证，但真实关系类别与可恢复失败恢复仍未完整覆盖，因此不得标记为“V2 X 正式可用”或无人值守 SLA。**
 
+**X 当日判断 v3 写回断层（2026-08-05）：** 已修复控制面在完成回执阶段仍按 v2 结构解析冻结上下文的问题：v3 的 `segment_output`、`analysis_id` 与 post-analysis 字段现会原样通过服务器端校验并用于证据归属核验。控制面 239 项测试、lint 与 production build 均通过；生产 deployment `dpl_VMysBV16simYmtvQyqWEAAGefsKb` 已 Ready 且稳定 `/x` 别名已切换。此前两条手动恢复 run 已在旧版本下耗尽三次尝试，仍保留为 `judgement_failed` 审计记录；下一步必须为指定历史窗口创建新的恢复批次，不得重置或篡改旧 run。
+
 **X 当日判断 Worker Protocol v3 修复（2026-08-04）：** 已批准的 [修复设计](superpowers/specs/2026-08-04-x-daily-judgement-worker-protocol-v3-design.md) 与 [Implementation Plan](superpowers/plans/2026-08-04-x-daily-judgement-worker-protocol-v3.md) 将 Worker 的 context/completion 本地校验从 v2 切换为当前 Runtime 与控制面已使用的 `v3-x-cross-blogger-1` / `v3-x-cross-blogger`。有效 v3 三类观点回执可通过既有 worker endpoint；v2 payload、不完整字段和不安全 telemetry 均在网络请求前被拒绝；ProtocolError 现在报告 `schema_error`，不再错误显示为 `persistence_failure`。本地聚焦测试与完整 Worker 回归 168 tests 已通过；提交 `4b6ba4a` 已推送至 `origin/main`，`com.investhub.x-worker` 已重启并从同一 checkout 运行。只读数据库核验没有创建新 judgement，保留 2026-08-03 20:00 与次日 00:00 的不可变历史失败记录；本次不回刷或恢复它们。控制面、数据库和 Reader 均无代码变更，因此没有 Vercel deployment；下一次正常 scheduler judgement 是生产端到端 v3 成功的唯一新增证据。
 
 **X 当日判断 v3 context 断层（2026-08-05）：** 08:00 与 12:00 的来源采集完成后，Worker 在 Provider 调用前因 `ProtocolError` 终态失败。已确认此前 Protocol 仅升级顶层 v3 version，却保留 v2 内部 context 字段；production RPC 已返回 Runtime 所要求的 v3 segment/analysis 结构。修复 `cd9a9e0` 已推送至 `origin/main`，完整 Worker 185 项回归通过，本机 Worker 已 reload，控制面 production deployment 已 Ready。原失败窗口保持不可变；管理员须从稳定 `/admin` 的“补采并重新生成 X 总结”创建新的审计恢复 run。当前执行环境被浏览器安全策略禁止访问该页面，故尚不能把两个失败窗口标记为已恢复。

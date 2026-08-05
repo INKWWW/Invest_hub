@@ -1043,7 +1043,7 @@ describe("v0 control-plane API authorization", () => {
       run_id: "11111111-1111-4111-8111-111111111111",
       batch_id: "22222222-2222-4222-8222-222222222222",
       attempt: 1,
-      prompt_version: "v2-x-cross-blogger-1",
+      prompt_version: "v3-x-cross-blogger-1",
       sources: [{
         source_id: "33333333-3333-4333-8333-333333333333",
         display_name: "Fixture researcher",
@@ -1092,13 +1092,14 @@ describe("v0 control-plane API authorization", () => {
     xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
       run_id: "11111111-1111-4111-8111-111111111111", attempt: 1,
       batch_id: "22222222-2222-4222-8222-222222222222",
-      prompt_version: "v2-x-cross-blogger-1",
+      prompt_version: "v3-x-cross-blogger-1",
       sources: [{
         source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher",
         window_segments: [{
-          id: "44444444-4444-4444-8444-444444444444", occurred_from_at: "2099-01-01T00:00:00.000Z",
-          occurred_through_at: "2099-01-01T00:01:00.000Z", viewpoints: [], uncertainties: [],
-          analyses: [{ post_id: "post-a@1", blogger_viewpoint: null, arguments: [], quoted_post_viewpoint: null, uncertainties: [], evidence_post_ids: ["post-a"] }],
+          id: "44444444-4444-4444-8444-444444444444", schema_version: "v3-x-window", prompt_version: "v3-x-window-1",
+          occurred_from_at: "2099-01-01T00:00:00.000Z", occurred_through_at: "2099-01-01T00:01:00.000Z",
+          segment_output: { schema_version: "v3-x-window", analysis_ids: ["post-a@2"], evidence_post_ids: ["post-a"] },
+          analyses: [{ analysis_id: "post-a@2", schema_version: "v3-x-post-analysis", prompt_version: "v3-x-post-analysis-1", analysis_output: { post_id: "post-a", evidence_post_ids: ["post-a"] }, evidence_post_ids: ["post-a"] }],
         }],
       }], excluded_sources: [],
     });
@@ -1109,7 +1110,7 @@ describe("v0 control-plane API authorization", () => {
       security_industry_viewpoints: [{
         statement: "一位博主明确倾向买入该标的。", action_intent: "buy", action_scope: "该标的", conditions: ["需求改善"],
         supporting_source_ids: ["33333333-3333-4333-8333-333333333333"],
-        dissenting_source_ids: [], analysis_ids: ["post-a@1"], evidence_post_ids: ["post-a"], uncertainties: [],
+        dissenting_source_ids: [], analysis_ids: ["post-a@2"], evidence_post_ids: ["post-a"], uncertainties: [],
       }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [],
     };
 

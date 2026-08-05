@@ -14,11 +14,10 @@ export type XDailyJudgementClaim = {
 };
 
 type XDailyJudgementAnalysis = {
-  post_id: string;
-  blogger_viewpoint: string | null;
-  arguments: string[];
-  quoted_post_viewpoint: string | null;
-  uncertainties: string[];
+  analysis_id: string;
+  schema_version: "v3-x-post-analysis";
+  prompt_version: "v3-x-post-analysis-1";
+  analysis_output: Record<string, unknown>;
   evidence_post_ids: string[];
 };
 
@@ -32,10 +31,11 @@ export type XDailyJudgementContext = {
     display_name: string;
     window_segments: Array<{
       id: string;
+      schema_version: "v3-x-window";
+      prompt_version: "v3-x-window-1";
       occurred_from_at: string;
       occurred_through_at: string;
-      viewpoints: string[];
-      uncertainties: string[];
+      segment_output: Record<string, unknown>;
       analyses: XDailyJudgementAnalysis[];
     }>;
   }>;
@@ -126,17 +126,14 @@ function parseManualRecoveryRun(value: unknown): XManualRecoveryRun | null {
 }
 
 function parseAnalysis(value: unknown): XDailyJudgementAnalysis | null {
-  if (!isObject(value) || typeof value.post_id !== "string"
-    || (value.blogger_viewpoint !== null && typeof value.blogger_viewpoint !== "string")
-    || !isStringArray(value.arguments)
-    || (value.quoted_post_viewpoint !== null && typeof value.quoted_post_viewpoint !== "string")
-    || !isStringArray(value.uncertainties) || !isStringArray(value.evidence_post_ids)) return null;
+  if (!isObject(value) || typeof value.analysis_id !== "string"
+    || value.schema_version !== "v3-x-post-analysis" || value.prompt_version !== "v3-x-post-analysis-1"
+    || !isObject(value.analysis_output) || !isStringArray(value.evidence_post_ids)) return null;
   return {
-    post_id: value.post_id,
-    blogger_viewpoint: value.blogger_viewpoint,
-    arguments: value.arguments,
-    quoted_post_viewpoint: value.quoted_post_viewpoint,
-    uncertainties: value.uncertainties,
+    analysis_id: value.analysis_id,
+    schema_version: value.schema_version,
+    prompt_version: value.prompt_version,
+    analysis_output: value.analysis_output,
     evidence_post_ids: value.evidence_post_ids,
   };
 }
@@ -151,16 +148,18 @@ function parseContext(value: unknown): XDailyJudgementContext | null {
       || !Array.isArray(source.window_segments)) return null;
     const windowSegments = source.window_segments.map((segment) => {
       if (!isObject(segment) || typeof segment.id !== "string" || typeof segment.occurred_from_at !== "string"
-        || typeof segment.occurred_through_at !== "string" || !isStringArray(segment.viewpoints)
-        || !isStringArray(segment.uncertainties) || !Array.isArray(segment.analyses)) return null;
+        || typeof segment.occurred_through_at !== "string" || segment.schema_version !== "v3-x-window"
+        || segment.prompt_version !== "v3-x-window-1" || !isObject(segment.segment_output)
+        || !Array.isArray(segment.analyses)) return null;
       const analyses = segment.analyses.map(parseAnalysis);
       if (analyses.some((analysis) => !analysis)) return null;
       return {
         id: segment.id,
+        schema_version: segment.schema_version,
+        prompt_version: segment.prompt_version,
         occurred_from_at: segment.occurred_from_at,
         occurred_through_at: segment.occurred_through_at,
-        viewpoints: segment.viewpoints,
-        uncertainties: segment.uncertainties,
+        segment_output: segment.segment_output,
         analyses: analyses as XDailyJudgementAnalysis[],
       };
     });
