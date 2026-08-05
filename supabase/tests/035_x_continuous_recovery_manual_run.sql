@@ -1,9 +1,10 @@
 begin;
-select plan(13);
+select plan(17);
 
 select has_table('public', 'x_manual_recovery_runs', 'manual X recovery runs are persisted');
 select has_table('public', 'x_manual_recovery_run_sources', 'manual X recovery freezes its source set');
 select has_function('public', 'create_x_manual_recovery_run', array['uuid', 'timestamp with time zone'], 'admin can create a manual X recovery run');
+select has_function('public', 'create_x_manual_recovery_run_at', array['uuid', 'timestamp with time zone', 'timestamp with time zone'], 'admin can create a replacement run for one historical cutoff');
 select has_function('public', 'advance_x_manual_recovery_runs', array['uuid', 'timestamp with time zone'], 'eligible Worker advances manual X recovery runs');
 select ok(
   exists(
@@ -57,6 +58,10 @@ select throws_ok(
 
 insert into public.workers (id, name, device_secret_hash, status, capabilities, last_heartbeat_at)
 values ('00000000-0000-0000-0000-000000035101', 'manual-recovery-contract-worker', 'manual-recovery-contract-hash', 'online', array['x_sync'], now());
+insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
+values ('00000000-0000-0000-0000-000000035102', 'authenticated', 'authenticated', 'manual-recovery-admin@example.invalid', 'not-a-secret', now());
+insert into public.profiles (id, role, display_name)
+values ('00000000-0000-0000-0000-000000035102', 'admin', 'Manual recovery admin');
 insert into public.sources (id, source_key, source_type, display_name, parameter_version, authorized_worker_id)
 values ('00000000-0000-0000-0000-000000035111', 'manual-recovery-contract-source', 'x', 'Manual recovery contract source', 'v3-manual-recovery', '00000000-0000-0000-0000-000000035101');
 insert into public.x_source_profiles (source_id, requested_handle, account_id, display_name, resolution_status)
@@ -128,6 +133,21 @@ select is(
   (select x_sync_task_id::text from public.x_collection_batch_sources where batch_id = '00000000-0000-0000-0000-000000035201' and source_id = '00000000-0000-0000-0000-000000035112'),
   '00000000-0000-0000-0000-000000035122',
   'batchless historical input remains traceable in the manual recovery snapshot'
+);
+select is(
+  (select public.create_x_manual_recovery_run_at('00000000-0000-0000-0000-000000035102', '2026-08-05T04:00:00Z', '2026-08-05T05:00:00Z')->>'status'),
+  'queued',
+  'a failed historical cutoff receives a fresh queued recovery run instead of an attempt reset'
+);
+select is(
+  (select public.create_x_manual_recovery_run_at('00000000-0000-0000-0000-000000035102', '2026-08-05T04:00:00Z', '2026-08-05T05:00:00Z')->>'idempotent'),
+  'true',
+  'an active replacement run remains idempotent for the same cutoff'
+);
+select throws_ok(
+  $$select public.create_x_manual_recovery_run_at('00000000-0000-0000-0000-000000035102', '2026-08-05T05:00:00Z', '2026-08-05T05:00:00Z')$$,
+  '22023', 'invalid_manual_x_recovery_cutoff',
+  'a non-scheduled historical cutoff cannot create a recovery run'
 );
 
 select * from finish();
