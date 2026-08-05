@@ -233,15 +233,15 @@
 
   先以只读 `supabase migration list` 确认远端 history 和目标项目；运行本地 dry-run/测试后应用仅 Task 2 新生成的 migration。随后只读查询 migration history 与 v4 function/constraint 存在性；不得使用 `migration repair`、`db pull` 或直接 DML 修改历史 judgement。
 
-- [ ] **Step 3: 发布控制面并重启同一提交的 X Worker。**
+- [x] **Step 3: 发布控制面并重启同一提交的 X Worker。**
 
   将已验证提交推送 `origin/main`，从 `apps/control-plane` 使用 `npx --yes vercel@latest --prod --yes` 部署，确认 deployment 为 `READY` 且稳定 `/x` 指向该版本。随后仅重启 `com.investhub.x-worker` 并核对它从同一 checkout 加载；不手工调用 Provider、不触发采集或回刷。
 
-- [ ] **Step 4: 完成生产只读验收。**
+- [ ] **Step 4: 完成生产只读验收。**（浏览器 DOM/滚动接口持续超时；仅确认已登录页面与筛选控件可见，桌面/375px 逐项视觉 gate 未宣称通过。）
 
   在已登录普通用户会话打开稳定 `/x`，核对桌面与 375px：两个模块标题带、加粗博主行、统一观点层级、历史 v3 的对象未明确降级显示、博主/日期筛选与最新窗口优先。等待下一次正常 v4 scheduler window 作为新持久化合同的唯一生产证据；只读检查其 status、schema/prompt version、Reader 输出和无对象动作的显示。若没有正常窗口，不宣称 v4 正常链路已被生产证明。
 
-- [ ] **Step 5: 写工程记录与状态，并提交。**
+- [x] **Step 5: 写工程记录与状态，并提交。**
 
   工程记录必须写明 migration 版本、提交、部署、Worker reload、各 gate 结果、普通用户页面验收、是否已有正常 v4 window；`docs/project-status.md` 只能据此更新，不能把“READY”替代端到端 Scheduler 证据。勾选 Plan 中实际完成的步骤。
 

@@ -10,4 +10,4 @@
 
 生产数据库：已确认 Supabase 项目 `invest-hub-v1`，应用唯一待执行 migration `20260805141108_x_judgement_scope_v4.sql`，随后远端 migration history 已确认该版本已登记。`db push` 同时报告 pg-delta catalog 缓存证书缺失 warning，但 migration 已完成且 history 重试确认成功；未使用 migration repair、db pull 或历史数据回刷。
 
-待完成门禁：将提交合并并推送 `origin/main`，发布 Vercel 控制面，重载 `com.investhub.x-worker`，然后在已登录普通用户会话完成稳定 `/x` 的桌面与 375px 只读验收。没有下一次正常 v4 scheduler window 前，不把生产端到端 v4 持久化写成已证明。
+发布结果：提交已快进合并到 `main` 并推送 `origin/main`；Vercel deployment `dpl_4XHChU26dqiYAnmspYFtgyTLLnCK` 为 READY 且稳定别名已切换；`com.investhub.x-worker` 已 reload 并保持 running。已登录 `/x` 标签页可读取生产内容和筛选控件，但浏览器 DOM/滚动接口持续超时，截图不足以可靠完成桌面/375px 逐项视觉验收，因此该 gate 保持“部分可见、未完全证明”。没有下一次正常 v4 scheduler window 前，不把生产端到端 v4 持久化写成已证明。
