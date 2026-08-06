@@ -36,6 +36,14 @@ class XPromptContractTests(unittest.TestCase):
             self.assertIn("unspecified", prompt)
             self.assertIn("绝不能", prompt)
 
+    def test_v4_cross_blogger_prompt_requires_neutral_action_wording(self) -> None:
+        daily = (PROMPT_ROOT / "v4_x_cross_blogger.md").read_text(encoding="utf-8")
+
+        for forbidden_wording in ("建议买入", "应该卖出", "必须加仓", "立即减仓"):
+            self.assertIn(forbidden_wording, daily)
+        self.assertIn("操作倾向为", daily)
+        self.assertIn("不得原样复制", daily)
+
     def test_chunk_prompt_names_every_required_analysis_field(self) -> None:
         prompt = (PROMPT_ROOT / "v2_x_chunk.md").read_text(encoding="utf-8")
 
