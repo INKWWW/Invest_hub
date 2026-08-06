@@ -36,27 +36,27 @@ describe("X daily judgement repository", () => {
     });
   });
 
-  it("does not expose raw canonical message content in the validated context", async () => {
+  it("accepts the production v4 RPC context without exposing raw canonical message content", async () => {
     databaseMocks.rpc.mockResolvedValue({
       data: {
         run_id: claim.run_id,
         batch_id: claim.batch.id,
         attempt: 1,
-        prompt_version: "v3-x-cross-blogger-1",
+        prompt_version: "v4-x-cross-blogger-1",
         sources: [{
           source_id: "33333333-3333-4333-8333-333333333333",
           display_name: "Fixture researcher",
           window_segments: [{
             id: "44444444-4444-4444-8444-444444444444",
-            schema_version: "v3-x-window",
-            prompt_version: "v3-x-window-1",
+            schema_version: "v4-x-window",
+            prompt_version: "v4-x-window-1",
             occurred_from_at: "2099-01-01T00:00:00.000Z",
             occurred_through_at: "2099-01-01T00:01:00.000Z",
-            segment_output: { schema_version: "v3-x-window", analysis_ids: ["post-1@2"], evidence_post_ids: ["post-1"] },
+            segment_output: { schema_version: "v4-x-window", analysis_ids: ["post-1@2"], evidence_post_ids: ["post-1"] },
             analyses: [{
               analysis_id: "post-1@2",
-              schema_version: "v3-x-post-analysis",
-              prompt_version: "v3-x-post-analysis-1",
+              schema_version: "v4-x-post-analysis",
+              prompt_version: "v4-x-post-analysis-1",
               analysis_output: { post_id: "post-1", evidence_post_ids: ["post-1"] },
               evidence_post_ids: ["post-1"],
             }],
@@ -81,12 +81,12 @@ describe("X daily judgement repository", () => {
     const completion = {
       run_id: claim.run_id,
       attempt: 1,
-      schema_version: "v3-x-cross-blogger" as const,
+      schema_version: "v4-x-cross-blogger" as const,
       provider: "codex_cli" as const,
       model_reported: null,
-      prompt_version: "v3-x-cross-blogger-1" as const,
+      prompt_version: "v4-x-cross-blogger-1" as const,
       security_industry_viewpoints: [{
-        statement: "一位博主明确倾向买入该标的。", action_intent: "buy" as const, action_scope: "该标的", conditions: ["需求改善"],
+        statement: "明确倾向买入该标的。", action_intent: "buy" as const, action_scope_status: "specified" as const, action_scope: "该标的", conditions: ["需求改善"],
         supporting_source_ids: ["33333333-3333-4333-8333-333333333333"], dissenting_source_ids: [], analysis_ids: ["post-1"], evidence_post_ids: ["post-1"], uncertainties: [],
       }],
       market_structure_viewpoints: [],
@@ -101,12 +101,12 @@ describe("X daily judgement repository", () => {
       p_attempt: 1,
       p_worker_id: "worker-1",
       p_payload: {
-        schema_version: "v3-x-cross-blogger",
+        schema_version: "v4-x-cross-blogger",
         provider: "codex_cli",
         model_reported: null,
-        prompt_version: "v3-x-cross-blogger-1",
+        prompt_version: "v4-x-cross-blogger-1",
         security_industry_viewpoints: [{
-          statement: "一位博主明确倾向买入该标的。", action_intent: "buy", action_scope: "该标的", conditions: ["需求改善"],
+          statement: "明确倾向买入该标的。", action_intent: "buy", action_scope_status: "specified", action_scope: "该标的", conditions: ["需求改善"],
           supporting_source_ids: ["33333333-3333-4333-8333-333333333333"], dissenting_source_ids: [], analysis_ids: ["post-1"], evidence_post_ids: ["post-1"], uncertainties: [],
         }],
         market_structure_viewpoints: [],

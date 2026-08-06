@@ -104,7 +104,7 @@ describe("XReader", () => {
     }]} initialNaturalDate="2099-01-03" />);
 
     expect(html).toContain("当日判断仍在处理中。");
-    expect(html).toContain("当日判断未能完成，稍后会重试。");
+    expect(html).toContain("当日判断未能完成，已停止自动重试。");
     expect(html).not.toContain("本窗口没有新的可判断信息。");
     expect(html.indexOf('<details class="x-reader-judgement" open="">')).toBeLessThan(html.indexOf('<details class="x-reader-judgement">'));
     expect(html).toContain("可见判断");
@@ -124,10 +124,10 @@ describe("XReader", () => {
     }]} initialNaturalDate="2099-01-05" />);
 
     expect(html).toContain("判断失败");
-    expect(html).toContain("当日判断未能完成，稍后会重试。");
+    expect(html).toContain("当日判断未能完成，已停止自动重试。");
     expect(html).toContain("验证恢复（非定时任务）");
     expect(html).toContain("恢复后的判断");
-    expect(html.indexOf("当日判断未能完成，稍后会重试。")).toBeLessThan(html.indexOf("验证恢复（非定时任务）"));
+    expect(html.indexOf("当日判断未能完成，已停止自动重试。")).toBeLessThan(html.indexOf("验证恢复（非定时任务）"));
     for (const forbidden of ["analysis_ids", "evidence_post_ids", "replay_id", "prompt_version", "provider", "raw_content"]) expect(html).not.toContain(forbidden);
   });
 
