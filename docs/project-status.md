@@ -1,10 +1,12 @@
 # Project Status
 
-Last updated: 2026-08-05
+Last updated: 2026-08-07
 
 ## Current phase
 
 **V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、真实持久化范围闭环、X 专用本机常驻 Worker 的实际自动窗口完成，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：自动增量链路已验证，但真实关系类别与可恢复失败恢复仍未完整覆盖，因此不得标记为“V2 X 正式可用”或无人值守 SLA。**
+
+**X v4 当日判断生产修复（2026-08-06 至 2026-08-07）：** 已修复正常链路 v4 context 被 Control Plane v3 parser 拒绝、零版本终态失败 batch 无精确恢复入口，以及受审计 recovery completion 被 batch 状态机拒绝的三个断点；确定性证据校验器保持不变，并补强 v4 跨博主 Prompt 对命令式买卖句的中性改写要求。生产 Control Plane Ready deployment、两条 additive migration 与本机 Worker 均已生效。2026-08-06 的五个失败 batch 已保留旧 run 后精确恢复，全部为 `succeeded`、各一个 revision 1、`v4-x-cross-blogger-1`；已登录稳定 `/x` 显示 20:00、16:00、12:00、08:00“已更新”，新的 00:00 批次正常显示“判断处理中”。本地证据为 Control Plane 239 tests、Worker 189 tests、Supabase 42 files/663 tests、lint、production build、diff/redact gate 全通过。详见 [工程记录](engineering-journal/2026-08-06-x-v4-daily-judgement-production-repair.md)。
 
 **X 当日判断 v3 写回断层（2026-08-05）：** 已修复控制面在完成回执阶段仍按 v2 结构解析冻结上下文的问题：v3 的 `segment_output`、`analysis_id` 与 post-analysis 字段现会原样通过服务器端校验并用于证据归属核验。控制面 239 项测试、lint 与 production build 均通过；生产 deployment `dpl_VMysBV16simYmtvQyqWEAAGefsKb` 已 Ready 且稳定 `/x` 别名已切换。此前两条手动恢复 run 已在旧版本下耗尽三次尝试，仍保留为 `judgement_failed` 审计记录；下一步必须为指定历史窗口创建新的恢复批次，不得重置或篡改旧 run。
 

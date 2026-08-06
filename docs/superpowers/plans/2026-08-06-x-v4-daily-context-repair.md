@@ -14,9 +14,9 @@
 - [x] 用 pgTAP 锁定失败 batch 恢复的状态、权限、零版本、Provider 输入、活动 run 和不可变证据门禁，再实现 `recover_failed_x_daily_judgement`。
 - [x] 用真实 claim → v4 completion 红灯证明旧状态机拒绝 `judgement_failed → succeeded`，再加入最新成功管理员 recovery run 与 immutable version 双重门禁。
 - [x] 运行 Control Plane 聚焦/全量测试、lint、production build，运行全量 Worker 与 Supabase 回归，并执行 diff/redact gate。
-- [ ] 提交并合入 `main`、推送远端、部署 Control Plane、重启同提交 Worker，确认稳定域名指向 Ready deployment。
-- [ ] 通过受控恢复机制处理 2026-08-06 00:00、08:00、12:00、16:00、20:00 中实际终态失败的窗口；保留旧 run 和证据。
-- [ ] 以生产数据库 v4 version、Worker telemetry 和已登录 `/x` 页面完成端到端验收，更新工程记录与 `docs/project-status.md`。
+- [x] 提交并合入 `main`、推送远端、部署 Control Plane、重启同提交 Worker，确认稳定域名指向 Ready deployment。
+- [x] 通过受控恢复机制处理 2026-08-06 00:00、08:00、12:00、16:00、20:00 中实际终态失败的窗口；保留旧 run 和证据。
+- [x] 以生产数据库 v4 version、Worker telemetry 和已登录 `/x` 页面完成端到端验收，更新工程记录与 `docs/project-status.md`。
 
 ## 回滚与验收
 
