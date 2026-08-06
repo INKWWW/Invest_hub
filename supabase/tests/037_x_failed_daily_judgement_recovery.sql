@@ -1,6 +1,6 @@
 begin;
 
-select plan(15);
+select plan(19);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values
@@ -143,6 +143,37 @@ select is(
   (select count(*)::text from public.x_daily_judgement_runs where batch_id='00000000-0000-0000-0000-000000037203'),
   '1',
   'rejected recovery attempts leave the target failed run unchanged'
+);
+
+create temporary table failed_recovery_claim as
+select public.claim_next_x_daily_judgement(
+  '00000000-0000-0000-0000-000000037001', now()
+) as payload;
+select is(
+  (select payload->>'attempt' from failed_recovery_claim),
+  '1',
+  'the normal Worker claims the queued failed-batch recovery as attempt one'
+);
+select is(
+  (select public.complete_x_daily_judgement(
+    (select (payload->>'run_id')::uuid from failed_recovery_claim),
+    1,
+    '00000000-0000-0000-0000-000000037001',
+    '{"schema_version":"v4-x-cross-blogger","provider":"codex_cli","model_reported":null,"prompt_version":"v4-x-cross-blogger-1","security_industry_viewpoints":[],"market_structure_viewpoints":[],"strategy_mindset_viewpoints":[],"uncertainties":[]}'::jsonb
+  )->>'status'),
+  'succeeded',
+  'normal v4 completion succeeds the audited failed-batch recovery'
+);
+select is(
+  (select status from public.x_collection_batches where id='00000000-0000-0000-0000-000000037200'),
+  'succeeded',
+  'a successful recovery transitions only its failed batch to succeeded'
+);
+select is(
+  (select count(*)::text || '|' || max(revision)::text || '|' || max(schema_version)
+     from public.x_daily_judgement_versions where batch_id='00000000-0000-0000-0000-000000037200'),
+  '1|1|v4-x-cross-blogger',
+  'successful recovery appends exactly one immutable v4 revision one'
 );
 
 select * from finish();

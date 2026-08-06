@@ -4,7 +4,7 @@
 
 ## 根因与边界
 
-生产数据库和 Worker 已使用 `v4-x-*` 合同，但 Control Plane 的 `x-daily-judgements` repository 仍按 `v3-x-*` 解析 RPC context，导致合法 v4 context 在 Provider 调用前被拒绝为 `schema_error`。历史失败 run、采集数据和冻结证据保持不可变；修复不得直接 DML、重置 attempt 或重新采集 X。现有 manual recovery 会冻结当前全部来源，不能精确重跑一个历史 partial batch；因此补充一个仅 `service_role` 可调用的窄口径恢复 RPC，只允许 `judgement_failed + zero versions + failed run + provider input + no active run` 的原冻结 batch 新增受审计 run。
+生产数据库和 Worker 已使用 `v4-x-*` 合同，但 Control Plane 的 `x-daily-judgements` repository 仍按 `v3-x-*` 解析 RPC context，导致合法 v4 context 在 Provider 调用前被拒绝为 `schema_error`。历史失败 run、采集数据和冻结证据保持不可变；修复不得直接 DML、重置 attempt 或重新采集 X。现有 manual recovery 会冻结当前全部来源，不能精确重跑一个历史 partial batch；因此补充一个仅 `service_role` 可调用的窄口径恢复 RPC，只允许 `judgement_failed + zero versions + failed run + provider input + no active run` 的原冻结 batch 新增受审计 run。恢复 completion 还必须只在“最新 run 是管理员请求且已成功的 regeneration，并已写入 immutable version”时允许 batch 从 `judgement_failed` 转为 `succeeded`。
 
 ## 执行步骤
 
@@ -12,6 +12,7 @@
 - [x] 将正常 daily judgement repository 的 context、analysis、window、completion TypeScript 合同升级为 v4，并保留独立 v3 verification replay 不变。
 - [x] 将终态 `judgement_failed` 文案改为“已停止自动重试”，不再承诺不存在的自动重试。
 - [x] 用 pgTAP 锁定失败 batch 恢复的状态、权限、零版本、Provider 输入、活动 run 和不可变证据门禁，再实现 `recover_failed_x_daily_judgement`。
+- [x] 用真实 claim → v4 completion 红灯证明旧状态机拒绝 `judgement_failed → succeeded`，再加入最新成功管理员 recovery run 与 immutable version 双重门禁。
 - [x] 运行 Control Plane 聚焦/全量测试、lint、production build，运行全量 Worker 与 Supabase 回归，并执行 diff/redact gate。
 - [ ] 提交并合入 `main`、推送远端、部署 Control Plane、重启同提交 Worker，确认稳定域名指向 Ready deployment。
 - [ ] 通过受控恢复机制处理 2026-08-06 00:00、08:00、12:00、16:00、20:00 中实际终态失败的窗口；保留旧 run 和证据。
