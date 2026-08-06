@@ -34,7 +34,7 @@ function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches
         <summary>修订版本 {revision.revision}</summary>
         <JudgementRevision revision={revision} excludedSourceCount={batch.excludedSourceCount} timedOutSourceCount={batch.timedOutSourceCount} />
       </details>)}
-    </div> : <p className="summary-empty">{batch.status === "judgement_pending" ? "当日判断仍在处理中。" : "当日判断未能完成，稍后会重试。"}</p>}
+    </div> : <p className="summary-empty">{batch.status === "judgement_pending" ? "当日判断仍在处理中。" : "当日判断未能完成，已停止自动重试。"}</p>}
   </details>, batch.verificationRecovery ? <details className="x-reader-verification-recovery" key={`${batch.cutoffAt}-verification-recovery`}>
     <summary>验证恢复（非定时任务）</summary>
     <div className="reader-section"><p>基于该失败窗口已冻结的输入完成 v3 验证，不影响既有定时任务或原始失败记录。</p>
