@@ -211,9 +211,48 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .topic-card + .topic-card { border-top: 1px solid #dce4e0; padding-top: 1.15rem; }
 
-.x-reader-viewpoint-group { display: grid; gap: 0.65rem; margin-top: 1rem; }
+.x-reader-viewpoint-group {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  min-width: 0;
+  border: 1px solid var(--x-category-border);
+  border-left: 4px solid var(--x-category-accent);
+  background: var(--x-category-surface);
+  padding: 0.85rem 1rem 1rem;
+  overflow-wrap: anywhere;
+}
 
-.reader-content .x-reader-viewpoint-group h3 { margin: 0; color: #254b53; font-family: inherit; font-size: 1rem; font-weight: 850; letter-spacing: 0; }
+.x-reader-viewpoint-group--security {
+  --x-category-accent: #2d6872;
+  --x-category-surface: #eff5f2;
+  --x-category-border: #b8ceca;
+}
+
+.x-reader-viewpoint-group--market {
+  --x-category-accent: #a86b20;
+  --x-category-surface: #fff7e8;
+  --x-category-border: #e1c79c;
+}
+
+.x-reader-viewpoint-group--strategy {
+  --x-category-accent: #6b5a78;
+  --x-category-surface: #f3eff6;
+  --x-category-border: #cfc4d6;
+}
+
+.reader-content .x-reader-viewpoint-heading {
+  margin: 0 -1rem;
+  border-bottom: 1px solid var(--x-category-border);
+  padding: 0.2rem 1rem 0.65rem;
+  color: var(--x-category-accent);
+  font-family: inherit;
+  font-size: clamp(1.15rem, 2vw, 1.35rem);
+  font-weight: 850;
+  letter-spacing: -0.01em;
+}
+
+.x-reader-viewpoint-group .topic-card { border-left-color: var(--x-category-accent); }
 
 .x-reader-viewpoint-list { display: grid; gap: 0.65rem; }
 
@@ -221,7 +260,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .x-reader-viewpoint-number { margin: 0; color: #547077; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 
-.x-reader-viewpoint-statement { margin: 0; color: #17252d; font-size: 1.02rem; font-weight: 600; line-height: 1.7; }
+.x-reader-viewpoint-statement { margin: 0; color: #17252d; font-size: 1.02rem; font-weight: 600; line-height: 1.7; overflow-wrap: anywhere; }
 
 .x-reader-viewpoint-meta { display: grid; gap: 0.45rem; margin: 0; padding-top: 0.7rem; border-top: 1px solid #dce4e0; }
 
@@ -233,11 +272,31 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .x-reader-viewpoint-card .topic-uncertainty { margin: 0; border-top: 1px solid #eadccf; padding-top: 0.7rem; }
 
-.x-viewpoints { display: grid; gap: 0.55rem; margin: 0; padding-left: 1.2rem; line-height: 1.6; }
+.x-viewpoints { display: grid; gap: 0.55rem; min-width: 0; margin: 0; padding-left: 1.2rem; line-height: 1.6; overflow-wrap: anywhere; }
 .x-evidence { background: #f8faf6; border: 1px solid #dce4e0; padding: 0.85rem 1rem; }
-.x-analysis { border-top: 1px solid #dce4e0; margin-top: 0.8rem; padding-top: 0.8rem; }
 .x-analysis h4, .x-analysis p { margin: 0; }
 .x-analysis p + p { margin-top: 0.45rem; }
+
+.reader-content details.x-analysis {
+  min-width: 0;
+  border-top: 1px solid #dce4e0;
+  margin-top: 0.8rem;
+  padding: 0.8rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.reader-content details.x-analysis:last-child { border-bottom: 0; }
+
+.reader-content details.x-analysis summary {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.25rem 0;
+}
+
+.reader-content details.x-analysis summary a { color: #1f5663; font-weight: 800; }
+
+.x-analysis-body { max-width: 72ch; min-width: 0; padding: 0.75rem 0 0.2rem 1.25rem; overflow-wrap: anywhere; }
 
 .topic-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
 
@@ -530,6 +589,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (max-width: 430px) {
   .reader-sidebar { grid-template-columns: 1fr; }
   .reader-content { padding: 1rem; }
+  .x-reader-viewpoint-group { padding: 0.75rem 0.75rem 0.85rem; }
+  .reader-content .x-reader-viewpoint-heading { margin-inline: -0.75rem; padding-inline: 0.75rem; }
+  .x-analysis-body { padding-left: 0.75rem; }
   .admin-navigation { width: 100%; }
   .admin-navigation a { flex: 1 1 auto; text-align: center; }
 }
