@@ -12,3 +12,18 @@ describe("reader header visual hierarchy", () => {
     expect(css).toMatch(/\.session-controls button\s*\{[^}]*font-size:\s*0\.625rem;/s);
   });
 });
+
+describe("X Reader category and evidence styling", () => {
+  it("defines semantic category modules and a prominent responsive heading", () => {
+    expect(css).toMatch(/\.x-reader-viewpoint-group--security\s*\{/);
+    expect(css).toMatch(/\.x-reader-viewpoint-group--market\s*\{/);
+    expect(css).toMatch(/\.x-reader-viewpoint-group--strategy\s*\{/);
+    expect(css).toMatch(/\.reader-content\s+\.x-reader-viewpoint-heading\s*\{[^}]*font-size:\s*clamp\(/s);
+    expect(css).toMatch(/\.x-reader-viewpoint-group\s*\{[^}]*overflow-wrap:\s*anywhere;/s);
+    expect(css).toMatch(/\.x-analysis-body[^}]*overflow-wrap:\s*anywhere;/s);
+  });
+
+  it("defines a dedicated raw X post summary row", () => {
+    expect(css).toMatch(/\.x-analysis\s+summary\s*\{/);
+  });
+});

@@ -10,7 +10,7 @@ const days = [{
     batches: [{
       cutoffAt: "2099-01-02T12:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 2,
       stockViewpoints: [{ statement: "跨博主股票判断", supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: [] }],
-      marketIndustryViewpoints: [], strategyMindsetViewpoints: [{ statement: "一位博主建议保持观望。", actionIntent: "watch", actionScope: "高波动市场", conditions: ["等待趋势确认"], supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: [] }], uncertainties: [], excludedSourceCount: 1, timedOutSourceCount: 0,
+      marketIndustryViewpoints: [{ statement: "市场结构仍需观察。", supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: [] }], strategyMindsetViewpoints: [{ statement: "一位博主建议保持观望。", actionIntent: "watch", actionScope: "高波动市场", conditions: ["等待趋势确认"], supportingDisplayNames: ["Second Author"], dissentingDisplayNames: [], uncertainties: [] }], uncertainties: [], excludedSourceCount: 1, timedOutSourceCount: 0,
       includedSourceCount: 4, noNewSourceCount: 2,
       revisionHistory: [{
         revision: 1, coverageStatus: "partial",
@@ -26,7 +26,7 @@ const days = [{
   },
   bloggers: [{
     source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false,
-    segments: [{ occurredFromAt: "2099-01-02T11:00:00.000Z", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新博主观点"], securityIndustryViewpoints: [{ statement: "测试标的具备修复条件", actionIntent: "buy", actionScope: "测试标的", conditions: ["等待趋势确认"], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: ["缺少外部确认"] }], uncertainties: [], analyses: [] }, {
+    segments: [{ occurredFromAt: "2099-01-02T11:00:00.000Z", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新博主观点"], securityIndustryViewpoints: [{ statement: "测试标的具备修复条件", actionIntent: "buy", actionScope: "测试标的", conditions: ["等待趋势确认"], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: ["缺少外部确认"] }], marketStructureViewpoints: [{ statement: "市场结构仍处于观察期", actionIntent: "watch", actionScope: "市场结构", conditions: ["等待宽度改善"], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], strategyMindsetViewpoints: [{ statement: "策略上保持耐心", actionIntent: "watch", actionScope: "当前仓位", conditions: [], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], uncertainties: [], analyses: [{ postLink: "https://x.example/posts/analysis-1", bloggerViewpoint: "帖子中的降息观点", actionIntent: "buy", actionScope: "测试标的", conditions: ["等待数据确认"], arguments: ["博主此前已持续提及该判断"], quotedPostViewpoint: "引用帖的补充判断", uncertainties: ["未说明完整时间范围"] }] }, {
       occurredFromAt: "2099-01-02T07:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["较早博主观点"], uncertainties: [], analyses: [],
     }],
   }, {
@@ -64,7 +64,12 @@ describe("XReader", () => {
     expect(html).toContain("投资策略与心态");
     expect(html).toContain("操作表述：观望（高波动市场）");
     expect(html).toContain("个股与产业观点");
-    expect(html).toContain('class="x-reader-viewpoint-group"');
+    expect(html).toContain('class="x-reader-viewpoint-group x-reader-viewpoint-group--security"');
+    expect(html).toContain('class="x-reader-viewpoint-group x-reader-viewpoint-group--market"');
+    expect(html).toContain('class="x-reader-viewpoint-group x-reader-viewpoint-group--strategy"');
+    expect(html.match(/class="x-reader-viewpoint-group x-reader-viewpoint-group--security"/g) ?? []).toHaveLength(3);
+    expect(html.match(/class="x-reader-viewpoint-group x-reader-viewpoint-group--market"/g) ?? []).toHaveLength(2);
+    expect(html.match(/class="x-reader-viewpoint-group x-reader-viewpoint-group--strategy"/g) ?? []).toHaveLength(2);
     expect(html).toContain('class="topic-card"');
     expect(html).toContain("观点 01");
     expect(html).toContain('class="x-reader-viewpoint-statement"');
@@ -74,6 +79,15 @@ describe("XReader", () => {
     expect(html).toContain("条件");
     expect(html).toContain("等待趋势确认");
     expect(html).toContain("不确定性：缺少外部确认");
+    expect(html).toContain('<details class="x-analysis">');
+    expect(html).not.toContain('<details class="x-analysis" open="">');
+    expect(html).toContain('<summary><a href="https://x.example/posts/analysis-1"');
+    expect(html).toContain("帖子中的降息观点");
+    expect(html).toContain("买入（测试标的）");
+    expect(html).toContain("等待数据确认");
+    expect(html).toContain("博主此前已持续提及该判断");
+    expect(html).toContain("引用帖的补充判断");
+    expect(html).toContain("不确定性：未说明完整时间范围");
     expect(html).toContain("采集超时，未形成判断");
     expect(html).toContain("其中 1 位因采集未在结算截止前完成。");
     expect(html.indexOf("最新博主观点")).toBeLessThan(html.indexOf("较早博主观点"));
