@@ -71,6 +71,8 @@ function readerSafeXDays(days: XReaderDate[]) {
         uncertainties: [...segment.uncertainties],
         analyses: segment.analyses.map((analysis) => ({
           postLink: analysis.postLink,
+          postedAt: analysis.postedAt ?? null,
+          postType: analysis.postType ?? null,
           bloggerViewpoint: analysis.bloggerViewpoint,
           actionIntent: analysis.actionIntent ?? null,
           actionScope: analysis.actionScope ?? "",

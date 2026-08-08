@@ -49,6 +49,7 @@ export type ReaderDay = {
 type ReaderActionIntent = "build_position" | "buy" | "add" | "hold" | "reduce" | "sell" | "watch" | "avoid";
 type InputActionIntent = ReaderActionIntent | "none";
 type ReaderActionScopeStatus = "specified" | "unspecified";
+type XPostType = "original" | "quote" | "reply" | "repost";
 
 export type ReaderJudgement = {
   statement: string;
@@ -71,6 +72,8 @@ type XReaderSegment = {
   uncertainties: string[];
   analyses: Array<{
     postLink: string;
+    postedAt?: string | null;
+    postType?: XPostType | null;
     bloggerViewpoint: string | null;
     actionIntent?: ReaderActionIntent | null;
     actionScope?: string;
@@ -313,7 +316,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const requestedPostIdChunks = chunkValues([...requestedPostIds], READER_QUERY_BATCH_SIZE);
   const canonicalQueryChunks = sourceIdChunks.flatMap((sourceIds) => requestedPostIdChunks.map((postIds) => ({ sourceIds, postIds })));
   const canonicalRows = await readAllChunkPages(canonicalQueryChunks, ({ sourceIds: ids, postIds }, from, to) => (
-    supabase.from("canonical_messages").select("id,source_id,external_message_id")
+    supabase.from("canonical_messages").select("id,source_id,external_message_id,occurred_at")
       .in("source_id", ids).in("external_message_id", postIds)
       .order("source_id", { ascending: true }).order("external_message_id", { ascending: true }).order("id", { ascending: true }).range(from, to)
   ));
@@ -325,7 +328,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       .select("canonical_message_id,analysis_version,schema_version,prompt_version,analysis_output,blogger_viewpoint,arguments,quoted_post_viewpoint,uncertainties")
       .in("canonical_message_id", ids)
       .order("canonical_message_id", { ascending: true }).order("analysis_version", { ascending: true }).range(from, to)),
-    readAllChunkPages(canonicalIdChunks, (ids, from, to) => supabase.from("x_post_contexts").select("canonical_message_id,post_url")
+    readAllChunkPages(canonicalIdChunks, (ids, from, to) => supabase.from("x_post_contexts").select("canonical_message_id,post_url,post_type")
       .in("canonical_message_id", ids).order("canonical_message_id", { ascending: true }).range(from, to)),
   ]);
   const analysisByCanonicalId = new Map(analysisRows.map((row) => [`${row.canonical_message_id}:${row.analysis_version}`, row]));
@@ -488,7 +491,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
           const uncertainties = strings(analysis.uncertainties);
           const scopeStatus = actionScopeStatus(actionIntent, actionScope, output?.action_scope_status, uncertainties);
           const validAction = actionIntent === "none" ? actionScope === "" : scopeStatus !== null;
-          return [{ postLink: context.post_url, bloggerViewpoint: output && typeof output.blogger_viewpoint === "string" ? output.blogger_viewpoint : analysis.blogger_viewpoint,
+          return [{ postLink: context.post_url, postedAt: canonical.occurred_at ?? null, postType: context.post_type ?? null, bloggerViewpoint: output && typeof output.blogger_viewpoint === "string" ? output.blogger_viewpoint : analysis.blogger_viewpoint,
             actionIntent: validAction && actionIntent !== "none" ? actionIntent : null, actionScope: validAction ? actionScope : "", actionScopeStatus: validAction ? scopeStatus ?? undefined : undefined, conditions: validAction ? strings(output?.conditions) : [],
             arguments: strings(analysis.arguments), quotedPostViewpoint: analysis.quoted_post_viewpoint,
             uncertainties }];
