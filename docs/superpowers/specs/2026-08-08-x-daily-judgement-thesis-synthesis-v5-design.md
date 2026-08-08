@@ -3,7 +3,7 @@
 ## 文档状态
 
 - 阶段：V2 受控生产试运行的阅读与理解能力修订
-- 状态：**待书面复核；方案 B、A 生成方式、双模块合同、重要性边界和页面线框已由用户于 2026-08-08 确认**
+- 状态：**已批准；方案 B、A 生成方式、双模块合同、重要性边界和页面线框已由用户确认，并于 2026-08-08 明确要求进入 implementation plan**
 - 日期：2026-08-08
 - 关联：[X 跨博主当日判断总结 Spec](2026-07-31-x-cross-blogger-daily-judgement-summary-design.md)、[X 判断对象范围与阅读展示设计](2026-08-05-x-judgement-scope-and-reader-presentation-design.md)、[X Reader 分类模块与帖子默认折叠设计](2026-08-07-x-reader-category-modules-and-collapsed-posts-design.md)、[项目状态](../../project-status.md)
 
