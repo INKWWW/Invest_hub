@@ -76,6 +76,8 @@ describe("GET /api/reader/x", () => {
           analyses: [{
             postLink: "https://x.com/alpha/status/1",
             bloggerViewpoint: "Safe analysis",
+            postedAt: "2099-01-02T08:30:00.000Z",
+            postType: "quote",
             arguments: ["Safe argument"],
             quotedPostViewpoint: null,
             uncertainties: [],
@@ -105,7 +107,7 @@ describe("GET /api/reader/x", () => {
             stockViewpoints: [expect.objectContaining({ statement: "Safe prior revision." })],
           })],
         })] }),
-        bloggers: [expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, segments: [expect.objectContaining({ analyses: [expect.objectContaining({ postLink: "https://x.com/alpha/status/1" })] })] })],
+        bloggers: [expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, segments: [expect.objectContaining({ analyses: [expect.objectContaining({ postLink: "https://x.com/alpha/status/1", postedAt: "2099-01-02T08:30:00.000Z", postType: "quote" })] })] })],
       }),
     ]) });
     expect(readerMocks.readXDay).toHaveBeenCalledWith({ sourceKey: undefined, date: undefined });

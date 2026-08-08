@@ -25,5 +25,10 @@ describe("X Reader category and evidence styling", () => {
 
   it("defines a dedicated raw X post summary row", () => {
     expect(css).toMatch(/\.x-analysis\s+summary\s*\{/);
+    expect(css).toMatch(/\.x-analysis\s+summary::before\s*\{/);
+    expect(css).toMatch(/\.x-analysis\[open\]\s*>\s*summary::before/);
+    expect(css).toMatch(/\.reader-content\s+details\.x-analysis\s+summary\s*\{[^}]*min-height:\s*2\.75rem;/s);
+    expect(css).toMatch(/\.reader-content\s+details\.x-analysis\s+summary\s+a\s*\{[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s);
+    expect(css).toMatch(/\.x-analysis-body[^}]*overflow-wrap:\s*anywhere;/s);
   });
 });

@@ -273,6 +273,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .x-reader-viewpoint-card .topic-uncertainty { margin: 0; border-top: 1px solid #eadccf; padding-top: 0.7rem; }
 
 .x-viewpoints { display: grid; gap: 0.55rem; min-width: 0; margin: 0; padding-left: 1.2rem; line-height: 1.6; overflow-wrap: anywhere; }
+.x-reader-unlinked-viewpoints { border-left: 3px solid #809694; padding-left: 1rem; }
+.x-reader-unlinked-viewpoints-label { margin: 0; color: #547077; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; }
+.x-reader-unlinked-viewpoints .x-viewpoints { margin-top: 0.45rem; }
 .x-evidence { background: #f8faf6; border: 1px solid #dce4e0; padding: 0.85rem 1rem; }
 .x-analysis h4, .x-analysis p { margin: 0; }
 .x-analysis p + p { margin-top: 0.45rem; }
@@ -290,8 +293,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .reader-content details.x-analysis summary {
   display: flex;
   align-items: center;
+  gap: 0.55rem;
   min-height: 2.75rem;
   padding: 0.25rem 0;
+  list-style: none;
+}
+
+.reader-content details.x-analysis summary::-webkit-details-marker { display: none; }
+
+.x-analysis summary::before {
+  flex: 0 0 auto;
+  color: #547077;
+  content: "▸";
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.x-analysis[open] > summary::before { transform: rotate(90deg); }
+
+.reader-content details.x-analysis summary a {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .reader-content details.x-analysis summary a { color: #1f5663; font-weight: 800; }
@@ -592,6 +615,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .x-reader-viewpoint-group { padding: 0.75rem 0.75rem 0.85rem; }
   .reader-content .x-reader-viewpoint-heading { margin-inline: -0.75rem; padding-inline: 0.75rem; }
   .x-analysis-body { padding-left: 0.75rem; }
+  .reader-content details.x-analysis summary { align-items: flex-start; }
   .admin-navigation { width: 100%; }
   .admin-navigation a { flex: 1 1 auto; text-align: center; }
 }
