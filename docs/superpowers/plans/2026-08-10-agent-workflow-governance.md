@@ -10,7 +10,7 @@
 
 ## 文档状态
 
-- 状态：**已批准并执行**
+- 状态：**已完成（2026-08-10）**
 - 授权：用户于 2026-08-10 确认 Spec 并要求完成后续工作
 - 执行方式：Inline Execution
 
@@ -38,15 +38,15 @@
 - Consumes: 已批准治理 Spec、docs/project-status.md、docs/project-pitfalls-reflections.md。
 - Produces: 统一生命周期、Matt/Superpowers profile 映射和根级强制 workflow pointer。
 
-- [ ] **Step 1: 创建 workflow 权威文档**
+- [x] **Step 1: 创建 workflow 权威文档**
 
 创建 docs/agents/workflow.md，依次写明统一生命周期、两种 profile、Matt 主流程、Status/Approval 分离、单一执行来源、profile 切换、release authorization 和文档权威层级。
 
-- [ ] **Step 2: 移除 AGENTS.md 的过期状态缓存**
+- [x] **Step 2: 移除 AGENTS.md 的过期状态缓存**
 
 把硬编码的 Discovery、尚无批准 Spec/Plan 和 V0–V3 后续顺序改为正向规则：当前阶段、已批准范围和下一门禁必须读取 docs/project-status.md。保留未获批准前只能澄清、设计和治理，不得开始应用实现或生产变更的门禁。
 
-- [ ] **Step 3: 添加强制 workflow pointer**
+- [x] **Step 3: 添加强制 workflow pointer**
 
 在 AGENTS.md 中明确：
 - 任何新 feature 先读 docs/agents/workflow.md；
@@ -55,7 +55,7 @@
 - 一个 feature 只有一个执行来源；
 - push、远程 migration、部署和真实生产操作需要独立授权。
 
-- [ ] **Step 4: 验证根入口与权威正文一致**
+- [x] **Step 4: 验证根入口与权威正文一致**
 
 Run:
 
@@ -75,11 +75,11 @@ Expected: 根文件包含触发条件和强制门禁；详细定义集中在 wor
 - Consumes: docs/agents/workflow.md 的 Matt profile 与批准语义。
 - Produces: .scratch feature 文件的可机械检查元数据，以及 readiness 与 authorization 的清晰边界。
 
-- [ ] **Step 1: 扩展 tracker conventions**
+- [x] **Step 1: 扩展 tracker conventions**
 
 规定 spec.md 和每张 ticket 都必须包含 Workflow profile、Status、Approval、Approved at、Approval evidence；ticket 继续包含 Blocked by。Approval 只允许 draft/approved，批准日期或证据为空时不得为 approved。
 
-- [ ] **Step 2: 添加元数据模板**
+- [x] **Step 2: 添加元数据模板**
 
 写入以下模板：
 
@@ -93,11 +93,11 @@ Approval evidence: —
 
 只有用户批准后才更新 Approval、ISO 日期和可追溯确认。全部 ticket 共享同一次批准记录时，完整 graph 才获批；ticket 数量、内容或 blocking edge 改变后，完整 graph 恢复 draft。
 
-- [ ] **Step 3: 澄清 triage label**
+- [x] **Step 3: 澄清 triage label**
 
 把 ready-for-agent 定义为“材料完整、可由 Agent 执行；仍必须满足独立 Approval 门禁”，并明确所有 triage labels 都不产生用户授权。
 
-- [ ] **Step 4: 验证审批字段**
+- [x] **Step 4: 验证审批字段**
 
 Run:
 
@@ -119,19 +119,19 @@ Expected: Spec 和 ticket 都有完整字段；ready-for-agent 只描述 readine
 - Consumes: Task 1–2 的最终治理文件。
 - Produces: 当前治理决策状态、维护者导航入口和 Spec/Plan 完成状态。
 
-- [ ] **Step 1: 记录治理决策**
+- [x] **Step 1: 记录治理决策**
 
 在 project-status 的 Current phase 产品状态之后加入 2026-08-10 治理记录，明确 Matt 默认范围、Superpowers 历史权威、统一批准门禁和“不自动授权模块 2–4”。不得改写既有产品状态或 V2 结论。
 
-- [ ] **Step 2: 添加 docs README 入口**
+- [x] **Step 2: 添加 docs README 入口**
 
 在项目协作/文档索引位置增加 workflow、local tracker、pitfalls 和本次治理 Spec/Plan 的链接。
 
-- [ ] **Step 3: 标记批准与执行状态**
+- [x] **Step 3: 标记批准与执行状态**
 
 Spec 保持“已批准（用户确认 2026-08-10）”。本 Plan 完成后勾选所有步骤；若任一步失败，保留未完成状态并记录阻塞证据。
 
-- [ ] **Step 4: 验证导航**
+- [x] **Step 4: 验证导航**
 
 Run:
 
@@ -159,7 +159,7 @@ Expected: 所有入口存在，状态文档只新增治理记录。
 - Consumes: Task 1–3 的全部治理修改。
 - Produces: 无矛盾、无断链、无敏感信息且保留既有 dirty worktree 的最终文档集合。
 
-- [ ] **Step 1: 检查合同覆盖**
+- [x] **Step 1: 检查合同覆盖**
 
 Run:
 
@@ -169,7 +169,7 @@ rg -n "grill-with-docs|to-spec|to-tickets|implement|Feature Contract|Delivery Pl
 
 Expected: Matt 主流程、两次批准、状态分离、单一执行来源和发布授权均有权威定义与入口。
 
-- [ ] **Step 2: 检查过期和矛盾表述**
+- [x] **Step 2: 检查过期和矛盾表述**
 
 Run:
 
@@ -179,7 +179,7 @@ rg -n "当前项目状态为 Discovery|尚无批准后的 specification|尚无�
 
 Expected: 只有明确说明“ready-for-agent 不等于批准”的正向防误用文本可以命中；不存在过期项目状态或 Superpowers-only 限制。
 
-- [ ] **Step 3: 检查 Markdown whitespace**
+- [x] **Step 3: 检查 Markdown whitespace**
 
 Run:
 
@@ -189,7 +189,7 @@ git diff --check
 
 Expected: exit 0。
 
-- [ ] **Step 4: 运行脱敏检查**
+- [x] **Step 4: 运行脱敏检查**
 
 Run:
 
@@ -199,7 +199,7 @@ bash scripts/v0/redact-check.sh
 
 Expected: exit 0，未发现真实 URL、Cookie、Token、私有 Prompt、真实 fixture 或本地 evidence。
 
-- [ ] **Step 5: 审查 dirty worktree 与提交边界**
+- [x] **Step 5: 审查 dirty worktree 与提交边界**
 
 Run:
 
@@ -210,7 +210,7 @@ git diff -- AGENTS.md docs/agents docs/project-status.md docs/README.md docs/sup
 
 Expected: 只有批准范围内增量和任务开始前已有用户改动；.superpowers、docs/handoffs 及其他未授权文件未被修改。无法安全隔离的重叠改动保留在工作区，不得为了制造干净状态覆盖用户内容。
 
-- [ ] **Step 6: 提交可安全隔离的治理产物**
+- [x] **Step 6: 提交可安全隔离的治理产物**
 
 优先提交本任务新建的 workflow.md 与 Plan/Spec 状态更新。任务开始前已 dirty 或 untracked 的文件，只有全部内容都直接属于 Matt 治理配置时才纳入；否则保持未提交。建议提交信息：
 
