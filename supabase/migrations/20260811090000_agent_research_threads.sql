@@ -37,6 +37,7 @@ create index research_thread_artifacts_thread_created_idx
 create or replace function public.prevent_research_owner_change()
 returns trigger
 language plpgsql
+security definer
 set search_path = public
 as $$
 begin
@@ -62,6 +63,23 @@ for each row execute function public.prevent_research_owner_change();
 create trigger research_threads_set_updated_at
 before update on public.research_threads
 for each row execute function public.set_updated_at();
+
+create or replace function public.touch_research_thread_on_message()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  update public.research_threads
+  set updated_at = timezone('utc', now())
+  where id = new.thread_id and owner_id = new.owner_id;
+  return new;
+end;
+$$;
+
+create trigger research_messages_touch_thread
+after insert on public.research_messages
+for each row execute function public.touch_research_thread_on_message();
 
 alter table public.research_threads enable row level security;
 alter table public.research_messages enable row level security;
