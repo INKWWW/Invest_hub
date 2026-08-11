@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 
 import { SessionControls, type SessionViewer } from "../auth/SessionControls";
 
-export type AdminSection = "overview" | "sources" | "tasks" | "workers";
+export type AdminSection = "overview" | "agent" | "sources" | "tasks" | "workers";
 
 const navigation: Array<{ section: AdminSection; href: string; label: string }> = [
   { section: "overview", href: "/admin", label: "Overview" },
+  { section: "agent", href: "/admin/agent", label: "Agent" },
   { section: "sources", href: "/admin/sources", label: "Sources" },
   { section: "tasks", href: "/admin/tasks", label: "Tasks" },
   { section: "workers", href: "/admin/workers", label: "Workers" },

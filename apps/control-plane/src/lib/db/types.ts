@@ -102,6 +102,84 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["research_thread_artifacts"]["Insert"]>;
         Relationships: [];
       };
+      research_quotas: {
+        Row: {
+          owner_id: string;
+          lifetime_units: number;
+          reserved_units: number;
+          settled_units: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          owner_id: string;
+          lifetime_units?: number;
+          reserved_units?: number;
+          settled_units?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["research_quotas"]["Insert"]>;
+        Relationships: [];
+      };
+      research_quota_reservations: {
+        Row: {
+          id: string;
+          owner_id: string;
+          request_id: string;
+          units: number;
+          status: "reserved" | "committed" | "released";
+          created_at: string;
+          resolved_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          request_id: string;
+          units?: number;
+          status?: "reserved" | "committed" | "released";
+          created_at?: string;
+          resolved_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["research_quota_reservations"]["Insert"]>;
+        Relationships: [];
+      };
+      research_quota_ledger: {
+        Row: {
+          id: number;
+          owner_id: string;
+          reservation_id: string | null;
+          actor_id: string | null;
+          event_type: "admin_adjustment" | "reservation" | "commit" | "release";
+          request_id: string | null;
+          reason: string;
+          lifetime_before: number;
+          lifetime_after: number;
+          reserved_before: number;
+          reserved_after: number;
+          settled_before: number;
+          settled_after: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          owner_id: string;
+          reservation_id?: string | null;
+          actor_id?: string | null;
+          event_type: "admin_adjustment" | "reservation" | "commit" | "release";
+          request_id?: string | null;
+          reason: string;
+          lifetime_before: number;
+          lifetime_after: number;
+          reserved_before: number;
+          reserved_after: number;
+          settled_before: number;
+          settled_after: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["research_quota_ledger"]["Insert"]>;
+        Relationships: [];
+      };
       invites: {
         Row: {
           id: string;
@@ -1224,6 +1302,26 @@ export interface Database {
       is_admin: {
         Args: Record<string, never>;
         Returns: boolean;
+      };
+      research_quota_snapshot: {
+        Args: { p_owner_id: string; p_idempotent?: boolean };
+        Returns: Json;
+      };
+      admin_adjust_research_quota: {
+        Args: { p_owner_id: string; p_lifetime_units: number; p_reason: string };
+        Returns: Json;
+      };
+      reserve_research_quota: {
+        Args: { p_request_id: string };
+        Returns: Json;
+      };
+      commit_research_quota: {
+        Args: { p_reservation_id: string };
+        Returns: Json;
+      };
+      release_research_quota: {
+        Args: { p_reservation_id: string };
+        Returns: Json;
       };
     };
   };

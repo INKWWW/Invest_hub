@@ -599,6 +599,26 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-workbench { position: relative; display: grid; grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr); min-height: 36rem; border: 1px solid #c7d6d2; background: #fffefa; box-shadow: 0 12px 35px rgba(23, 37, 45, 0.08); }
 
+.agent-quota-card { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 1rem; border-bottom: 1px solid #c7d6d2; background: #edf5f1; padding: 0.85rem 1.15rem; }
+
+.agent-quota-card h2 { margin: 0; color: #315860; font-family: Georgia, "Times New Roman", serif; font-size: 1.1rem; font-weight: 600; }
+
+.agent-quota-available { display: flex; align-items: baseline; gap: 0.45rem; border-left: 1px solid #b8ceca; padding-left: 1rem; }
+
+.agent-quota-available strong { color: #1f5961; font-size: 1.5rem; }
+
+.agent-quota-available span, .agent-quota-card dt, .agent-quota-card dd, .agent-quota-note { color: #607579; font-size: 0.72rem; }
+
+.agent-quota-card dl { display: flex; justify-content: flex-end; gap: 1rem; margin: 0; }
+
+.agent-quota-card dl div { display: flex; align-items: baseline; gap: 0.35rem; }
+
+.agent-quota-card dt, .agent-quota-card dd { margin: 0; }
+
+.agent-quota-card dd { color: #315860; font-weight: 800; }
+
+.agent-quota-note { grid-column: 1 / -1; margin: 0; }
+
 .agent-thread-sidebar { display: grid; align-content: start; gap: 1.15rem; min-width: 0; border-right: 1px solid #c7d6d2; background: #f2f6f3; padding: 1.15rem; }
 
 .agent-sidebar-heading { display: flex; align-items: start; justify-content: space-between; gap: 0.7rem; border-bottom: 1px solid #cbdad6; padding-bottom: 1rem; }
@@ -695,6 +715,42 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-error { margin: 0; border-top: 1px solid #e0bbb3; background: #fff3f0; padding: 0.65rem clamp(1rem, 3vw, 2rem); color: #763630; font-size: 0.8rem; }
 
+.admin-quota-management { display: grid; gap: 1.25rem; }
+
+.admin-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #c7d6d2; padding-bottom: 1rem; }
+
+.admin-section-heading h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 2rem; font-weight: 600; }
+
+.admin-section-heading > p { max-width: 42rem; margin: 0; color: #607579; font-size: 0.82rem; line-height: 1.5; text-align: right; }
+
+.admin-quota-list { display: grid; gap: 1rem; }
+
+.admin-quota-card { display: grid; gap: 1rem; border: 1px solid #c7d6d2; background: #fffefa; padding: 1rem; }
+
+.admin-quota-card header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+
+.admin-quota-card h2 { margin: 0; color: #315860; font-family: Georgia, "Times New Roman", serif; font-size: 1.15rem; font-weight: 600; }
+
+.admin-quota-card header p, .admin-quota-card header span { margin: 0.25rem 0 0; color: #708084; font-size: 0.74rem; }
+
+.admin-quota-card header span { overflow-wrap: anywhere; text-align: right; }
+
+.admin-quota-card dl { display: flex; gap: 1.25rem; margin: 0; }
+
+.admin-quota-card dl div { display: grid; gap: 0.2rem; }
+
+.admin-quota-card dt { color: #708084; font-size: 0.72rem; }
+
+.admin-quota-card dd { margin: 0; color: #285862; font-size: 1.2rem; font-weight: 800; }
+
+.admin-quota-card form { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(14rem, 1fr) auto; align-items: end; gap: 0.75rem; }
+
+.admin-quota-card label { display: grid; gap: 0.3rem; color: #52666c; font-size: 0.75rem; font-weight: 750; }
+
+.admin-quota-card input { width: 100%; min-height: 2.35rem; border-color: #b8ceca; background: #fffefa; padding: 0.45rem 0.55rem; }
+
+.admin-error { margin: 0; border-left: 3px solid var(--danger); background: #fff3f0; padding: 0.65rem 0.8rem; color: #763630; font-size: 0.8rem; }
+
 .agent-drawer-trigger, .agent-drawer-backdrop { display: none; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -704,6 +760,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .agent-page-header { padding: 0 1rem; }
   .agent-header-top { align-items: flex-start; flex-direction: column; margin-bottom: 1.5rem; }
   .agent-workbench { display: block; min-height: calc(100vh - 12rem); border-right: 0; border-left: 0; }
+  .agent-quota-card { display: grid; grid-template-columns: 1fr auto; gap: 0.65rem; padding: 0.85rem 1rem; }
+  .agent-quota-card dl { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
+  .agent-quota-note { grid-column: 1 / -1; }
   .agent-drawer-trigger { display: block; position: absolute; z-index: 3; top: 1rem; right: 1rem; min-height: 2.4rem; border: 1px solid #8eb2ac; border-radius: 2px; background: #e7f0ed; color: #285862; padding: 0.45rem 0.65rem; font-size: 0.75rem; }
   .agent-thread-sidebar { position: fixed; z-index: 5; top: 0; bottom: 0; left: 0; display: none; width: min(86vw, 20rem); overflow-y: auto; border-right: 1px solid #b4c9c4; box-shadow: 12px 0 28px rgba(23, 37, 45, 0.16); }
   .agent-thread-sidebar-open { display: grid; }
@@ -736,6 +795,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .admin-shell-header { align-items: flex-start; flex-direction: column; padding: 1rem; }
   .admin-header-navigation { align-items: flex-start; flex-direction: column; gap: 0.8rem; }
   .admin-content { padding: 2rem 1rem 3rem; overflow-x: clip; }
+  .admin-section-heading { align-items: flex-start; flex-direction: column; }
+  .admin-section-heading > p { text-align: left; }
+  .admin-quota-card form { grid-template-columns: 1fr; }
   .source-workspace-tabs { overflow-x: auto; padding-bottom: 0.75rem; }
   .source-workspace-tabs button { flex: 0 0 auto; }
   .source-workspace-panel-header, .source-card-header { align-items: flex-start; flex-direction: column; }
