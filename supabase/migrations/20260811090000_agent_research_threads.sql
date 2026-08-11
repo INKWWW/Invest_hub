@@ -37,7 +37,6 @@ create index research_thread_artifacts_thread_created_idx
 create or replace function public.prevent_research_owner_change()
 returns trigger
 language plpgsql
-security definer
 set search_path = public
 as $$
 begin
