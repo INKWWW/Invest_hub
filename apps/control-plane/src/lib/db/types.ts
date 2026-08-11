@@ -44,6 +44,64 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
         Relationships: [];
       };
+      research_threads: {
+        Row: {
+          id: string;
+          owner_id: string;
+          title: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          title: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["research_threads"]["Insert"]>;
+        Relationships: [];
+      };
+      research_messages: {
+        Row: {
+          id: string;
+          thread_id: string;
+          owner_id: string;
+          role: "user" | "assistant";
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          thread_id: string;
+          owner_id: string;
+          role: "user" | "assistant";
+          content: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["research_messages"]["Insert"]>;
+        Relationships: [];
+      };
+      research_thread_artifacts: {
+        Row: {
+          id: string;
+          thread_id: string;
+          owner_id: string;
+          artifact_type: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          thread_id: string;
+          owner_id: string;
+          artifact_type: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["research_thread_artifacts"]["Insert"]>;
+        Relationships: [];
+      };
       invites: {
         Row: {
           id: string;
