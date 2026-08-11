@@ -28,7 +28,14 @@ describe("ResearchAgentShell", () => {
   });
 
   it("renders the A workbench hierarchy with a mobile drawer trigger", () => {
-    const html = renderToStaticMarkup(<ResearchAgentShell initialThreads={threads} />);
+    const html = renderToStaticMarkup(<ResearchAgentShell initialThreads={threads} initialQuota={{
+      ownerId: "user-one",
+      lifetimeUnits: 8,
+      reservedUnits: 1,
+      settledUnits: 3,
+      availableUnits: 4,
+      updatedAt: "2099-01-01T00:00:00.000Z",
+    }} />);
     expect(html).toContain('data-testid="agent-workbench"');
     expect(html).toContain('aria-label="研究会话列表"');
     expect(html).toContain('aria-label="打开研究会话列表"');
@@ -37,11 +44,14 @@ describe("ResearchAgentShell", () => {
     expect(html).toContain("昨天的研究");
     expect(html).toContain('data-testid="agent-composer"');
     expect(html).toContain("研究执行暂未开放");
+    expect(html).toContain("可用额度");
+    expect(html).toContain("已预占");
+    expect(html).toContain("已结算");
   });
 
   it("does not expose deferred tools or management affordances in the chat shell", () => {
     const html = renderToStaticMarkup(<ResearchAgentShell initialThreads={[]} />);
-    for (const forbidden of ["搜索", "文件夹", "收藏", "分支", "Regenerate", "上传", "技术画线分析", "Quota", "Research Progress"]) {
+    for (const forbidden of ["搜索", "文件夹", "收藏", "分支", "Regenerate", "上传", "技术画线分析", "Research Progress"]) {
       expect(html).not.toContain(forbidden);
     }
   });

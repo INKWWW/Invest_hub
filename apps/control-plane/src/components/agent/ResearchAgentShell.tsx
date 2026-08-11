@@ -7,6 +7,7 @@ import type {
   ResearchThread,
   ResearchThreadDetail,
 } from "../../lib/db/repositories/research-threads";
+import type { ResearchQuota } from "../../lib/db/repositories/research-quota";
 
 type ThreadSummary = Pick<ResearchThread, "id" | "title" | "createdAt" | "updatedAt">;
 type AgentThreadDetail = Omit<ResearchThreadDetail, "ownerId" | "messages" | "artifacts"> & {
@@ -94,8 +95,18 @@ async function readJson<T>(response: Response): Promise<T> {
   return payload;
 }
 
-export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadSummary[] }) {
+const EMPTY_QUOTA: ResearchQuota = {
+  ownerId: "",
+  lifetimeUnits: 0,
+  availableUnits: 0,
+  reservedUnits: 0,
+  settledUnits: 0,
+  updatedAt: null,
+};
+
+export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA }: { initialThreads: ThreadSummary[]; initialQuota?: ResearchQuota }) {
   const [threads, setThreads] = useState(initialThreads);
+  const [quota, setQuota] = useState(initialQuota);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(initialThreads[0]?.id ?? null);
   const [detail, setDetail] = useState<AgentThreadDetail | null>(null);
   const [draft, setDraft] = useState("");
@@ -124,6 +135,31 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
       .catch(() => { if (!cancelled) setError("会话读取失败，请刷新重试。"); });
     return () => { cancelled = true; };
   }, [activeThreadId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshQuota() {
+      try {
+        const { quota: next } = await readJson<{ quota: { lifetime_units: number; available_units: number; reserved_units: number; settled_units: number; updated_at: string | null } }>(await fetch("/api/agent/quota", { cache: "no-store" }));
+        if (!cancelled) setQuota({
+          ownerId: initialQuota.ownerId,
+          lifetimeUnits: next.lifetime_units,
+          availableUnits: next.available_units,
+          reservedUnits: next.reserved_units,
+          settledUnits: next.settled_units,
+          updatedAt: next.updated_at,
+        });
+      } catch {
+        // The server-rendered snapshot remains visible if the refresh is unavailable.
+      }
+    }
+    void refreshQuota();
+    window.addEventListener("focus", refreshQuota);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshQuota);
+    };
+  }, [initialQuota.ownerId]);
 
   function openThread(threadId: string) {
     setActiveThreadId(threadId);
@@ -228,6 +264,12 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
   const groupedThreads = groupThreads(threads);
 
   return <section className="agent-workbench" data-testid="agent-workbench">
+    <aside className="agent-quota-card" aria-label="研究额度">
+      <div><p className="agent-kicker">Research Quota</p><h2>研究额度</h2></div>
+      <div className="agent-quota-available"><strong>{quota.availableUnits}</strong><span>可用额度</span></div>
+      <dl><div><dt>生命周期总额</dt><dd>{quota.lifetimeUnits}</dd></div><div><dt>已预占</dt><dd>{quota.reservedUnits}</dd></div><div><dt>已结算</dt><dd>{quota.settledUnits}</dd></div></dl>
+      <p className="agent-quota-note">额度只在正式 Agent Run 开始时预占；当前研究执行尚未开放。</p>
+    </aside>
     <button className="agent-drawer-trigger" type="button" aria-label="打开研究会话列表" onClick={() => setDrawerOpen(true)}>会话列表</button>
     {drawerOpen ? <button className="agent-drawer-backdrop" type="button" aria-label="关闭研究会话列表" onClick={() => setDrawerOpen(false)} /> : null}
     <aside className={`agent-thread-sidebar${drawerOpen ? " agent-thread-sidebar-open" : ""}`} aria-label="研究会话列表">

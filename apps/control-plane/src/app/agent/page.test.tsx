@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const authMocks = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 const threadMocks = vi.hoisted(() => ({ listResearchThreads: vi.fn() }));
+const quotaMocks = vi.hoisted(() => ({ getResearchQuota: vi.fn() }));
 const navigationMocks = vi.hoisted(() => ({ redirect: vi.fn((value: string) => { throw new Error(`redirect:${value}`); }) }));
 
 vi.mock("../../lib/auth/current-user", () => authMocks);
 vi.mock("../../lib/db/repositories/research-threads", () => threadMocks);
+vi.mock("../../lib/db/repositories/research-quota", () => quotaMocks);
 vi.mock("next/navigation", () => navigationMocks);
 
 import AgentPage from "./page";
@@ -16,13 +18,24 @@ describe("AgentPage", () => {
     vi.clearAllMocks();
     authMocks.getCurrentUser.mockResolvedValue({ id: "user-one", email: "one@example.invalid", role: "user" });
     threadMocks.listResearchThreads.mockResolvedValue([]);
+    quotaMocks.getResearchQuota.mockResolvedValue({
+      ownerId: "user-one",
+      lifetimeUnits: 8,
+      reservedUnits: 1,
+      settledUnits: 3,
+      availableUnits: 4,
+      updatedAt: "2099-01-01T00:00:00.000Z",
+    });
   });
 
   it("is an authenticated independent Agent entry", async () => {
     const html = renderToStaticMarkup(await AgentPage());
     expect(html).toContain("投资研究 Agent");
     expect(html).toContain('href="/agent"');
+    expect(html).toContain("可用额度");
+    expect(html).toContain("4");
     expect(threadMocks.listResearchThreads).toHaveBeenCalledWith("user-one");
+    expect(quotaMocks.getResearchQuota).toHaveBeenCalledWith("user-one");
   });
 
   it("redirects unauthenticated visitors to the existing login protection", async () => {
