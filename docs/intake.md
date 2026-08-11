@@ -1779,3 +1779,40 @@ X 日度研判
 ### 26.5 后续门禁
 
 新 V2 会话先以本节、当前项目状态、V1/V1.1 工程日志为输入起草 V2 Spec；Spec 获批准后再编写 V2 implementation plan。任何 V2 代码、数据库迁移、共享协议改动、部署或真实 X 采集都不由本节授权。
+
+---
+
+## 27. 投资研究 Agent 独立能力模块输入（2026-08-11）
+
+本节记录独立于既有模块 2–4 编号体系的投资研究 Agent 产品输入，不构成 Feature Contract、Delivery Plan 或实现授权。该独立能力仍须按照 Matt Pocock profile 完成完整 Spec 与 ticket graph 的审阅批准。
+
+- **研究会话主题切换 TODO：** 评估让一个研究会话保持连贯研究目标、并在用户切换到实质无关的投资主题时创建新会话的实现与交互成本；如果首版成本过高，则不在首版实现，留待后续迭代。
+- **Memory 首版边界：** 同一研究会话使用可压缩但可追溯的 Thread Memory；跨会话 Personal Long-term Memory 只包含 Interest Memory、Research Conclusion Memory 与 Preference Memory，不把完整聊天副本或系统 Skills 当作个人长期记忆。
+- **Memory 写入与生命周期：** 已成功完成的 Agent Run 可以自动产生 Memory Candidate；低敏感关注信息和具备时间、条件、Run/Artifact 来源的关键结论可自动写入，真实持仓、资产规模和个人财务状况只能在用户明确要求后保存。历史结论不得被静默覆盖，应保留被取代或失效关系；用户可以查看、修改和删除自己的 Memory。
+- **Thread Memory 压缩：** 完整聊天记录继续用于阅读和审计；进入模型上下文的内容可以压缩为最近对话、滚动摘要、当前研究状态与必要证据引用，且摘要必须能追溯到原始会话。
+- **Agent Trace 与管理员审计：** 每次 Agent Run 必须形成结构化 Trace，覆盖编排步骤、模型与 Tool 调用元数据、耗时、用量、错误、输入输出摘要和 Artifact 引用；不得记录密钥、Cookie、浏览器凭据或模型隐藏思维过程，X/Discord 原始内容优先保留引用与 hash 而非在 Trace 中重复复制。管理员可以查看全部用户会话、Memory 与 Trace，管理员的查看、修改和删除操作本身必须留有审计记录。
+- **可见研究过程：** 前端在 Agent Run 执行期间展示由真实 Runtime 事件、Tool 调用、来源进度、阶段性 Commentary 与 Provider 可提供的 Reasoning Summary 组成的用户安全过程；不展示原始 Chain-of-thought。运行时默认展开，完成后可以折叠并重新查看，失败时保留已完成步骤和安全失败原因。当前 Codex CLI Provider 尚未读取 JSONL 事件，首版必须先通过独立 Spike 确认 `codex exec --json` 的实际事件合同与脱敏边界，且前端合同不得绑定单一 Provider 的私有事件格式。
+- **Codex CLI 帮助级事实：** 2026-08-11 本机 `codex-cli 0.144.3` 的帮助文本暴露 `codex exec --json`、`codex exec resume` 与 `--image`；这只证明命令入口存在，不证明 JSONL 事件 Schema 稳定、网站断线后可恢复、进程取消安全、Provider session 可作为 Research Thread 权威，或图片链路已满足项目隔离与保留要求。上述行为仍须在 Feature Contract 后通过代表性 Spike 验证。
+- **Agent Skill 编排与准入：** Skill Description 用于发现候选、主动推荐与 Auto 路由；Agent 根据用户问题和研究上下文进行语义选择，Runtime 再确定性检查启用状态、固定版本、输入合同、Tool 权限、适用市场、调用上限和停止条件。外部 Skill 必须固定来源版本，经过许可证与安全审阅、必要的项目配置、Eval 和管理员试用后才能对普通用户启用；安装不等于启用。
+- **Skill 提供约定：** 用户后续提供或安装的 Skill 默认只供 Codex 开发环境使用，不自动写入 Invest Hub 或成为网站 Runtime Skill；只有用户明确说明某个 Skill 专用于 Invest Hub 时，才进入项目的 Feature Contract、版本化适配与发布流程。本节列出的首批四个 Skill 已被用户明确指定用于 Invest Hub 网站 Agent，并允许进入后续导入流程。第三方 Skill 保留固定版本的上游原文，Invest Hub 只维护轻量的项目 Description、UI 文案与 Runtime 配置，不为本批次额外包装或重写其工作流。
+- **Invest Hub Agent Skill 范围：** 核心 Agent 首批接入 `investment-research`、`investment-checklist` 与 `portfolio-review`。`investment-research` 用于用户明确要求对一家上市公司进行商业模式、护城河、管理层、行业、风险和估值的综合深度研究；`investment-checklist` 不依赖用户预先提供结构化投资逻辑，当用户明确提到正在作出投资决策或准备下单时，Agent 主动询问是否需要使用巴菲特买入前 Checklist，并在用户确认后使用，重点复核核心假设、反面证据、估值与安全边际、风险和决策纪律，不用于初次筛选或完整公司研究；`portfolio-review` 只在用户主动提供持仓并要求从组合层面分析集中度、相关性、风险、机会成本或调整方向时使用，不能仅因用户提到持有某只股票而自动调用。用户自研技术画线 Skill 与核心 Agent 并行开发，但不进入核心 Agent 的首个 Feature Contract；交付后通过独立集成 feature 接入。该 Skill 首版唯一有效输入是用户主动上传的 K 线截图，不支持只提供股票名称或代码后由系统取数，不接入富途，不获取 OHLCV，不生成原始 K 线图，也不预设其内部画线流程与输出边界。
+- **显式 Skill 交互：** 聊天框上方展示可用 Skill 按钮；一次 Agent Run 最多允许用户点选一个，选中后在聊天输入区以可见引用呈现，并作为结构化选择随该次提问提交。未选择时进入 Auto，Agent 可以选择一个 Skill，也可以进行不依赖这些 Skill 的通用投资问答；用户显式选择后锁定该 Skill，不得静默切换为其他 Skill。若显式选择与输入不匹配，Agent 先说明缺失信息并追问，只有输入满足合同、Agent Run 正式开始后才扣 Research Quota。实际执行记录应显示最终使用的 Skill，选择不跨 Agent Run 永久保留。
+- **Checklist 推荐交互：** Auto 识别到明确的投资决策或下单意图时，先询问用户是否使用“下单前巴菲特拷问”；用户以自然语言确认即可视为下一次 Agent Run 显式选择该 Skill，不要求再次点击按钮，并在输入区与实际执行记录中显示 Skill 引用。用户拒绝后，同一标的、同一次下单意图内不重复推荐；只有出现新的标的、新的下单决策或显著变化的投资条件时才可再次询问。
+- **首批 Skill 按钮文案：** Auto 路由模式对用户显示为“智能”，`investment-research` 显示为“大师投研”，`investment-checklist` 显示为“下单前巴菲特拷问”，`portfolio-review` 显示为“持仓组合分析”，自研 Skill 暂用“技术画线分析”。展示文案与内部稳定 Skill ID、Auto 枚举分离，后续修改文案不得改变运行合同。
+- **Agent 页面初步结构与原型结论：** 页面保持简洁的双栏聊天工作台：左侧显示当前用户自己的 Research Thread 列表，右侧显示当前 Thread 的多轮对话与对话框；可用 Skill 以轻量按钮放在对话框上方。整体视觉沿用当前 Invest Hub 的颜色、字体、边框、间距与交互语气，不另建一套通用 ChatGPT/Codex 仿制风格。2026-08-11 的 throwaway UI prototype 已选择 A“纸面工作台”作为后续 Feature Contract 的页面结构参考，B“Codex 专注界面”和 C“研究台”仅保留为被否决的比较材料。移动端结构、会话列表信息密度、对话消息层级、Research Progress 的展开方式和输入区控件继续在页面交互 Discovery 中确认。
+- **X/Discord Agent sourcing 延期：** 首版投资研究 Agent 不设计、不开发、也不调用 Invest Hub 已有的 X 原始内容或 Discord 派生总结能力，不建设对应 Agent Tool、检索编排、引用合同或 Eval。现有 X/Discord 采集、持久化与 Reader 能力保持不变；未来若接入 Agent，必须作为独立能力重新完成 Feature Contract 与 Delivery Plan，本节不预留实现承诺。
+- **首版事实来源：** Agent 可以使用用户提供的文字、上市公司或监管机构披露、公开网络资料，以及经过批准的行情与财务数据 Tool；不调用 X/Discord，也不允许任意 shell 或未经批准的数据源。具有时效性的外部事实必须显示来源与日期，来源不足时不得把模型已有知识伪装成当前事实。
+- **自研技术画线 Skill 并行与集成门禁：** 核心 Agent Feature Contract 在用户明确批准时冻结，创建 draft `spec.md` 不构成冻结。自研 Skill 可以与核心 Agent 实现并行开发；核心只预留通用的版本化 Skill 准入边界，不提前实现推测性的图片上传或画线逻辑。Skill 交付后，单独完成“技术画线 Skill 集成”Feature Contract、ticket graph、输入输出与安全检查，再接入 Agent；集成发布前隐藏“技术画线分析”按钮。届时用户未上传 K 线截图只提示补充输入，不启动 Agent Run、不预占 Research Quota。
+- **额度与并发：** 首版 Research Quota 是管理员手工分配的用户余额，不设计月度周期。Agent Run 正式开始时原子预占一次，成功形成研究回答后结算；Scope Refusal、补充信息追问、用户取消和技术失败均释放预占。单一用户同时最多运行一个 Agent Run。
+- **Run 生命周期：** Agent Run 属于服务器侧可恢复任务，不依赖浏览器连接；刷新或重新打开页面后可以继续查看进度。用户可以停止正在运行的 Run，停止必须终止 Provider 进程并释放额度。首版不做回答分支、编辑后重跑或一键 Regenerate；失败后由用户明确发起新的重试 Run。
+- **产品帮助例外：** Agent 可以回答 Invest Hub 自身功能、额度、会话和操作方式，并可以进行简短问候；该路径不调用研究 Tool、不写长期 Memory、不扣 Research Quota。其他非投资话题继续返回 Scope Refusal。
+- **删除与保留：** 删除 Research Thread 时删除该用户可见的消息、Agent Run 与会话 Artifact，但不静默删除已独立形成的 Personal Long-term Memory；界面应提示用户到 Memory 管理页单独处理。只含脱敏运行元数据、不含聊天正文副本的 Trace 最长保留 30 天用于排错，之后自动清除。
+- **用户与管理员管理面：** 用户账户菜单提供极简“我的记忆”页面，用于查看、修改和删除自己的 Memory；管理员现有 `/admin` 增加独立 Agent 管理工作区，用于管理用户额度并查看全部用户的 Research Thread、Memory 与 Trace。聊天左栏不承载管理功能。
+- **A 原型交互确认：** Agent 作为独立顶层入口；Research Thread 自动生成短标题并允许用户重命名或删除，按时间分组；移动端左栏折叠为抽屉；页面持续显示剩余 Research Quota。首版不增加会话搜索、文件夹、收藏或分支。
+- **Research Thread 权威：** Invest Hub 数据库是会话消息、Thread Memory、Personal Long-term Memory、Run 与 Artifact 的唯一事实来源。Codex Provider session 只能作为可丢弃的运行优化，不能成为多轮连续性的权威；任一 Run 必须能够从用户隔离的持久化上下文重建。
+- **首版文件输入：** 核心 Agent 只接受文字输入，不支持 PDF、Word、Excel、CSV、财报截图或其他通用文件解析，也不为尚未交付的技术画线 Skill 提前建设上传入口。后续独立集成 feature 才按该 Skill 的实际合同增加 K 线截图上传；K 线截图是该 Skill 的强制输入，该能力不得被泛化为通用图片或文件上传。具体图片格式、大小、保留与删除规则由集成 Feature Contract 冻结。
+- **本地 Worker 可用性：** 测试期明确接受网站 Agent 依赖用户本机 Codex CLI Worker 在线；电脑休眠、Worker 关闭或登录失效时，页面显示“Agent 暂时不可用”，历史 Research Thread 仍可读取，但不接受或无限排队新的 Agent Run，也不建设云端 Provider fallback。
+- **首版资产范围：** 支持 A 股、港股、美股、ETF、基金和上市 REITs，以及直接服务于这些证券研究的行业、宏观、商品、估值、技术分析、投资方法、组合与风险问题。加密货币、外汇、衍生品交易、债券和非上市资产属于“暂不支持的投资范围”，不得误判为完全无关话题；纯暂不支持请求不启动 Agent Run、不扣 Research Quota。
+- **混合话题：** 同一请求同时包含投资内容与无关内容时，只处理投资部分并明确拒绝其余部分；只要投资 Agent Run 正式执行，就正常结算一次额度。无关部分不进入研究 Tool、Trace 输入输出摘要或 Personal Long-term Memory。
+- **管理员禁止冒充：** 管理员可以按已授权边界查看、修改或删除用户研究数据并管理额度，但不得以用户身份创建消息、继续 Research Thread 或发起 Agent Run。所有管理员操作必须保留真实管理员身份与审计记录。
+- **证据不足与额度：** 公开来源不可用或互相矛盾时，Agent 只能输出已确认事实、分歧和缺失信息，不得生成确定性当前结论。若技术失败导致没有形成可用研究回答，则释放 Quota Reservation；若形成了可用的 Evidence-limited Result，则作为成功研究回答结算一次 Research Quota。

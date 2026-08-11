@@ -1,0 +1,510 @@
+<!doctype html>
+<!-- Three variants of the Invest Hub Agent chat page, switchable via ?variant=, in a standalone throwaway prototype. -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:," />
+  <title>Invest Hub Agent Chat — Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17252d;
+      --surface: #f2f4f1;
+      --paper: #fffefa;
+      --muted: #50636a;
+      --line: #d2dcda;
+      --accent: #235a66;
+      --accent-dark: #173d46;
+      --accent-soft: #e5efed;
+      --success: #297252;
+      --warning: #a86b20;
+      --shadow: 0 12px 32px rgba(23, 37, 45, 0.09);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--surface);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-width: 320px; min-height: 100%; margin: 0; }
+    body { background: var(--surface); }
+    button, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, textarea:focus-visible {
+      outline: 3px solid #9cc9cc;
+      outline-offset: 2px;
+    }
+
+    .prototype-flag {
+      position: fixed;
+      z-index: 50;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 1px solid #b9c7c4;
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: #455b60;
+      background: rgba(255, 254, 250, 0.92);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      box-shadow: 0 4px 12px rgba(23, 37, 45, .06);
+      backdrop-filter: blur(10px);
+    }
+
+    .product-mark {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 27px;
+      font-weight: 700;
+      letter-spacing: -.035em;
+    }
+
+    .muted { color: var(--muted); }
+    .eyebrow {
+      margin: 0 0 5px;
+      color: #40626a;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    .avatar {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      flex: 0 0 30px;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--accent);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .session-list { display: grid; gap: 3px; }
+    .session-group { margin: 18px 9px 7px; color: #6a7d80; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .session-button {
+      width: 100%;
+      border: 0;
+      border-radius: 6px;
+      padding: 9px 10px;
+      color: #32484e;
+      background: transparent;
+      overflow: hidden;
+      text-align: left;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .session-button:hover, .session-button.active { color: var(--accent-dark); background: var(--accent-soft); }
+
+    .new-chat {
+      width: 100%;
+      border: 1px solid #a8bfbc;
+      border-radius: 6px;
+      padding: 9px 12px;
+      color: var(--accent-dark);
+      background: var(--paper);
+      font-weight: 760;
+      text-align: left;
+    }
+    .new-chat:hover { background: var(--accent-soft); }
+
+    .skill-row { display: flex; gap: 7px; overflow-x: auto; padding: 1px 1px 7px; scrollbar-width: thin; }
+    .skill {
+      flex: 0 0 auto;
+      border: 1px solid #b7ceca;
+      border-radius: 999px;
+      padding: 6px 9px;
+      color: #315860;
+      background: var(--paper);
+      font-size: 11px;
+      font-weight: 780;
+      white-space: nowrap;
+    }
+    .skill:hover { background: var(--accent-soft); }
+    .skill.selected { border-color: var(--accent); color: #fff; background: var(--accent); }
+
+    .composer-box {
+      border: 1px solid #aebfbc;
+      border-radius: 10px;
+      padding: 10px;
+      background: var(--paper);
+      box-shadow: 0 8px 24px rgba(23, 37, 45, .07);
+    }
+    .composer-box textarea {
+      display: block;
+      width: 100%;
+      min-height: 62px;
+      resize: none;
+      border: 0;
+      padding: 3px 4px 8px;
+      color: var(--ink);
+      background: transparent;
+      line-height: 1.5;
+    }
+    .composer-box textarea:focus { outline: 0; }
+    .composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .selection-state { color: #5e7378; font-size: 11px; }
+    .send {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--accent);
+      font-weight: 900;
+    }
+    .send:hover { background: var(--accent-dark); }
+
+    .user-message {
+      width: min(82%, 610px);
+      margin-left: auto;
+      border: 1px solid #d6dfdc;
+      border-radius: 12px 12px 3px 12px;
+      padding: 11px 14px;
+      background: #f7f4ee;
+      line-height: 1.65;
+    }
+    .agent-message { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 11px; }
+    .agent-copy { min-width: 0; }
+    .agent-copy h2 { margin: 0 0 9px; font-family: Georgia, "Times New Roman", serif; font-size: 20px; letter-spacing: -.025em; }
+    .agent-copy p { margin: 0 0 11px; line-height: 1.72; }
+    .agent-copy ul { margin: 8px 0 12px; padding-left: 20px; line-height: 1.68; }
+    .source-note { color: #60757a; font-size: 11px; }
+
+    .progress-card {
+      margin: 16px 0 18px 42px;
+      border-left: 3px solid var(--accent);
+      padding: 3px 0 3px 15px;
+    }
+    .progress-card summary { cursor: pointer; color: #274f59; font-size: 12px; font-weight: 800; }
+    .progress-steps { display: grid; gap: 7px; margin-top: 10px; color: #526a6f; font-size: 12px; }
+    .progress-step { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 7px; align-items: start; }
+    .progress-step.done span:first-child { color: var(--success); }
+
+    /* Variant A — Paper Workbench */
+    .variant-a { min-height: 100vh; padding-bottom: 82px; }
+    .a-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      height: 72px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 max(28px, calc((100vw - 1320px) / 2));
+      background: var(--paper);
+    }
+    .a-nav { display: flex; align-items: center; gap: 5px; margin-left: 28px; }
+    .a-nav button { border: 0; border-radius: 5px; padding: 7px 10px; color: #52666c; background: transparent; font-weight: 750; }
+    .a-nav button.active { color: var(--accent-dark); background: var(--accent-soft); }
+    .a-account { margin-left: auto; color: #52666c; font-size: 12px; }
+    .a-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: calc(100vh - 72px); max-width: 1320px; margin: 0 auto; }
+    .a-sidebar { border-right: 1px solid var(--line); padding: 28px 16px; background: #f7f8f5; }
+    .a-main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; background: var(--paper); }
+    .a-thread-head { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e0e6e3; padding: 24px clamp(24px, 5vw, 70px) 17px; }
+    .a-thread-head h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 21px; letter-spacing: -.03em; }
+    .a-thread-head small { color: #60757a; }
+    .a-conversation { width: min(100%, 850px); margin: 0 auto; padding: 38px 34px 150px; }
+    .a-composer { position: sticky; bottom: 0; width: min(calc(100% - 46px), 850px); margin: 0 auto; padding: 13px 0 22px; background: linear-gradient(180deg, rgba(255,254,250,0), var(--paper) 20%); }
+
+    /* Variant B — Codex Focus */
+    .variant-b { display: grid; grid-template-columns: 282px minmax(0, 1fr); min-height: 100vh; padding-bottom: 78px; background: #edf1ee; }
+    .b-sidebar { display: flex; flex-direction: column; min-height: 100vh; padding: 25px 16px; color: #eaf2ef; background: #19373d; }
+    .b-sidebar .product-mark { padding: 0 9px 22px; color: #fffefa; }
+    .b-sidebar .new-chat { border-color: #67848a; color: #f6fbf8; background: #244a52; }
+    .b-sidebar .new-chat:hover { background: #2c5962; }
+    .b-sidebar .session-group { color: #8eaaad; }
+    .b-sidebar .session-button { color: #c7d7d6; }
+    .b-sidebar .session-button:hover, .b-sidebar .session-button.active { color: #fff; background: #2a5057; }
+    .b-sidebar-foot { margin-top: auto; border-top: 1px solid #36565c; padding: 18px 9px 0; color: #a9bdbc; font-size: 11px; line-height: 1.5; }
+    .a-main, .b-main { grid-template-columns: minmax(0, 1fr); }
+    .b-main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; }
+    .b-thread-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 32px; }
+    .b-thread-head h1 { margin: 0; font-size: 14px; font-weight: 800; }
+    .b-thread-head span { color: #5d7479; font-size: 11px; }
+    .b-conversation { width: min(100%, 760px); margin: 0 auto; padding: 42px 26px 160px; }
+    .b-conversation .user-message { border: 0; border-radius: 9px; background: #dde6e2; }
+    .b-conversation .agent-message { margin-top: 30px; }
+    .b-composer { position: sticky; bottom: 0; width: min(calc(100% - 40px), 760px); margin: 0 auto; padding: 15px 0 24px; background: linear-gradient(180deg, rgba(237,241,238,0), #edf1ee 22%); }
+    .b-composer .composer-box { border-radius: 16px; }
+
+    /* Variant C — Research Desk */
+    .variant-c { min-height: 100vh; padding: 70px 0 80px; background: #eef2ef; }
+    .c-topbar {
+      position: fixed;
+      z-index: 5;
+      top: 0;
+      right: 0;
+      left: 0;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      height: 70px;
+      border-bottom: 1px solid var(--line);
+      padding: 0 28px;
+      background: var(--paper);
+    }
+    .c-topbar .muted { margin-left: auto; font-size: 12px; }
+    .c-shell { display: grid; grid-template-columns: 230px minmax(0, 1fr) 260px; min-height: calc(100vh - 150px); }
+    .c-sidebar { border-right: 1px solid var(--line); padding: 24px 14px; background: #f6f7f4; }
+    .c-main { min-width: 0; padding: 0 24px; }
+    .c-thread-title { width: min(100%, 780px); margin: 0 auto; border-bottom: 1px solid var(--line); padding: 24px 8px 15px; }
+    .c-thread-title h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 22px; letter-spacing: -.03em; }
+    .c-conversation { width: min(100%, 780px); margin: 0 auto; padding: 30px 8px 165px; }
+    .c-context { border-left: 1px solid var(--line); padding: 24px 18px; background: #f6f7f4; }
+    .context-card { border-top: 2px solid var(--accent); padding: 13px 0 18px; }
+    .context-card + .context-card { border-top-width: 1px; }
+    .context-card h3 { margin: 0 0 8px; font-family: Georgia, "Times New Roman", serif; font-size: 16px; }
+    .context-card p, .context-card li { color: #52686d; font-size: 11px; line-height: 1.65; }
+    .context-card ul { margin: 0; padding-left: 17px; }
+    .c-composer { position: fixed; z-index: 4; right: 284px; bottom: 0; left: 254px; padding: 12px 28px 22px; background: linear-gradient(180deg, rgba(238,242,239,0), #eef2ef 22%); }
+    .c-composer > div { max-width: 780px; margin: 0 auto; }
+
+    .prototype-switcher {
+      position: fixed;
+      z-index: 100;
+      right: 50%;
+      bottom: 16px;
+      display: grid;
+      grid-template-columns: 38px minmax(210px, auto) 38px;
+      align-items: center;
+      transform: translateX(50%);
+      overflow: hidden;
+      border: 1px solid #557078;
+      border-radius: 999px;
+      color: #eef7f4;
+      background: #172f35;
+      box-shadow: var(--shadow);
+    }
+    .prototype-switcher button { height: 38px; border: 0; color: #fff; background: transparent; font-size: 17px; }
+    .prototype-switcher button:hover { background: #28484f; }
+    .switcher-label { padding: 0 10px; text-align: center; }
+    .switcher-label strong { display: block; font-size: 11px; }
+    .switcher-label span { display: block; margin-top: 1px; color: #a9c0bf; font-size: 9px; }
+
+    @media (max-width: 860px) {
+      .prototype-flag { top: 6px; }
+      .a-topbar { height: 64px; padding: 0 16px; }
+      .a-nav { display: none; }
+      .a-shell, .variant-b { grid-template-columns: 1fr; }
+      .a-sidebar, .b-sidebar, .c-sidebar, .c-context { display: none; }
+      .a-conversation, .b-conversation, .c-conversation { padding-inline: 18px; }
+      .a-thread-head { padding-inline: 18px; }
+      .b-thread-head { padding-inline: 18px; }
+      .c-shell { grid-template-columns: 1fr; }
+      .c-main { padding: 0; }
+      .c-composer { right: 0; left: 0; padding-inline: 18px; }
+      .prototype-switcher { bottom: 8px; grid-template-columns: 36px minmax(180px, auto) 36px; }
+      .user-message { width: 92%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="prototype-flag">Prototype · no real data</div>
+  <main id="app"></main>
+  <div class="prototype-switcher" aria-label="原型样式切换">
+    <button type="button" id="prev" aria-label="上一个样式">←</button>
+    <div class="switcher-label"><strong id="variant-label"></strong><span id="state-label"></span></div>
+    <button type="button" id="next" aria-label="下一个样式">→</button>
+  </div>
+
+  <script>
+    const variants = {
+      A: { name: "纸面工作台", note: "最贴近当前 Invest Hub" },
+      B: { name: "Codex 专注界面", note: "侧栏更强、内容更沉浸" },
+      C: { name: "研究台", note: "把研究上下文持续放在右侧" },
+    };
+
+    const state = {
+      variant: getVariant(),
+      selectedSkill: "智能",
+      activeSession: "腾讯估值与回购",
+    };
+
+    function getVariant() {
+      const value = new URLSearchParams(location.search).get("variant")?.toUpperCase();
+      return variants[value] ? value : "A";
+    }
+
+    function sessionMarkup(theme = "light") {
+      return `
+        <button class="new-chat" type="button" data-new-chat>＋ 新建对话</button>
+        <p class="session-group">今天</p>
+        <div class="session-list">
+          ${sessionButton("腾讯估值与回购")}
+          ${sessionButton("宁德时代下单检查")}
+        </div>
+        <p class="session-group">过去 7 天</p>
+        <div class="session-list">
+          ${sessionButton("半导体设备行业判断")}
+          ${sessionButton("当前持仓组合复盘")}
+        </div>`;
+    }
+
+    function sessionButton(name) {
+      const active = state.activeSession === name ? " active" : "";
+      return `<button type="button" class="session-button${active}" data-session="${name}">${name}</button>`;
+    }
+
+    function skillMarkup() {
+      const skills = ["智能", "大师投研", "下单前巴菲特拷问", "持仓组合分析", "技术画线分析"];
+      return `<div class="skill-row" aria-label="选择 Skill">${skills.map((skill) =>
+        `<button type="button" class="skill${state.selectedSkill === skill ? " selected" : ""}" data-skill="${skill}">${skill}</button>`
+      ).join("")}</div>`;
+    }
+
+    function composerMarkup() {
+      return `${skillMarkup()}
+        <div class="composer-box">
+          <textarea aria-label="投资问题" placeholder="询问投资相关问题……"></textarea>
+          <div class="composer-actions">
+            <span class="selection-state">本轮：${state.selectedSkill}</span>
+            <button class="send" type="button" aria-label="发送" data-send>↑</button>
+          </div>
+        </div>`;
+    }
+
+    function conversationMarkup() {
+      return `
+        <div class="user-message">腾讯目前的估值是否已经反映了游戏业务恢复和回购带来的收益？</div>
+        <details class="progress-card" open>
+          <summary>研究过程 · 已完成 4 个步骤</summary>
+          <div class="progress-steps">
+            <div class="progress-step done"><span>✓</span><span>理解问题并确定研究范围</span></div>
+            <div class="progress-step done"><span>✓</span><span>梳理公司披露与公开财务资料</span></div>
+            <div class="progress-step done"><span>✓</span><span>核对估值、回购与业务假设</span></div>
+            <div class="progress-step done"><span>✓</span><span>形成有条件的综合判断</span></div>
+          </div>
+        </details>
+        <article class="agent-message">
+          <div class="avatar">I</div>
+          <div class="agent-copy">
+            <p class="eyebrow">Invest Hub Agent</p>
+            <h2>结论：市场已经反映了部分修复，但对回购持续性的定价仍不充分。</h2>
+            <p>当前估值不能只看游戏流水恢复。更关键的是自由现金流能否持续转化为回购，以及视频号商业化是否继续提高利润质量。</p>
+            <ul>
+              <li><strong>已经计价：</strong>游戏版号恢复、利润率正常化和基础回购预期。</li>
+              <li><strong>可能低估：</strong>回购注销对每股价值的长期累积，以及高毛利业务占比提升。</li>
+              <li><strong>主要风险：</strong>监管变化、资本开支回升和回购节奏下降。</li>
+            </ul>
+            <p class="source-note">参考：公司披露 · 公开财务资料</p>
+          </div>
+        </article>`;
+    }
+
+    function renderA() {
+      return `<section class="variant-a">
+        <header class="a-topbar">
+          <p class="product-mark">Invest Hub</p>
+          <nav class="a-nav"><button type="button">信息采集</button><button type="button" class="active">研究 Agent</button></nav>
+          <span class="a-account">测试用户 · 剩余 8 次</span>
+        </header>
+        <div class="a-shell">
+          <aside class="a-sidebar">${sessionMarkup()}</aside>
+          <section class="a-main">
+            <header class="a-thread-head"><div><p class="eyebrow">Research Thread</p><h1>${state.activeSession}</h1></div><small>已自动保存</small></header>
+            <div class="a-conversation">${conversationMarkup()}</div>
+            <div class="a-composer">${composerMarkup()}</div>
+          </section>
+        </div>
+      </section>`;
+    }
+
+    function renderB() {
+      return `<section class="variant-b">
+        <aside class="b-sidebar">
+          <p class="product-mark">Invest Hub</p>
+          ${sessionMarkup("dark")}
+          <div class="b-sidebar-foot">研究 Agent<br>测试用户 · 剩余 8 次</div>
+        </aside>
+        <section class="b-main">
+          <header class="b-thread-head"><h1>${state.activeSession}</h1><span>研究 Agent · 已自动保存</span></header>
+          <div class="b-conversation">${conversationMarkup()}</div>
+          <div class="b-composer">${composerMarkup()}</div>
+        </section>
+      </section>`;
+    }
+
+    function renderC() {
+      return `<section class="variant-c">
+        <header class="c-topbar"><p class="product-mark">Invest Hub</p><strong>研究 Agent</strong><span class="muted">测试用户 · 剩余 8 次</span></header>
+        <div class="c-shell">
+          <aside class="c-sidebar">${sessionMarkup()}</aside>
+          <section class="c-main">
+            <header class="c-thread-title"><p class="eyebrow">Research Thread</p><h1>${state.activeSession}</h1></header>
+            <div class="c-conversation">${conversationMarkup()}</div>
+          </section>
+          <aside class="c-context">
+            <section class="context-card"><p class="eyebrow">当前研究</p><h3>腾讯控股 · 0700.HK</h3><p>估值、回购与游戏业务恢复</p></section>
+            <section class="context-card"><p class="eyebrow">本轮 Skill</p><h3>${state.selectedSkill}</h3><p>本轮结束后自动恢复为“智能”。</p></section>
+            <section class="context-card"><p class="eyebrow">使用的来源</p><ul><li>公司披露</li><li>公开财务资料</li><li>用户提供的信息</li></ul></section>
+          </aside>
+        </div>
+        <div class="c-composer"><div>${composerMarkup()}</div></div>
+      </section>`;
+    }
+
+    function render() {
+      const app = document.querySelector("#app");
+      app.innerHTML = state.variant === "B" ? renderB() : state.variant === "C" ? renderC() : renderA();
+      document.querySelector("#variant-label").textContent = `${state.variant} — ${variants[state.variant].name}`;
+      document.querySelector("#state-label").textContent = `${variants[state.variant].note} · Skill=${state.selectedSkill}`;
+      wireInteractions();
+    }
+
+    function wireInteractions() {
+      document.querySelectorAll("[data-skill]").forEach((button) => button.addEventListener("click", () => {
+        state.selectedSkill = button.dataset.skill;
+        render();
+      }));
+      document.querySelectorAll("[data-session]").forEach((button) => button.addEventListener("click", () => {
+        state.activeSession = button.dataset.session;
+        render();
+      }));
+      document.querySelectorAll("[data-new-chat]").forEach((button) => button.addEventListener("click", () => {
+        state.activeSession = "新对话";
+        state.selectedSkill = "智能";
+        render();
+      }));
+      document.querySelectorAll("[data-send]").forEach((button) => button.addEventListener("click", () => {
+        const textarea = button.closest(".composer-box").querySelector("textarea");
+        if (!textarea.value.trim()) textarea.placeholder = "这是样式原型，不会调用真实 Agent。";
+        else textarea.value = "";
+      }));
+    }
+
+    function switchVariant(direction) {
+      const keys = Object.keys(variants);
+      const current = keys.indexOf(state.variant);
+      state.variant = keys[(current + direction + keys.length) % keys.length];
+      const url = new URL(location.href);
+      url.searchParams.set("variant", state.variant);
+      history.replaceState({}, "", url);
+      render();
+    }
+
+    document.querySelector("#prev").addEventListener("click", () => switchVariant(-1));
+    document.querySelector("#next").addEventListener("click", () => switchVariant(1));
+    addEventListener("keydown", (event) => {
+      const target = event.target;
+      if (target.matches("input, textarea, [contenteditable='true']")) return;
+      if (event.key === "ArrowLeft") switchVariant(-1);
+      if (event.key === "ArrowRight") switchVariant(1);
+    });
+    addEventListener("popstate", () => { state.variant = getVariant(); render(); });
+
+    render();
+  </script>
+</body>
+</html>

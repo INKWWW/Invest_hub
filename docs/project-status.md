@@ -1,10 +1,14 @@
 # Project Status
 
-Last updated: 2026-08-07
+Last updated: 2026-08-11
 
 ## Current phase
 
 **V1 Discord 正式可用 MVP 已完成；个人 Discord 账号采集已阶段性结项，不再进入生产。V2 X 指定博主信息收集已完成生产部署、真实持久化范围闭环、X 专用本机常驻 Worker 的实际自动窗口完成，以及普通用户 `/x` 桌面/375px 阅读验收。当前结论为“受控生产试运行”：自动增量链路已验证，但真实关系类别与可恢复失败恢复仍未完整覆盖，因此不得标记为“V2 X 正式可用”或无人值守 SLA。**
+
+**Agent 工作流治理（2026-08-10）：** 已批准 [治理 Spec](superpowers/specs/2026-08-10-agent-workflow-governance-design.md) 与 [Implementation Plan](superpowers/plans/2026-08-10-agent-workflow-governance.md)。后续新 Agent 能力默认采用 Matt Pocock profile：`grill-with-docs → to-spec → Spec 批准 → to-tickets → 完整 ticket graph 批准 → implement`；已有 Superpowers Spec/Plan 的模块 1 工作继续以原产物为权威。两种 profile 统一遵守 `Feature Contract Approval → Delivery Plan Approval → Implementation → Verification → Release Authorization`，`ready-for-agent` 不等于用户批准，一个 feature 同一时间只能有一个执行来源。该治理变化只调整工程编排，不自动授权模块 2–4，也不放宽生产写入、部署、真实 Provider 或外部状态变更门禁。详细规则见 [Agent 工作流治理](agents/workflow.md)。
+
+**投资研究 Agent Feature Contract 与 Delivery Plan（2026-08-11）：** 用户已明确批准 Matt profile 的[完整 Spec](../.scratch/investment-research-agent/spec.md)，并在审阅后明确批准由 17 张 tracer-bullet tickets 及其 blocking edges 构成的完整 Delivery Plan；全部 ticket 使用同一批准日期与证据。获批范围是独立的核心投资研究 Agent：继续使用 Vercel、Supabase 与本机 Codex CLI Worker，Supabase 作为用户隔离的 Research Thread、Agent Run、Quota、Trace 与 Memory 权威存储；首版不接入 X/Discord Agent sourcing，技术画线 Skill 保持并行开发并在交付后走独立集成 Feature Contract。当前 implementation frontier 为 Ticket 01“Codex CLI 运行合同与安全事件 Spike”和 Ticket 02“私有 Research Thread 聊天骨架”，可按 graph 进入本地实现；Ticket 17 的 push、remote migration、Vercel deployment、Worker变更、真实生产验收等外部状态操作仍要求独立 Release Authorization。
 
 **X v4 当日判断生产修复（2026-08-06 至 2026-08-07）：** 已修复正常链路 v4 context 被 Control Plane v3 parser 拒绝、零版本终态失败 batch 无精确恢复入口，以及受审计 recovery completion 被 batch 状态机拒绝的三个断点；确定性证据校验器保持不变，并补强 v4 跨博主 Prompt 对命令式买卖句的中性改写要求。生产 Control Plane Ready deployment、两条 additive migration 与本机 Worker 均已生效。2026-08-06 的五个失败 batch 已保留旧 run 后精确恢复，全部为 `succeeded`、各一个 revision 1、`v4-x-cross-blogger-1`；已登录稳定 `/x` 显示 20:00、16:00、12:00、08:00“已更新”，新的 00:00 批次正常显示“判断处理中”。本地证据为 Control Plane 239 tests、Worker 189 tests、Supabase 42 files/663 tests、lint、production build、diff/redact gate 全通过。详见 [工程记录](engineering-journal/2026-08-06-x-v4-daily-judgement-production-repair.md)。
 
@@ -38,7 +42,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## 后续对话交接
 
-下一次新对话应先阅读 `docs/intake.md`、本文件、[V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)、[V2 工程记录](engineering-journal/2026-07-23-v2-x-local-implementation.md)、[管理员来源工作台设计](superpowers/specs/2026-07-25-admin-source-configuration-workspace-design.md)、[工作台实施计划](superpowers/plans/2026-07-25-admin-source-configuration-workspace.md)、[来源创建简化设计](superpowers/specs/2026-07-25-admin-source-creation-simplification-design.md)、[来源创建简化计划](superpowers/plans/2026-07-25-admin-source-creation-simplification.md)、[X 阅读页全量筛选设计](superpowers/specs/2026-07-26-x-reader-all-filters-design.md)、[X 阅读页全量筛选计划](superpowers/plans/2026-07-26-x-reader-all-filters.md) 与 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。X 专用常驻 Worker 已完成首个自动窗口；后续仅在用户需要正式退出受控试运行时，补充真实可恢复失败恢复与关系类别覆盖。不得重新启动个人 Discord 账号采集。
+下一次新对话应先阅读[项目踩坑反思](project-pitfalls-reflections.md)与[Agent 工作流治理](agents/workflow.md)，再阅读 `docs/intake.md`、本文件、当前 feature 的权威 Feature Contract/Delivery Plan 及相关工程记录。若继续 V2，则读取 [V2 Spec](superpowers/specs/2026-07-22-v2-x-information-collection-and-reader-design.md)、[V2 Plan](superpowers/plans/2026-07-22-v2-x-information-collection-and-reader.md)、[V2 工程记录](engineering-journal/2026-07-23-v2-x-local-implementation.md)与 [V2 Final Report](spikes/2026-07-22-v2-x-decision-report.md)。X 专用常驻 Worker 已完成首个自动窗口；后续仅在用户需要正式退出受控试运行时，补充真实可恢复失败恢复与关系类别覆盖。不得重新启动个人 Discord 账号采集。
 
 **V2 状态更正（2026-07-23）：** 上述 V2 “真实 X 待办”仅指完整采集与验收；最小、非持久化的真实 Go/No-Go 已在明确授权后完成，并因 OpenCLI 缺少 reply/repost 关系与范围完成证明而判定 `x_collection_unverified` / `opencli_contract`。未创建云端任务、未调用 Codex CLI、未推进水位、未远程迁移或部署。
 
@@ -57,6 +61,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 ## Approval status
 
 - Approved specification：
+  - [Agent 工作流治理设计](superpowers/specs/2026-08-10-agent-workflow-governance-design.md)（用户确认 2026-08-10）
   - [模块 1 总体设计](superpowers/specs/2026-07-15-invest-hub-module-1-project-design.md)
   - [Spike-01 Discord 增量采集设计](superpowers/specs/2026-07-15-spike-01-opencli-discord-incremental-design.md)
   - [Spike-02 Codex CLI 容量与质量设计](superpowers/specs/2026-07-15-spike-02-free-llm-capacity-quality-design.md)
@@ -73,6 +78,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
   - [X 跨博主当日判断总结 Spec](superpowers/specs/2026-07-31-x-cross-blogger-daily-judgement-summary-design.md)
   - [X 生产 Migration 历史对账设计](superpowers/specs/2026-08-02-x-migration-history-reconciliation-design.md)（用户确认 2026-08-02）
 - Approved implementation plan：
+  - [Agent 工作流治理计划](superpowers/plans/2026-08-10-agent-workflow-governance.md)（用户授权完成后续工作 2026-08-10）
   - [Spike-01 Discord 增量采集计划](superpowers/plans/2026-07-15-spike-01-opencli-discord-implementation-plan.md)
   - [Spike-02 Codex CLI 容量与质量计划](superpowers/plans/2026-07-15-spike-02-free-llm-capacity-quality.md)
   - [Spike-02 有界并发计划](superpowers/plans/2026-07-18-spike-02-bounded-concurrency-plan.md)
@@ -105,7 +111,7 @@ V1 已在独立 worktree 中完成多来源来源绑定/规则、有限分页、
 
 ## Current scope
 
-当前只处理模块 1「投资信息收集」。模块 2「选股研判」、模块 3「策略和复盘」和模块 4「投资体系」暂不进入实现范围。
+当前模块化主线只处理模块 1「投资信息收集」。模块 2「选股研判」、模块 3「策略和复盘」和模块 4「投资体系」暂不进入实现范围。独立的“投资研究 Agent”不归入模块 2–4，其实现范围仅限本文件顶部已记录为获批的 Feature Contract 与 17-ticket Delivery Plan。
 
 模块 1 的前期目标是建立从 Discord/X 信息采集，到原始内容持久化、规则清洗、LLM 结构化理解、批次总结、日累计总结，再到网页阅读和证据回溯的可持续流水线。
 

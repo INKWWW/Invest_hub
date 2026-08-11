@@ -1,6 +1,6 @@
-# Invest Hub Reader Context
+# Invest Hub Context
 
-This context defines the shared language for the X Reader's evidence and viewpoint presentation. It describes reader-facing concepts, not implementation details.
+This context defines the shared language for Invest Hub's Reader evidence, viewpoint presentation, and investment research Agent. It describes domain concepts, not implementation details.
 
 ## X Reader language
 
@@ -24,3 +24,80 @@ _避免_：最新渲染结果、当前批次（除非确实指同一概念）
 
 **历史窗口**：同一博主在该自然日内早于最新窗口的已持久化采集窗口，保留用于时间追溯。
 _避免_：旧数据、废弃版本
+
+## Agent research language
+
+**投资研究 Agent**：围绕用户提出的投资问题形成可追溯研究结论的 Agent；可以表达有条件的判断与操作倾向，但不替用户执行交易，也不把不确定判断包装成无条件买卖指令。
+_避免_：交易 Agent、自动投顾、选股机器人
+
+**投资研究范围**：能够直接服务于证券投资研究或投资决策的问题范围；当前包括 A 股、港股、美股、ETF、基金、上市 REITs 及其直接相关的公司、行业、宏观、商品、估值、技术分析、投资方法、组合与风险问题。
+_避免_：泛财经话题、所有与钱有关的话题
+
+**暂不支持的投资范围（Unsupported Investment Scope）**：属于投资问题、但资产类别尚未进入当前产品范围的请求；首版包括加密货币、外汇、衍生品交易、债券和非上市资产，不应误归为 Scope Refusal。
+_避免_：非投资话题、范围拒绝、技术故障
+
+**范围拒绝（Scope Refusal）**：当用户请求完全不属于投资研究范围时返回的简短边界说明；它不形成研究结论，也不消耗 Research Quota。
+_避免_：无响应、Agent 故障、投资风险提示
+
+**产品帮助（Product Help）**：只解释 Invest Hub 自身功能、额度、会话与操作方式的免额度响应；它不调用投资研究 Tool，也不形成或写入研究 Memory。
+_避免_：投资研究、范围拒绝、通用闲聊
+
+**测试身份（Test Identity）**：由同一管理员控制、用于验证注册、权限、额度和数据隔离的独立账号；它可以具有普通用户角色，但不代表真实外部用户。
+_避免_：受邀朋友、外部用户、多用户生产验收
+
+**研究会话（Research Thread）**：某一用户围绕投资问题进行的多轮对话容器；同一研究会话可以包含多个相互关联的 Agent Run，但不承载其他用户的研究内容。
+_避免_：单次回答、Agent Run、共享聊天室
+
+**Agent Run（智能体运行）**：为研究会话中的一次用户提问执行的有界过程，包含必要的路由、Skill 或 Tool 使用、Observation、Loop、结果与停止原因。
+_避免_：研究会话、一次模型调用
+
+**Agent Skill（智能体技能）**：面向一类投资研究任务的版本化工作流，其 Description 用于候选发现，实际执行仍须经过 Agent 选择与 Runtime 的确定性准入。
+_避免_：Codex 开发 Skill、Tool、单段 Prompt
+
+**显式选择 Skill（Selected Skill）**：用户在发起一次 Agent Run 前主动选择并在聊天输入区可见引用的一个 Agent Skill；同一 Agent Run 最多显式选择一个。
+_避免_：自由文本标签、会话永久模式、多个 Skill 组合
+
+**Agent Tool（智能体工具）**：由 Runtime 授权调用、提供单一外部数据或确定性动作能力的原子入口；Tool 不负责决定完整研究方法。
+_避免_：Agent Skill、研究流程、任意脚本执行
+
+**Research Quota（研究额度）**：管理员分配给单一用户的可用 Agent Run 余额；一次成功形成研究回答的 Agent Run 消耗一次，不按底层模型调用、Tool 调用或 Loop 次数重复计量。
+_避免_：Token 额度、周期额度、研究会话数量
+
+**额度预占（Quota Reservation）**：Agent Run 正式开始时暂时占用的一次 Research Quota；成功回答后结算，范围拒绝、补充信息追问、取消或技术失败时释放。
+_避免_：提前扣费、模型调用计数、永久消耗
+
+**证据受限结果（Evidence-limited Result）**：Agent 已完成有用研究，但当前证据不足、不可用或互相矛盾，因而只保留已确认事实、分歧和缺失信息的研究回答；它不是技术失败，也不包含伪造的确定性结论。
+_避免_：无结果、系统故障、确定性投资结论
+
+**会话记忆（Thread Memory）**：仅服务于一个研究会话连续对话的工作上下文，不跨用户共享。
+_避免_：个人长期记忆、完整用户档案
+
+**个人长期记忆（Personal Long-term Memory）**：属于单一用户、可跨研究会话召回的持久信息，包括其历史关注标的、行业与仍有参考价值的关键研究结论。
+_避免_：共享来源库、完整聊天记录、模型参数记忆
+
+**关注记忆（Interest Memory）**：描述用户持续关注的股票、基金、行业或投资主题及其最近关注情况的个人长期记忆。
+_避免_：自选股、持仓记录、来源热度
+
+**研究结论记忆（Research Conclusion Memory）**：从已完成研究中保留的、带形成时间、适用条件与来源关联的历史关键结论；后续结论可以取代或判定其失效，但不得静默覆盖原结论。
+_避免_：当前事实、永久结论、系统投资建议
+
+**研究偏好记忆（Preference Memory）**：描述用户相对稳定的研究期限、方法偏好、输出偏好或风险关注点的个人长期记忆。
+_避免_：一次性要求、系统 Prompt、Agent Skill
+
+**记忆候选（Memory Candidate）**：由已完成 Agent Run 提取、等待按写入规则验证后进入个人长期记忆的信息；候选本身不具备可召回记忆的权威性。
+_避免_：已保存记忆、Agent 草稿、聊天摘要
+
+**共享来源库**：所有授权用户共同可检索的 Invest Hub 来源材料，包括 X 原始帖子与 Discord 派生总结；它是公共研究输入，不属于任何用户的个人 Memory。
+_避免_：用户知识库、个人记忆
+
+**Discord 派生总结**：系统基于已授权 Discord 内容生成并保留证据关联的总结；它属于派生来源，不等同于原始发言。
+_避免_：Discord 原文、直接证据
+
+**用户研究空间**：归属于单一用户的研究会话、Agent Run、回答、Artifact 与个人 Memory 的集合；普通用户之间互不可见，管理员可以查看全部用户研究空间。
+_避免_：共享 Agent 历史、公共研究记录
+
+**Agent Trace（智能体轨迹）**：与一次 Agent Run 关联、按执行顺序记录编排事件及其结果的可追溯记录，用于排查、评估与优化 Agent 行为。
+_避免_：聊天记录、普通应用日志、模型思维过程
+
+**可见研究过程（Research Progress）**：从真实 Agent Trace 事件、Tool 调用、来源进度、阶段性 Commentary 与可用的 Reasoning Summary 中形成的用户安全视图；它用于解释研究进展，但不等同于原始 Chain-of-thought。
+_避免_：思维链、完整 Agent Trace、加载动画

@@ -4,28 +4,28 @@
 
 Invest Hub 面向个人及少量受邀用户，是一个持续沉淀外部投研信息、个人判断、交易策略和复盘结果的投资信息与投资决策工作台。
 
-当前只讨论和开发模块 1：投资信息收集。模块 2（选股研判）、模块 3（策略和复盘）和模块 4（投资体系）不属于当前范围，但模块 1 的数据结构应为后续模块保留关联来源、作者、标的、时间、观点、操作倾向、证据和摘要版本的能力。
+当前模块化主线只讨论和开发模块 1：投资信息收集。模块 2（选股研判）、模块 3（策略和复盘）和模块 4（投资体系）不属于当前范围，但模块 1 的数据结构应为后续模块保留关联来源、作者、标的、时间、观点、操作倾向、证据和摘要版本的能力。另有独立于模块 2–4 的“投资研究 Agent”能力，其实现范围只以 `docs/project-status.md` 中记录的已批准 Feature Contract 与 Delivery Plan 为准，不自动开放模块 2–4。
 
 ## 事实来源与决策边界
 
-- `docs/intake.md` 是当前项目背景、需求输入、前期讨论方案和未决事项的事实来源。
+- `docs/intake.md` 是项目背景、需求输入、前期讨论方案和未决事项的事实来源；当前阶段、批准状态、已完成结果和下一门禁以 `docs/project-status.md` 为准。
 - 不得擅自改写 `docs/intake.md` 中已经记录的事实、范围、约束或前期讨论结论。
 - intake 中标注为“建议”“总体技术方向”“待 Spike 或 Spec 阶段确认”的内容，不得在 Discovery 阶段当作最终技术选型、正式架构或实现承诺。
-- 任何新决策都必须在相应的正式 specification 或 implementation plan 中明确记录，并在获得批准后生效。
+- 任何新决策都必须记录在 `docs/agents/workflow.md` 定义的对应权威文档中；只有已批准的 Feature Contract 和 Delivery Plan 能产生实现授权。
 
-## 当前阶段门禁
+## 当前阶段与授权门禁
 
-当前项目状态为 Discovery。尚无批准后的 specification，也尚无批准后的 implementation plan。
+开始或继续任何 feature 前，必须先读取 `docs/project-status.md` 确认当前阶段、已批准范围和下一门禁，再按 [`docs/agents/workflow.md`](docs/agents/workflow.md) 确认该 feature 的唯一 workflow profile、Feature Contract 和 Delivery Plan。
 
-在 specification 和 implementation plan 获得批准前：
+在 Feature Contract 和 Delivery Plan 分别获得批准前：
 
 - 只允许进行需求澄清、方案审阅、技术 Spike 设计或执行、数据与验收标准讨论，以及治理文档维护；
 - 不得生成应用代码、框架脚手架或应用代码目录；
 - 不得选择或固化技术栈；
 - 不得安装生产依赖；
-- 不得把 V0–V3 的范围描述直接当作已授权实现任务。
+- 不得把 intake、roadmap、CONTEXT、ADR、triage label 或历史文档直接当作实现授权。
 
-后续工作按 intake 建议推进：先审阅和澄清 intake，再分别为 Spike-01、Spike-02、V0、V1、V2、V3 编写并批准 specification 和 plan；不把所有版本合并为一个超大 plan。
+已批准产物只授权其中明确记录的范围。Git push、远程 migration、生产写入、部署、Worker 操作、真实 Provider 调用和会改变外部状态的生产验收，仍须在 Delivery Plan 或独立 release ticket 中明确列出并获得对应授权。
 
 ## 产品与工程原则
 
@@ -52,8 +52,24 @@ V1 媒体处理边界保持为：保存附件/媒体元数据和链接，但不�
 
 ## 工作方式
 
+- **工作流强制前置：** 新 Agent 能力默认采用 Matt Pocock profile；已有 Superpowers Spec/Plan 的模块 1 工作继续沿用 Superpowers。任何 feature 开始前必须读取 [`docs/agents/workflow.md`](docs/agents/workflow.md)；`ready-for-agent` 只表示材料就绪，不等于用户批准；一个 feature 同一时间只能有一个权威执行来源。
+- **强制前置阅读：** 任何开发、需求澄清、Spec、Plan、实现、测试、独立复核、发布或生产验收任务开始前，必须先阅读 [`docs/project-pitfalls-reflections.md`](docs/project-pitfalls-reflections.md)。如果任务涉及评估集、Prompt、LLM、结构化输出、数据边界或 release gate，必须逐条执行该文档中的对应检查；发现同类根因重复出现时，暂停局部修复并回到 Spec/Plan 修订。
 - 先确认范围、事实来源、未决问题和验收标准，再提出方案。
 - 确定性工作由程序完成，LLM 只负责 intake 所述的结构化理解、分类、提炼和总结；输出必须可校验、可追溯、可恢复。
 - 默认坚持幂等、局部重试、任务恢复、版本记录和可回滚；任何例外必须在批准的 plan 中说明。
 - 只在代码测试中进行对抗式审查；非代码治理讨论不提前引入实现性审查。
 - 完成任何阶段前，检查是否越过当前阶段门禁，并核对文件树、Git diff、测试/Spike 结果和未决项。
+
+## Agent skills
+
+### Issue tracker
+
+Matt profile 的 issues 和 specs 使用 `.scratch/<feature-slug>/`；既有 Superpowers 产物继续保留在 `docs/superpowers/`。参见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+Uses the default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
