@@ -13,6 +13,36 @@ type AgentThreadDetail = Omit<ResearchThreadDetail, "ownerId" | "messages" | "ar
   messages: Array<Pick<ResearchMessage, "id" | "role" | "content" | "createdAt">>;
   artifacts: Array<Pick<ResearchThreadDetail["artifacts"][number], "id" | "artifactType" | "metadata" | "createdAt">>;
 };
+type ApiThread = { id: string; title: string; created_at: string; updated_at: string };
+type ApiThreadDetail = ApiThread & {
+  messages: Array<{ id: string; role: "user" | "assistant"; content: string; created_at: string }>;
+  artifacts: Array<{ id: string; artifact_type: string; metadata: AgentThreadDetail["artifacts"][number]["metadata"]; created_at: string }>;
+};
+
+export function mapThread(thread: ApiThread): ThreadSummary {
+  return { id: thread.id, title: thread.title, createdAt: thread.created_at, updatedAt: thread.updated_at };
+}
+
+export function mapThreadDetail(thread: ApiThreadDetail): AgentThreadDetail {
+  return {
+    id: thread.id,
+    title: thread.title,
+    createdAt: thread.created_at,
+    updatedAt: thread.updated_at,
+    messages: thread.messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      createdAt: message.created_at,
+    })),
+    artifacts: thread.artifacts.map((artifact) => ({
+      id: artifact.id,
+      artifactType: artifact.artifact_type,
+      metadata: artifact.metadata,
+      createdAt: artifact.created_at,
+    })),
+  };
+}
 
 function dateKey(value: string): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -89,8 +119,8 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
     let cancelled = false;
     setError(null);
     void fetch(`/api/agent/threads/${activeThreadId}`)
-      .then((response) => readJson<{ thread: AgentThreadDetail }>(response))
-      .then(({ thread }) => { if (!cancelled) setDetail(thread); })
+      .then((response) => readJson<{ thread: ApiThreadDetail }>(response))
+      .then(({ thread }) => { if (!cancelled) setDetail(mapThreadDetail(thread)); })
       .catch(() => { if (!cancelled) setError("会话读取失败，请刷新重试。"); });
     return () => { cancelled = true; };
   }, [activeThreadId]);
@@ -106,10 +136,11 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
     setBusy(true);
     setError(null);
     try {
-      const result = await readJson<{ thread: ThreadSummary }>(await fetch("/api/agent/threads", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
-      setThreads((current) => [result.thread, ...current]);
-      setActiveThreadId(result.thread.id);
-      setDetail({ ...result.thread, messages: [], artifacts: [] });
+      const result = await readJson<{ thread: ApiThread }>(await fetch("/api/agent/threads", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
+      const thread = mapThread(result.thread);
+      setThreads((current) => [thread, ...current]);
+      setActiveThreadId(thread.id);
+      setDetail({ ...thread, messages: [], artifacts: [] });
       setDrawerOpen(false);
     } catch {
       setError("新建会话失败，请重试。");
@@ -127,9 +158,10 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
     try {
       let threadId = activeThreadId;
       if (!threadId) {
-        const result = await readJson<{ thread: ThreadSummary }>(await fetch("/api/agent/threads", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
-        threadId = result.thread.id;
-        setThreads((current) => [result.thread, ...current]);
+        const result = await readJson<{ thread: ApiThread }>(await fetch("/api/agent/threads", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
+        const thread = mapThread(result.thread);
+        threadId = thread.id;
+        setThreads((current) => [thread, ...current]);
         setActiveThreadId(threadId);
       }
       await readJson(await fetch(`/api/agent/threads/${threadId}/messages`, {
@@ -138,12 +170,13 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
         body: JSON.stringify({ content }),
       }));
       setDraft("");
-      const refreshed = await readJson<{ thread: AgentThreadDetail }>(await fetch(`/api/agent/threads/${threadId}`));
-      setDetail(refreshed.thread);
+      const refreshed = await readJson<{ thread: ApiThreadDetail }>(await fetch(`/api/agent/threads/${threadId}`));
+      const refreshedThread = mapThreadDetail(refreshed.thread);
+      setDetail(refreshedThread);
       setThreads((current) => newestFirst(current.map((thread) => thread.id === threadId ? {
         ...thread,
-        title: refreshed.thread.title,
-        updatedAt: refreshed.thread.updatedAt,
+        title: refreshedThread.title,
+        updatedAt: refreshedThread.updatedAt,
       } : thread)));
     } catch {
       setError("消息保存失败，请重试。");
@@ -159,11 +192,12 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
     setBusy(true);
     setError(null);
     try {
-      const result = await readJson<{ thread: ThreadSummary }>(await fetch(`/api/agent/threads/${threadId}`, {
+      const result = await readJson<{ thread: ApiThread }>(await fetch(`/api/agent/threads/${threadId}`, {
         method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title }),
       }));
-      setThreads((current) => newestFirst(current.map((thread) => thread.id === threadId ? result.thread : thread)));
-      setDetail((current) => current && current.id === threadId ? { ...current, ...result.thread } : current);
+      const renamedThread = mapThread(result.thread);
+      setThreads((current) => newestFirst(current.map((thread) => thread.id === threadId ? renamedThread : thread)));
+      setDetail((current) => current && current.id === threadId ? { ...current, ...renamedThread } : current);
       setRenameId(null);
     } catch {
       setError("重命名失败，请重试。");

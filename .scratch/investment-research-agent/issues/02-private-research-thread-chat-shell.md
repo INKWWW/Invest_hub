@@ -26,3 +26,5 @@ Blocked by: None — can start immediately after the complete ticket graph is ap
 
 - 2026-08-11：已在独立 worktree `/Users/hanyuec/Desktop/Invest_hub/.worktrees/agent-ticket-02-chat-shell` 领取 Ticket 02，基于 planning baseline `9acdffc` 实施；主 checkout 保持不动。
 - 2026-08-11：本地实现与验证完成；控制面全量 48 files/257 tests、Supabase 全量 43 files/689 tests、lint、production build、redaction check 通过；已完成双 Test Identity 本地 HTTP/RLS 隔离、刷新持久化、删除级联和未登录保护验收。当前仅待提交本地分支，未执行 push、PR、远程 migration、部署或真实 Provider 调用。
+- 2026-08-11：集成审计发现 API 时间字段与客户端模型命名不一致、消息写入未推进 Thread 活动时间；已在集成分支补充受控字段映射、消息活动时间触发器及回归断言。未执行远程 migration、部署或其他外部状态操作。
+- 2026-08-11：集成组合验证完成；控制面 48 files/258 tests、Supabase 43 files/690 tests、lint、production build、diff check 和 redaction check 通过。两套本地 Test Identity 的真实登录、Thread 创建/消息持久化/刷新、跨用户列表隔离、猜测 ID 404 和 SSR 页面不泄露均通过；全量 `tsc --noEmit` 仍受既有非 Agent 测试类型错误阻断。

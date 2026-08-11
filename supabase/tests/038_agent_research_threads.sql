@@ -1,6 +1,6 @@
 begin;
 
-select plan(26);
+select plan(27);
 
 select has_table('public', 'research_threads', 'research threads table exists');
 select has_table('public', 'research_messages', 'research messages table exists');
@@ -29,8 +29,8 @@ values
   ('00000000-0000-0000-0000-000000038002', 'user', 'Agent Two')
 on conflict (id) do update set role = excluded.role;
 
-insert into public.research_threads (id, owner_id, title)
-values ('00000000-0000-0000-0000-000000038011', '00000000-0000-0000-0000-000000038001', '宁德时代研究');
+insert into public.research_threads (id, owner_id, title, created_at, updated_at)
+values ('00000000-0000-0000-0000-000000038011', '00000000-0000-0000-0000-000000038001', '宁德时代研究', '2000-01-01'::timestamptz, '2000-01-01'::timestamptz);
 
 insert into public.research_messages (id, thread_id, owner_id, role, content)
 values ('00000000-0000-0000-0000-000000038021', '00000000-0000-0000-0000-000000038011', '00000000-0000-0000-0000-000000038001', 'user', '请比较海外竞争格局');
@@ -44,6 +44,7 @@ select is((select count(*)::text from public.research_threads), '1', 'owner can 
 select is((select count(*)::text from public.research_messages), '1', 'owner can read own messages');
 select is((select count(*)::text from public.research_thread_artifacts), '1', 'owner can read own artifacts');
 select is((select count(*)::text from public.research_threads where owner_id <> auth.uid()), '0', 'owner list has no foreign rows');
+select ok((select updated_at > '2000-01-01'::timestamptz from public.research_threads where id = '00000000-0000-0000-0000-000000038011'), 'message insertion updates thread activity time');
 select throws_ok(
   $$insert into public.research_threads (owner_id, title) values ('00000000-0000-0000-0000-000000038002', '越权');$$,
   '42501', null, 'authenticated user cannot create a thread for another owner'
