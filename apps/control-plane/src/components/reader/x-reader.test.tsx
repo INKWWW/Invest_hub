@@ -109,6 +109,7 @@ const v5Day = {
     source: { sourceKey: "alpha", displayName: "Alpha" },
     status: "succeeded",
     timedOut: false,
+    lateArrival: false,
     collectionGaps: [],
     segments: [{
       occurredFromAt: "2099-01-06T10:00:00.000Z",
@@ -121,6 +122,7 @@ const v5Day = {
     source: { sourceKey: "beta", displayName: "Beta" },
     status: "succeeded",
     timedOut: false,
+    lateArrival: false,
     collectionGaps: [],
     segments: [{
       occurredFromAt: "2099-01-06T09:00:00.000Z",
@@ -176,13 +178,13 @@ const days = [{
     }],
   },
   bloggers: [{
-    source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false,
+    source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, lateArrival: false,
     collectionGaps: [{ startAt: "2099-01-02T04:00:00.000Z", endAt: "2099-01-02T08:00:00.000Z" }],
     segments: [{ occurredFromAt: "2099-01-02T11:00:00.000Z", occurredThroughAt: "2099-01-02T12:00:00.000Z", viewpoints: ["最新博主观点"], securityIndustryViewpoints: [{ statement: "测试标的具备修复条件", actionIntent: "buy", actionScope: "测试标的", conditions: ["等待趋势确认"], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: ["缺少外部确认"] }], marketStructureViewpoints: [{ statement: "市场结构仍处于观察期", actionIntent: "watch", actionScope: "市场结构", conditions: ["等待宽度改善"], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], strategyMindsetViewpoints: [{ statement: "策略上保持耐心", actionIntent: "watch", actionScope: "当前仓位", conditions: [], supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], uncertainties: [], analyses: [{ postLink: "https://x.example/posts/analysis-1", postedAt: "2099-08-07T19:05:00.000Z", postType: "quote", bloggerViewpoint: "帖子中的降息观点", actionIntent: "buy", actionScope: "测试标的", conditions: ["等待数据确认"], arguments: ["博主此前已持续提及该判断"], quotedPostViewpoint: "引用帖的补充判断", uncertainties: ["未说明完整时间范围"] }, { postLink: "https://x.example/posts/analysis-legacy", bloggerViewpoint: "旧版帖子观点", actionIntent: null, conditions: [], arguments: [], quotedPostViewpoint: null, uncertainties: [] }] }, {
       occurredFromAt: "2099-01-02T07:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["较早博主观点"], uncertainties: [], analyses: [],
     }],
   }, {
-    source: { sourceKey: "third", displayName: "Third Author" }, status: "succeeded", timedOut: false, collectionGaps: [],
+    source: { sourceKey: "third", displayName: "Third Author" }, status: "succeeded", timedOut: false, lateArrival: false, collectionGaps: [],
     segments: [{ occurredFromAt: "2099-01-02T10:00:00.000Z", occurredThroughAt: "2099-01-02T11:00:00.000Z", viewpoints: ["第三位最新观点"], uncertainties: [], analyses: [] }, {
       occurredFromAt: "2099-01-02T06:00:00.000Z", occurredThroughAt: "2099-01-02T07:00:00.000Z", viewpoints: ["第三位较早观点"], uncertainties: [], analyses: [],
     }],
@@ -191,7 +193,7 @@ const days = [{
   naturalDate: "2099-01-01",
   judgement: { visible: true, batches: [] },
   bloggers: [{
-    source: { sourceKey: "first", displayName: "First Author" }, status: "succeeded", timedOut: false, collectionGaps: [],
+    source: { sourceKey: "first", displayName: "First Author" }, status: "succeeded", timedOut: false, lateArrival: false, collectionGaps: [],
     segments: [{ occurredFromAt: "2099-01-01T12:00:00.000Z", occurredThroughAt: "2099-01-01T12:00:00.000Z", viewpoints: ["首位博主观点"], uncertainties: [], analyses: [] }],
   }],
 }];
@@ -254,6 +256,19 @@ describe("XReader", () => {
     expect(html).toContain('<details class="x-reader-segment">');
     expect(html).toContain('<option value="second">Second Author</option>');
     expect(html).toContain('<option value="2099-01-02" selected="">2099-01-02</option>');
+  });
+
+  it("labels late-arrival content without changing normal blogger cards", () => {
+    const lateDays = [{
+      ...days[0],
+      bloggers: days[0].bloggers.map((blogger) => blogger.source.sourceKey === "second" ? { ...blogger, lateArrival: true } : blogger),
+    }, ...days.slice(1)];
+    const html = renderToStaticMarkup(<XReader days={lateDays} initialNaturalDate="2099-01-02" />);
+    const normalHtml = renderToStaticMarkup(<XReader days={days} initialNaturalDate="2099-01-02" />);
+
+    expect(html).toContain("后补采集：该内容未纳入原跨博主日报。");
+    expect(html).toContain("采集缺失：01月02日 12:00–16:00");
+    expect(normalHtml).not.toContain("后补采集：该内容未纳入原跨博主日报。");
   });
 
   it("shows the range explanation, but never a narrowed judgement, for one blogger", () => {
@@ -454,10 +469,10 @@ describe("XReader", () => {
   it("renders batch-derived no-new, pending, failed, and excluded blogger placeholders", () => {
     const html = renderToStaticMarkup(<XReader days={[{
       naturalDate: "2099-01-04", judgement: { visible: true, batches: [] },
-      bloggers: [{ source: { sourceKey: "no-new", displayName: "No New" }, status: "no_new_messages", timedOut: false, segments: [] },
-        { source: { sourceKey: "pending", displayName: "Pending" }, status: "processing", timedOut: false, segments: [] },
-        { source: { sourceKey: "failed", displayName: "Failed" }, status: "failed", timedOut: false, segments: [] },
-        { source: { sourceKey: "excluded", displayName: "Excluded" }, status: "partial_failure", timedOut: true, segments: [] }],
+      bloggers: [{ source: { sourceKey: "no-new", displayName: "No New" }, status: "no_new_messages", timedOut: false, lateArrival: false, collectionGaps: [], segments: [] },
+        { source: { sourceKey: "pending", displayName: "Pending" }, status: "processing", timedOut: false, lateArrival: false, collectionGaps: [], segments: [] },
+        { source: { sourceKey: "failed", displayName: "Failed" }, status: "failed", timedOut: false, lateArrival: false, collectionGaps: [], segments: [] },
+        { source: { sourceKey: "excluded", displayName: "Excluded" }, status: "partial_failure", timedOut: true, lateArrival: false, collectionGaps: [], segments: [] }],
     }]} />);
 
     expect(html).toContain("已核实：截至当前时间没有新增消息。");
