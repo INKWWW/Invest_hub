@@ -201,6 +201,13 @@ describe("X reader date projection", () => {
     ]);
     databaseMocks.rows.set("task_attempts", []);
     databaseMocks.rows.set("x_collection_gaps", [{
+      source_id: "source-a",
+      natural_date: "2099-01-03",
+      window_start_at: "2099-01-03T04:00:00.000Z",
+      window_end_at: "2099-01-03T08:00:00.000Z",
+      failed_task_id: "task-late-gap",
+      failure_class: "timeout",
+    }, {
       source_id: "source-d",
       natural_date: "2099-01-03",
       window_start_at: "2099-01-03T04:00:00.000Z",
@@ -218,6 +225,10 @@ describe("X reader date projection", () => {
 
     expect(late).toMatchObject({
       lateArrival: true,
+      collectionGaps: [{
+        startAt: "2099-01-03T04:00:00.000Z",
+        endAt: "2099-01-03T08:00:00.000Z",
+      }],
       segments: [{ viewpoints: ["迟到但真实持久化的观点"] }],
     });
     expect(day?.judgement.batches).toEqual(expect.arrayContaining([expect.objectContaining({ coverageStatus: null })]));

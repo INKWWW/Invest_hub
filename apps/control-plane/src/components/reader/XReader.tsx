@@ -127,7 +127,7 @@ function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
     <header className="x-reader-author-strip"><p>博主</p><h3 className="x-reader-author">{blogger.source.displayName}</h3></header>
     <CollectionGapNotice gaps={blogger.collectionGaps} />
     {blogger.lateArrival ? <div className="reader-status" data-status="late_arrival">
-      <p role="status">后补采集：该内容未纳入原跨博主日报。</p>
+      <p role="status">后补采集：该内容在当日判断结算后完成采集，未纳入原跨博主日报。</p>
     </div> : null}
     {blogger.timedOut ? <div className="reader-status" data-status="partial_failure"><p role="status">采集超时：本机未在结算时间前完成采集。</p></div> : <ReaderStatus status={blogger.status} asOf={blogger.segments[0]?.occurredThroughAt} />}
     {!blogger.segments.length ? <p className="summary-empty">{blogger.timedOut ? "本批次未纳入该博主的完整信息。" : blogger.status === "partial_failure" ? "本批次未纳入该博主的完整信息。" : "本批次没有可展示的博主观点。"}</p> : null}

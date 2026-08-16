@@ -261,14 +261,15 @@ describe("XReader", () => {
   it("labels late-arrival content without changing normal blogger cards", () => {
     const lateDays = [{
       ...days[0],
-      bloggers: days[0].bloggers.map((blogger) => blogger.source.sourceKey === "second" ? { ...blogger, lateArrival: true } : blogger),
+      bloggers: days[0].bloggers.map((blogger) => blogger.source.sourceKey === "second" ? { ...blogger, lateArrival: true, timedOut: true } : blogger),
     }, ...days.slice(1)];
     const html = renderToStaticMarkup(<XReader days={lateDays} initialNaturalDate="2099-01-02" />);
     const normalHtml = renderToStaticMarkup(<XReader days={days} initialNaturalDate="2099-01-02" />);
 
-    expect(html).toContain("后补采集：该内容未纳入原跨博主日报。");
+    expect(html).toContain("后补采集：该内容在当日判断结算后完成采集，未纳入原跨博主日报。");
     expect(html).toContain("采集缺失：01月02日 12:00–16:00");
-    expect(normalHtml).not.toContain("后补采集：该内容未纳入原跨博主日报。");
+    expect(html).toContain("采集超时：本机未在结算时间前完成采集。");
+    expect(normalHtml).not.toContain("后补采集：该内容在当日判断结算后完成采集，未纳入原跨博主日报。");
   });
 
   it("shows the range explanation, but never a narrowed judgement, for one blogger", () => {
