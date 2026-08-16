@@ -1,6 +1,6 @@
 begin;
 
-select plan(20);
+select plan(19);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000044001', 'authenticated', 'authenticated', 'x-expired-user@example.invalid', 'fixture-only', now());
@@ -52,6 +52,9 @@ select public.create_windowed_x_sync_task(
   '2099-01-02T16:00:00+08:00', '2099-01-02T16:00+08:00'
 ) as payload;
 
+create temporary table claim_c_one as
+select public.claim_next_task('00000000-0000-0000-0000-000000044020', '2099-01-02T12:01:00Z') as payload;
+
 create temporary table claim_a_two as
 select public.claim_next_task('00000000-0000-0000-0000-000000044010', '2099-01-02T12:12:00Z') as payload;
 select is((select payload->>'attempt' from claim_a_two), '2', 'first expired lease gets one retry');
@@ -67,12 +70,21 @@ select is(
 );
 select is((select status from public.sync_tasks where id = (select (payload->>'id')::uuid from task_a)), 'leased', 'worker B helper leaves worker A task leased');
 
-create temporary table claim_c_from_worker_b as
-select public.claim_next_task('00000000-0000-0000-0000-000000044020', '2099-01-02T12:23:00Z') as payload;
-select is((select payload->>'task_id' from claim_c_from_worker_b), (select payload->>'id' from task_c), 'worker B only claims its bound source while worker A has an expired lease');
-select is((select payload->>'attempt' from claim_c_from_worker_b), '1', 'worker B starts its own source at attempt one');
-select is((select status from public.sync_tasks where id = (select (payload->>'id')::uuid from task_a)), 'leased', 'worker B does not reap worker A expired task');
-select is((select count(*)::text from public.x_collection_gaps where failed_task_id = (select (payload->>'id')::uuid from task_a)), '0', 'worker B claim does not create a gap for worker A source');
+create temporary table claim_c_two as
+select public.claim_next_task('00000000-0000-0000-0000-000000044020', '2099-01-02T12:12:00Z') as payload;
+update public.workers
+set status = 'offline'
+where id = '00000000-0000-0000-0000-000000044020';
+
+select throws_ok(
+  $$select public.claim_next_task('00000000-0000-0000-0000-000000044020', '2099-01-02T12:23:00Z')$$,
+  '42501', 'worker_not_authorized', 'invalid worker is rejected before expiry reaping'
+);
+select is((select status from public.sync_tasks where id = (select (payload->>'id')::uuid from task_c)), 'leased', 'rejected worker cannot mutate its expired task');
+select is((select count(*)::text from public.x_collection_gaps where failed_task_id = (select (payload->>'id')::uuid from task_c)), '0', 'rejected worker cannot create a gap');
+update public.workers
+set status = 'online'
+where id = '00000000-0000-0000-0000-000000044020';
 
 create temporary table claim_b_after_a as
 select public.claim_next_task('00000000-0000-0000-0000-000000044010', '2099-01-02T12:24:00Z') as payload;

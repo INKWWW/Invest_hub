@@ -14,6 +14,13 @@ declare
   v_failure jsonb;
   v_reaped integer := 0;
 begin
+  if not exists (
+    select 1 from public.workers
+    where id = p_worker_id and status in ('enrolled', 'online')
+  ) then
+    raise exception 'worker_not_authorized' using errcode = '42501';
+  end if;
+
   if p_now is null then
     raise exception 'invalid_expired_x_window_time' using errcode = '22023';
   end if;
