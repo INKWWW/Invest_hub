@@ -48,6 +48,7 @@ export async function POST(request: Request, context: { params: Promise<{ thread
       },
     }, { status: 201 });
   } catch (error) {
+    if (error instanceof Error && error.message === "invalid_message") return NextResponse.json({ error: "invalid_message" }, { status: 422 });
     if (error instanceof Error && error.message.includes("demo_runner_busy")) return NextResponse.json({ error: "demo_runner_busy", message: "Agent 正忙，请稍后重试" }, { status: 409 });
     if (error instanceof Error && error.message.includes("demo_runner_unavailable")) return NextResponse.json({ error: "demo_runner_unavailable", message: "Agent 暂时不可用" }, { status: 503 });
     if (error instanceof Error && error.message.includes("foreign key")) return NextResponse.json({ error: "thread_not_found" }, { status: 404 });

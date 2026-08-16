@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { authenticateWorker } from "../../../../../../lib/auth/worker";
-import { completeDemoRun } from "../../../../../../lib/db/repositories/agent-demo-runs";
-import { safeAssistantMarkdown } from "../../../../../../lib/agent-demo/contract";
+import { authenticateWorker } from "../../../../../../../lib/auth/worker";
+import { completeDemoRun } from "../../../../../../../lib/db/repositories/agent-demo-runs";
+import { safeAssistantMarkdown } from "../../../../../../../lib/agent-demo/contract";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
