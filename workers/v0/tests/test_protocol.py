@@ -134,6 +134,19 @@ class WorkerProtocolTests(unittest.TestCase):
             with self.assertRaises(ProtocolError):
                 protocol.claim()
 
+    def test_agent_demo_claim_and_complete_keep_provider_boundary_small(self) -> None:
+        run_id = "00000000-0000-0000-0000-000000000101"
+        claim = {"run_id": run_id, "owner_id": "user-1", "thread_id": "thread-1", "question": "研究公开公司", "status": "running"}
+        completion = {"run_id": run_id, "assistant_message_id": "message-1", "status": "succeeded", "provider": "scripted"}
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, claim), (200, completion))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+            self.assertEqual(protocol.claim_agent_demo_run(run_id)["question"], "研究公开公司")
+            self.assertEqual(protocol.complete_agent_demo_run(run_id, "# 结果", "scripted")["status"], "succeeded")
+            self.assertEqual(transport.calls[1]["url"], "https://control.example.invalid/api/worker/agent-demo/claim")
+            self.assertEqual(transport.calls[2]["url"], f"https://control.example.invalid/api/worker/agent-demo/runs/{run_id}/complete")
+
     def test_window_claim_preserves_nullable_coverage_state_and_resume_progress(self) -> None:
         claim = {
             "contract_version": "v0",

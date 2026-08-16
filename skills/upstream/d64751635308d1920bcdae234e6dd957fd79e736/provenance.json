@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/xbtlin/ai-berkshire",
+  "commit": "d64751635308d1920bcdae234e6dd957fd79e736",
+  "paths": [
+    "codex-skills/investment-research/SKILL.md",
+    "codex-skills/portfolio-review/SKILL.md",
+    "codex-skills/investment-checklist/SKILL.md"
+  ],
+  "retrieved_for": "Invest Hub investment-research-agent-demo Ticket 04",
+  "retrieved_at": "2026-08-16"
+}

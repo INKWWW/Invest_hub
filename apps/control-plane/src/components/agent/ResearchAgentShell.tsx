@@ -2,12 +2,13 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { SafeMarkdown } from "./SafeMarkdown";
+import { SKILL_DEFINITIONS, parseSkillCommand, type SkillId } from "../../lib/agent-demo/skill-routing";
 import type {
   ResearchMessage,
   ResearchThread,
   ResearchThreadDetail,
 } from "../../lib/db/repositories/research-threads";
-import type { ResearchQuota } from "../../lib/db/repositories/research-quota";
 
 type ThreadSummary = Pick<ResearchThread, "id" | "title" | "createdAt" | "updatedAt">;
 type AgentThreadDetail = Omit<ResearchThreadDetail, "ownerId" | "messages" | "artifacts"> & {
@@ -19,6 +20,7 @@ type ApiThreadDetail = ApiThread & {
   messages: Array<{ id: string; role: "user" | "assistant"; content: string; created_at: string }>;
   artifacts: Array<{ id: string; artifact_type: string; metadata: AgentThreadDetail["artifacts"][number]["metadata"]; created_at: string }>;
 };
+type ApiDemoRun = { id: string; status: "queued" | "running" | "succeeded" | "failed"; thread_id: string; assistant_message_id: string | null; invocation_mode?: "explicit" | "auto"; skill_id?: SkillId | null };
 
 export function mapThread(thread: ApiThread): ThreadSummary {
   return { id: thread.id, title: thread.title, createdAt: thread.created_at, updatedAt: thread.updated_at };
@@ -95,18 +97,8 @@ async function readJson<T>(response: Response): Promise<T> {
   return payload;
 }
 
-const EMPTY_QUOTA: ResearchQuota = {
-  ownerId: "",
-  lifetimeUnits: 0,
-  availableUnits: 0,
-  reservedUnits: 0,
-  settledUnits: 0,
-  updatedAt: null,
-};
-
-export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA }: { initialThreads: ThreadSummary[]; initialQuota?: ResearchQuota }) {
+export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadSummary[] }) {
   const [threads, setThreads] = useState(initialThreads);
-  const [quota, setQuota] = useState(initialQuota);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(initialThreads[0]?.id ?? null);
   const [detail, setDetail] = useState<AgentThreadDetail | null>(null);
   const [draft, setDraft] = useState("");
@@ -116,6 +108,8 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<SkillId | null>(null);
 
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
@@ -137,35 +131,34 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
   }, [activeThreadId]);
 
   useEffect(() => {
+    if (!activeRunId) return;
     let cancelled = false;
-    async function refreshQuota() {
-      try {
-        const { quota: next } = await readJson<{ quota: { lifetime_units: number; available_units: number; reserved_units: number; settled_units: number; updated_at: string | null } }>(await fetch("/api/agent/quota", { cache: "no-store" }));
-        if (!cancelled) setQuota({
-          ownerId: initialQuota.ownerId,
-          lifetimeUnits: next.lifetime_units,
-          availableUnits: next.available_units,
-          reservedUnits: next.reserved_units,
-          settledUnits: next.settled_units,
-          updatedAt: next.updated_at,
-        });
-      } catch {
-        // The server-rendered snapshot remains visible if the refresh is unavailable.
-      }
-    }
-    void refreshQuota();
-    window.addEventListener("focus", refreshQuota);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("focus", refreshQuota);
-    };
-  }, [initialQuota.ownerId]);
+    const timer = window.setInterval(() => {
+      void fetch(`/api/agent/runs/${activeRunId}`, { cache: "no-store" })
+        .then((response) => readJson<{ run: ApiDemoRun }>(response))
+        .then(({ run }) => {
+          if (cancelled || (run.status !== "succeeded" && run.status !== "failed")) return;
+          window.clearInterval(timer);
+          setActiveRunId(null);
+          if (run.status === "failed") {
+            setError("Agent 执行失败，请重新发送。请保留原问题后重试。");
+            return;
+          }
+          return fetch(`/api/agent/threads/${run.thread_id}`)
+            .then((response) => readJson<{ thread: ApiThreadDetail }>(response))
+            .then(({ thread }) => { if (!cancelled) setDetail(mapThreadDetail(thread)); });
+        })
+        .catch(() => undefined);
+    }, 800);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [activeRunId]);
 
   function openThread(threadId: string) {
     setActiveThreadId(threadId);
     setDrawerOpen(false);
     setDeleteId(null);
     setRenameId(null);
+    setSelectedSkill(null);
   }
 
   async function createThread() {
@@ -178,6 +171,7 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
       setActiveThreadId(thread.id);
       setDetail({ ...thread, messages: [], artifacts: [] });
       setDrawerOpen(false);
+      setSelectedSkill(null);
     } catch {
       setError("新建会话失败，请重试。");
     } finally {
@@ -191,6 +185,8 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
     if (!content || busy) return;
     setBusy(true);
     setError(null);
+    const parsed = parseSkillCommand(content);
+    const skillId = selectedSkill ?? parsed.skillId;
     try {
       let threadId = activeThreadId;
       if (!threadId) {
@@ -200,12 +196,14 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
         setThreads((current) => [thread, ...current]);
         setActiveThreadId(threadId);
       }
-      await readJson(await fetch(`/api/agent/threads/${threadId}/messages`, {
+      const accepted = await readJson<{ run: ApiDemoRun }>(await fetch(`/api/agent/threads/${threadId}/messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, request_id: crypto.randomUUID(), ...(skillId ? { invocation_mode: "explicit", skill_id: skillId } : {}) }),
       }));
       setDraft("");
+      setSelectedSkill(null);
+      setActiveRunId(accepted.run.id);
       const refreshed = await readJson<{ thread: ApiThreadDetail }>(await fetch(`/api/agent/threads/${threadId}`));
       const refreshedThread = mapThreadDetail(refreshed.thread);
       setDetail(refreshedThread);
@@ -214,8 +212,10 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
         title: refreshedThread.title,
         updatedAt: refreshedThread.updatedAt,
       } : thread)));
-    } catch {
-      setError("消息保存失败，请重试。");
+    } catch (error) {
+      if (error instanceof Error && error.message === "demo_runner_busy") setError("Agent 正忙，请稍后重试");
+      else if (error instanceof Error && error.message === "demo_runner_unavailable") setError("Agent 暂时不可用");
+      else setError("消息保存失败，请重试。");
     } finally {
       setBusy(false);
     }
@@ -264,12 +264,6 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
   const groupedThreads = groupThreads(threads);
 
   return <section className="agent-workbench" data-testid="agent-workbench">
-    <aside className="agent-quota-card" aria-label="研究额度">
-      <div><p className="agent-kicker">Research Quota</p><h2>研究额度</h2></div>
-      <div className="agent-quota-available"><strong>{quota.availableUnits}</strong><span>可用额度</span></div>
-      <dl><div><dt>生命周期总额</dt><dd>{quota.lifetimeUnits}</dd></div><div><dt>已预占</dt><dd>{quota.reservedUnits}</dd></div><div><dt>已结算</dt><dd>{quota.settledUnits}</dd></div></dl>
-      <p className="agent-quota-note">额度只在正式 Agent Run 开始时预占；当前研究执行尚未开放。</p>
-    </aside>
     <button className="agent-drawer-trigger" type="button" aria-label="打开研究会话列表" onClick={() => setDrawerOpen(true)}>会话列表</button>
     {drawerOpen ? <button className="agent-drawer-backdrop" type="button" aria-label="关闭研究会话列表" onClick={() => setDrawerOpen(false)} /> : null}
     <aside className={`agent-thread-sidebar${drawerOpen ? " agent-thread-sidebar-open" : ""}`} aria-label="研究会话列表">
@@ -306,19 +300,23 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
       <header className="agent-conversation-header">
         <p className="agent-kicker">Private workspace</p>
         <h2>{activeThread?.title ?? "新的研究会话"}</h2>
-        <p>只保存当前账号的纯文本对话，研究执行在后续能力完成前保持关闭。</p>
+        <p>只保存当前账号的研究对话；回答完成后会回到同一 Research Thread。</p>
       </header>
       <div className="agent-message-list" aria-live="polite">
         {detail?.messages.length ? detail.messages.map((message) => <article className={messageClass(message)} key={message.id}>
-          <p className="agent-message-role">{message.role === "user" ? "你" : "Agent"}</p><p>{message.content}</p><time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
+          <p className="agent-message-role">{message.role === "user" ? "你" : "Agent"}</p>{message.role === "assistant" ? <SafeMarkdown content={message.content} /> : <p>{message.content}</p>}<time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
         </article>) : <div className="agent-conversation-empty"><p>把一个投资问题留在这里，作为你的研究起点。</p><span>当前只提供私有 Thread 与纯文本消息保存。</span></div>}
       </div>
       {error ? <p className="agent-error" role="alert">{error}</p> : null}
-      <div className="agent-fail-closed" role="status"><strong>研究执行暂未开放</strong><span>本阶段不会启动 Agent Run、扣除额度或调用 Provider。</span></div>
+      <div className="agent-fail-closed" role="status"><strong>{activeRunId ? "Agent 处理中" : "本地 Demo Runner"}</strong><span>{activeRunId ? "正在等待助手回答，页面会自动更新。" : "每次发送都会创建一个可追踪的 Demo Run。"}</span></div>
       <form className="agent-composer" data-testid="agent-composer" onSubmit={(event) => void submitMessage(event)}>
         <label htmlFor="agent-message-input">发送纯文本消息</label>
+        <div className="agent-skill-picker" aria-label="本条消息的 Skill 选择">
+          <button type="button" aria-pressed={selectedSkill === null} onClick={() => setSelectedSkill(null)}>智能</button>
+          {SKILL_DEFINITIONS.map((skill) => <button key={skill.id} type="button" aria-pressed={selectedSkill === skill.id} onClick={() => setSelectedSkill(skill.id)}>{skill.buttonLabel}</button>)}
+        </div>
         <textarea id="agent-message-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
-        <div className="agent-composer-footer"><span>消息会持久化到当前 Research Thread。</span><button type="submit" disabled={busy || !draft.trim()}>{busy ? "保存中…" : "保存消息"}</button></div>
+        <div className="agent-composer-footer"><span>消息会持久化到当前 Research Thread。</span><button type="submit" disabled={busy || !draft.trim()}>{busy ? "提交中…" : "发送问题"}</button></div>
       </form>
     </section>
   </section>;

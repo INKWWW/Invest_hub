@@ -102,6 +102,46 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["research_thread_artifacts"]["Insert"]>;
         Relationships: [];
       };
+      agent_demo_runs: {
+        Row: {
+          id: string;
+          owner_id: string;
+          thread_id: string;
+          request_id: string;
+          user_message_id: string;
+          assistant_message_id: string | null;
+          question: string;
+          invocation_mode: "explicit" | "auto";
+          skill_id: "investment-research" | "portfolio-review" | "investment-checklist" | null;
+          status: "queued" | "running" | "succeeded" | "failed";
+          provider: string | null;
+          failure_code: string | null;
+          created_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          thread_id: string;
+          request_id: string;
+          user_message_id: string;
+          assistant_message_id?: string | null;
+          question: string;
+          invocation_mode?: "explicit" | "auto";
+          skill_id?: "investment-research" | "portfolio-review" | "investment-checklist" | null;
+          status?: "queued" | "running" | "succeeded" | "failed";
+          provider?: string | null;
+          failure_code?: string | null;
+          created_at?: string;
+          started_at?: string | null;
+          completed_at?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["agent_demo_runs"]["Insert"]>;
+        Relationships: [];
+      };
       research_quotas: {
         Row: {
           owner_id: string;
@@ -1321,6 +1361,18 @@ export interface Database {
       };
       release_research_quota: {
         Args: { p_reservation_id: string };
+        Returns: Json;
+      };
+      admit_agent_demo_run: {
+        Args: { p_owner_id: string; p_thread_id: string; p_request_id: string; p_question: string; p_invocation_mode?: "explicit" | "auto"; p_skill_id?: "investment-research" | "portfolio-review" | "investment-checklist" | null };
+        Returns: Json;
+      };
+      claim_agent_demo_run: {
+        Args: { p_run_id: string; p_worker_id: string };
+        Returns: Json | null;
+      };
+      complete_agent_demo_run: {
+        Args: { p_run_id: string; p_worker_id: string; p_content: string; p_provider: string };
         Returns: Json;
       };
     };

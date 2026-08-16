@@ -108,6 +108,35 @@ class WorkerProtocol:
         except ContractError as exc:
             raise ProtocolError("invalid task claim response") from exc
 
+    def claim_agent_demo_run(self, run_id: str) -> dict[str, Any] | None:
+        """Claim one explicitly selected local Demo run.
+
+        This seam deliberately carries only the persisted question and stable
+        identities. It does not expose legacy quota, trace, memory, or raw
+        provider payloads to the Demo worker.
+        """
+        credential = self._require_credential()
+        if not _uuid_like(run_id):
+            raise ProtocolError("invalid demo run id")
+        status, value = self._request("POST", "api/worker/agent-demo/claim", {"run_id": run_id})
+        if status == 204 or value is None:
+            return None
+        response = self._object(value, "invalid demo run claim")
+        if response.get("run_id") != run_id or response.get("status") != "running" or not _non_empty_string(response.get("question")):
+            raise ProtocolError("invalid demo run claim")
+        response["worker_id"] = credential.worker_id
+        return response
+
+    def complete_agent_demo_run(self, run_id: str, content: str, provider: str = "scripted") -> dict[str, Any]:
+        self._require_credential()
+        if not _uuid_like(run_id) or not isinstance(content, str) or not content.strip() or not isinstance(provider, str) or not provider.strip():
+            raise ProtocolError("invalid demo run completion")
+        _, value = self._request("POST", f"api/worker/agent-demo/runs/{run_id}/complete", {"content": content, "provider": provider})
+        response = self._object(value, "invalid demo run completion acknowledgement")
+        if response.get("run_id") != run_id or response.get("status") != "succeeded":
+            raise ProtocolError("demo run completion was not acknowledged")
+        return response
+
     def schedule_tick(self) -> dict[str, Any]:
         self._require_credential()
         _, value = self._request("POST", "api/worker/schedule/tick", {})
@@ -428,6 +457,10 @@ class WorkerProtocol:
 
 def _non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def _uuid_like(value: object) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", value, re.IGNORECASE))
 
 
 def _string_array(value: object) -> bool:
