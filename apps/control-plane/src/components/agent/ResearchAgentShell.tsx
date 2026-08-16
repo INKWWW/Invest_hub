@@ -262,6 +262,9 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
   }
 
   const groupedThreads = groupThreads(threads);
+  const selectedSkillDefinition = selectedSkill
+    ? SKILL_DEFINITIONS.find((skill) => skill.id === selectedSkill)
+    : null;
 
   return <section className="agent-workbench" data-testid="agent-workbench">
     <button className="agent-drawer-trigger" type="button" aria-label="打开研究会话列表" onClick={() => setDrawerOpen(true)}>会话列表</button>
@@ -315,6 +318,7 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
           <button type="button" aria-pressed={selectedSkill === null} onClick={() => setSelectedSkill(null)}>智能</button>
           {SKILL_DEFINITIONS.map((skill) => <button key={skill.id} type="button" aria-pressed={selectedSkill === skill.id} onClick={() => setSelectedSkill(skill.id)}>{skill.buttonLabel}</button>)}
         </div>
+        {selectedSkillDefinition ? <div className="agent-skill-selection" role="status"><span>已选择 Skill</span><strong>/{selectedSkillDefinition.buttonLabel}</strong></div> : null}
         <textarea id="agent-message-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
         <div className="agent-composer-footer"><span>消息会持久化到当前 Research Thread。</span><button type="submit" disabled={busy || !draft.trim()}>{busy ? "提交中…" : "发送问题"}</button></div>
       </form>

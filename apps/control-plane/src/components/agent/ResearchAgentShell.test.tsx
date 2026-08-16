@@ -38,6 +38,11 @@ describe("ResearchAgentShell", () => {
     expect(html).toContain('data-testid="agent-composer"');
     expect(html).toContain("本地 Demo Runner");
     expect(html).toContain("发送问题");
+    expect(html).toContain('class="agent-skill-picker"');
+    expect(html).toContain("大师投研");
+    expect(html).toContain("持仓组合分析");
+    expect(html).toContain("下单前巴菲特拷问");
+    expect(html).toContain('aria-pressed="true">智能</button>');
     expect(html).not.toContain("研究额度");
     expect(html).not.toContain("Research Quota");
   });

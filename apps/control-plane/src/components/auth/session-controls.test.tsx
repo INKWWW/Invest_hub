@@ -11,5 +11,7 @@ describe("SessionControls", () => {
     expect(adminHtml).toContain('href="/admin"');
     expect(adminHtml).toContain("配置管理");
     expect(readerHtml).not.toContain("配置管理");
+    expect(adminHtml).not.toContain('href="/agent"');
+    expect(readerHtml).not.toContain('href="/agent"');
   });
 });

@@ -39,7 +39,6 @@ export function SessionControls({ viewer }: { viewer: SessionViewer }) {
       <strong>{viewer.email ?? "已登录账号"}</strong>
       <em>{roleLabel(viewer.role)}</em>
     </p>
-    <a className="session-agent-link" href="/agent">投资研究 Agent</a>
     {viewer.role === "admin" ? <a className="session-admin-link" href="/admin">配置管理</a> : null}
     <button type="button" onClick={() => void signOut()} disabled={isSubmitting}>
       {isSubmitting ? "正在退出…" : "退出 / 切换账号"}

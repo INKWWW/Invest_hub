@@ -96,9 +96,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .session-admin-link { border: 1px solid #1f5663; border-radius: 2px; background: transparent; color: #1f5663; font-size: 0.625rem; font-weight: 800; padding: 0.45rem 0.6rem; text-decoration: none; white-space: nowrap; }
 
-.session-agent-link { border: 1px solid #b7ceca; border-radius: 2px; background: transparent; color: #1f5663; font-size: 0.625rem; font-weight: 800; padding: 0.45rem 0.6rem; text-decoration: none; white-space: nowrap; }
-
-.session-controls button:hover, .session-agent-link:hover, .session-admin-link:hover { background: #e5efed; }
+.session-controls button:hover, .session-admin-link:hover { background: #e5efed; }
 
 .session-controls button:disabled { cursor: wait; opacity: 0.7; }
 
@@ -704,6 +702,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .agent-composer { display: grid; gap: 0.65rem; border-top: 1px solid #d6e1de; background: #f6f8f5; padding: 1rem clamp(1rem, 3vw, 2rem) 1.25rem; }
 
 .agent-composer > label { color: #315860; font-size: 0.78rem; font-weight: 850; }
+
+.agent-skill-picker { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; }
+
+.agent-skill-picker button { border: 1px solid #b7ceca; border-radius: 4px; background: #e8f0ed; color: #466a70; padding: 0.5rem 0.72rem; font-size: 0.8rem; font-weight: 800; line-height: 1.25; }
+
+.agent-skill-picker button:hover { border-color: #88aaa5; background: #dceae6; color: #2b5960; }
+
+.agent-skill-picker button[aria-pressed="true"] { border-color: #2b6873; background: #2b6873; color: #fffefa; box-shadow: 0 2px 0 rgba(23, 61, 70, 0.14); }
+
+.agent-skill-picker button[aria-pressed="true"]:hover { border-color: #235a64; background: #235a64; }
+
+.agent-skill-selection { display: flex; align-items: center; gap: 0.55rem; width: fit-content; border-left: 3px solid #2b6873; background: #e5efed; padding: 0.42rem 0.65rem; color: #315860; font-size: 0.78rem; }
+
+.agent-skill-selection strong { color: #173d46; font-size: 0.86rem; }
 
 .agent-composer textarea { width: 100%; min-height: 6rem; resize: vertical; border-color: #b8ceca; background: #fffefa; padding: 0.75rem; color: var(--ink); line-height: 1.55; }
 
