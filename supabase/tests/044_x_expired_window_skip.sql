@@ -1,6 +1,6 @@
 begin;
 
-select plan(19);
+select plan(20);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000044001', 'authenticated', 'authenticated', 'x-expired-user@example.invalid', 'fixture-only', now());
@@ -76,6 +76,10 @@ update public.workers
 set status = 'offline'
 where id = '00000000-0000-0000-0000-000000044020';
 
+select throws_ok(
+  $$select public.reap_expired_x_window_tasks('00000000-0000-0000-0000-000000044020', '2099-01-02T12:23:00Z')$$,
+  '42501', 'worker_not_authorized', 'reaper rejects an invalid worker before scanning sources'
+);
 select throws_ok(
   $$select public.claim_next_task('00000000-0000-0000-0000-000000044020', '2099-01-02T12:23:00Z')$$,
   '42501', 'worker_not_authorized', 'invalid worker is rejected before expiry reaping'
