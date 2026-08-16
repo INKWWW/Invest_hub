@@ -89,6 +89,7 @@ export type XReaderBlogger = {
   source: { sourceKey: string; displayName: string };
   status: ReaderStatus;
   timedOut: boolean;
+  lateArrival: boolean;
   collectionGaps: Array<{ startAt: string; endAt: string }>;
   segments: XReaderSegment[];
 };
@@ -303,7 +304,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const segments = await readAllChunkPages(sourceIdChunks, (ids, from, to) => {
     let query = supabase.from("x_daily_viewpoint_segments")
-      .select("source_id,natural_date,occurred_from_at,occurred_through_at,schema_version,prompt_version,segment_output,window_viewpoints,post_analysis_refs")
+      .select("source_id,natural_date,range_task_id,created_at,occurred_from_at,occurred_through_at,schema_version,prompt_version,segment_output,window_viewpoints,post_analysis_refs")
       .in("source_id", ids);
     if (input.date) query = query.eq("natural_date", input.date);
     return query.order("natural_date", { ascending: false }).order("occurred_from_at", { ascending: true })
@@ -344,7 +345,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const contextByCanonicalId = new Map(contextRows.map((row) => [row.canonical_message_id, row]));
 
   const batches = await readAllPages((from, to) => {
-    let query = supabase.from("x_collection_batches").select("id,natural_date,cutoff_at,status");
+    let query = supabase.from("x_collection_batches").select("id,natural_date,cutoff_at,settlement_deadline_at,status");
     if (input.date) query = query.eq("natural_date", input.date);
     return query.order("natural_date", { ascending: false }).order("cutoff_at", { ascending: false })
       .order("id", { ascending: true }).range(from, to);
@@ -385,10 +386,13 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const batchSources = allBatchSources.filter((row) => sourceIdSet.has(row.source_id));
   const batchSourcesByBatch = new Map<string, typeof batchSources>();
   for (const row of batchSources) batchSourcesByBatch.set(row.batch_id, [...(batchSourcesByBatch.get(row.batch_id) ?? []), row]);
-  const taskIds = [...new Set(batchSources.flatMap((row) => typeof row.x_sync_task_id === "string" ? [row.x_sync_task_id] : []))];
+  const taskIds = [...new Set([
+    ...batchSources.flatMap((row) => typeof row.x_sync_task_id === "string" ? [row.x_sync_task_id] : []),
+    ...segments.flatMap((segment) => typeof segment.range_task_id === "string" ? [segment.range_task_id] : []),
+  ])];
   const taskIdChunks = chunkValues(taskIds, READER_QUERY_BATCH_SIZE);
   const [taskRows, attemptRows] = await Promise.all([
-    readAllChunkPages(taskIdChunks, (ids, from, to) => supabase.from("sync_tasks").select("id,status").in("id", ids)
+    readAllChunkPages(taskIdChunks, (ids, from, to) => supabase.from("sync_tasks").select("id,status,collection_batch_id").in("id", ids)
       .order("id", { ascending: true }).range(from, to)),
     readAllChunkPages(taskIdChunks, (ids, from, to) => supabase.from("task_attempts").select("task_id,result,updated_at").in("task_id", ids)
       .order("updated_at", { ascending: false }).order("task_id", { ascending: true })
@@ -396,6 +400,8 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   ]);
   const taskIdSet = new Set(taskIds);
   const taskById = new Map(taskRows.filter((task) => taskIdSet.has(task.id)).map((task) => [task.id, task]));
+  const batchById = new Map(orderedBatches.map((batch) => [batch.id, batch]));
+  const batchSourceByBatchAndSource = new Map(batchSources.map((row) => [`${row.batch_id}:${row.source_id}`, row]));
   const attemptResultByTaskId = new Map<string, unknown>();
   for (const attempt of attemptRows) {
     if (taskIdSet.has(attempt.task_id) && !attemptResultByTaskId.has(attempt.task_id)) attemptResultByTaskId.set(attempt.task_id, attempt.result);
@@ -496,6 +502,19 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       const taskId = typeof batchSource?.x_sync_task_id === "string" ? batchSource.x_sync_task_id : undefined;
       const daySegments = [...(segmentGroups.get(`${sourceId}:${naturalDate}`) ?? [])]
         .sort((left, right) => right.occurred_through_at.localeCompare(left.occurred_through_at));
+      const lateArrival = daySegments.some((segment) => {
+        const rangeTaskId = typeof segment.range_task_id === "string" ? segment.range_task_id : undefined;
+        const task = rangeTaskId ? taskById.get(rangeTaskId) : undefined;
+        const batchId = typeof task?.collection_batch_id === "string" ? task.collection_batch_id : undefined;
+        const batch = batchId ? batchById.get(batchId) : undefined;
+        const batchSource = batchId ? batchSourceByBatchAndSource.get(`${batchId}:${sourceId}`) : undefined;
+        return Boolean(
+          batch && batchSource && (
+            batchSource.settlement_status === "excluded"
+            || (typeof segment.created_at === "string" && typeof batch.settlement_deadline_at === "string" && segment.created_at > batch.settlement_deadline_at)
+          ),
+        );
+      });
       const projectedSegments = daySegments.map((segment) => {
         const refs = Array.isArray(segment.post_analysis_refs) ? segment.post_analysis_refs : [];
         const analyses = refs.flatMap((ref) => {
@@ -534,6 +553,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
           ? batchSourceReaderStatus(batchSource, taskId ? taskById.get(taskId) : undefined, taskId ? attemptResultByTaskId.get(taskId) : undefined)
           : "succeeded" as const,
         timedOut: batchSource?.settlement_status === "excluded" && batchSource.exclusion_code === "settlement_deadline_exceeded",
+        lateArrival,
         collectionGaps: collectionGapsBySourceAndDate.get(`${sourceId}:${naturalDate}`) ?? [],
         segments: projectedSegments,
       }];

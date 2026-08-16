@@ -109,6 +109,128 @@ describe("X reader date projection", () => {
     ]);
   });
 
+  it("projects late persisted segments without changing judgement", async () => {
+    databaseMocks.rows.set("sources", [
+      { id: "source-a", source_key: "alpha", display_name: "Alpha" },
+      { id: "source-b", source_key: "beta", display_name: "Beta" },
+      { id: "source-c", source_key: "gamma", display_name: "Gamma" },
+      { id: "source-d", source_key: "delta", display_name: "Delta" },
+    ]);
+    databaseMocks.rows.set("x_daily_viewpoint_segments", [
+      {
+        source_id: "source-a",
+        natural_date: "2099-01-03",
+        range_task_id: "task-late",
+        created_at: "2099-01-04T01:00:00.000Z",
+        occurred_from_at: "2099-01-03T08:00:00.000Z",
+        occurred_through_at: "2099-01-03T12:00:00.000Z",
+        window_viewpoints: ["迟到但真实持久化的观点"],
+        post_analysis_refs: [],
+        evidence_refs: ["internal"],
+      },
+      {
+        source_id: "source-b",
+        natural_date: "2099-01-03",
+        range_task_id: "task-normal",
+        created_at: "2099-01-03T13:00:00.000Z",
+        occurred_from_at: "2099-01-03T12:00:00.000Z",
+        occurred_through_at: "2099-01-03T13:00:00.000Z",
+        window_viewpoints: ["正常成功的观点"],
+        post_analysis_refs: [],
+        evidence_refs: ["internal"],
+      },
+    ]);
+    databaseMocks.rows.set("x_collection_batches", [{
+      id: "batch-late",
+      natural_date: "2099-01-03",
+      cutoff_at: "2099-01-03T12:00:00.000Z",
+      settlement_deadline_at: "2099-01-03T14:00:00.000Z",
+      status: "succeeded",
+    }, {
+      id: "batch-normal",
+      natural_date: "2099-01-03",
+      cutoff_at: "2099-01-03T13:00:00.000Z",
+      settlement_deadline_at: "2099-01-03T14:00:00.000Z",
+      status: "succeeded",
+    }, {
+      id: "batch-queued",
+      natural_date: "2099-01-03",
+      cutoff_at: "2099-01-03T14:00:00.000Z",
+      settlement_deadline_at: "2099-01-03T15:00:00.000Z",
+      status: "judgement_pending",
+    }, {
+      id: "batch-gap",
+      natural_date: "2099-01-03",
+      cutoff_at: "2099-01-03T15:00:00.000Z",
+      settlement_deadline_at: "2099-01-03T16:00:00.000Z",
+      status: "succeeded",
+    }]);
+    databaseMocks.rows.set("x_daily_judgement_versions", []);
+    databaseMocks.rows.set("x_collection_batch_sources", [{
+      batch_id: "batch-late",
+      source_id: "source-a",
+      source_display_name: "Alpha",
+      x_sync_task_id: "task-late",
+      settlement_status: "excluded",
+      exclusion_code: "settlement_deadline_exceeded",
+    }, {
+      batch_id: "batch-normal",
+      source_id: "source-b",
+      source_display_name: "Beta",
+      x_sync_task_id: "task-normal",
+      settlement_status: "included",
+    }, {
+      batch_id: "batch-queued",
+      source_id: "source-c",
+      source_display_name: "Gamma",
+      x_sync_task_id: "task-queued",
+      settlement_status: "pending",
+    }, {
+      batch_id: "batch-gap",
+      source_id: "source-d",
+      source_display_name: "Delta",
+      x_sync_task_id: "task-gap",
+      settlement_status: "excluded",
+      exclusion_code: "settlement_deadline_exceeded",
+    }]);
+    databaseMocks.rows.set("sync_tasks", [
+      { id: "task-late", source_id: "source-a", status: "succeeded", collection_batch_id: "batch-late" },
+      { id: "task-normal", source_id: "source-b", status: "succeeded", collection_batch_id: "batch-normal" },
+      { id: "task-queued", source_id: "source-c", status: "queued", collection_batch_id: "batch-queued" },
+      { id: "task-gap", source_id: "source-d", status: "failed", collection_batch_id: "batch-gap" },
+    ]);
+    databaseMocks.rows.set("task_attempts", []);
+    databaseMocks.rows.set("x_collection_gaps", [{
+      source_id: "source-d",
+      natural_date: "2099-01-03",
+      window_start_at: "2099-01-03T04:00:00.000Z",
+      window_end_at: "2099-01-03T08:00:00.000Z",
+      failed_task_id: "task-gap",
+      failure_class: "timeout",
+    }]);
+
+    const result = await readXDay();
+    const day = result.find((candidate) => candidate.naturalDate === "2099-01-03");
+    const late = day?.bloggers.find((blogger) => blogger.source.sourceKey === "alpha");
+    const normalIncluded = day?.bloggers.find((blogger) => blogger.source.sourceKey === "beta");
+    const queuedWithoutSegment = day?.bloggers.find((blogger) => blogger.source.sourceKey === "gamma");
+    const gapOnly = day?.bloggers.find((blogger) => blogger.source.sourceKey === "delta");
+
+    expect(late).toMatchObject({
+      lateArrival: true,
+      segments: [{ viewpoints: ["迟到但真实持久化的观点"] }],
+    });
+    expect(day?.judgement.batches).toEqual(expect.arrayContaining([expect.objectContaining({ coverageStatus: null })]));
+    expect(normalIncluded?.lateArrival).toBe(false);
+    expect(queuedWithoutSegment?.segments).toEqual([]);
+    expect(gapOnly?.collectionGaps).toEqual([{
+      startAt: "2099-01-03T04:00:00.000Z",
+      endAt: "2099-01-03T08:00:00.000Z",
+    }]);
+    expect(JSON.stringify(result)).not.toContain("settlement_deadline_exceeded");
+    expect(JSON.stringify(result)).not.toContain("task-late");
+  });
+
   it("retains archived history, builds snapshot placeholders, and projects safe revision history", async () => {
     databaseMocks.rows.set("x_collection_gaps", [
       { source_id: "source-a", natural_date: "2099-01-02", window_start_at: "2099-01-02T04:00:00.000Z", window_end_at: "2099-01-02T08:00:00.000Z", failed_task_id: "task-a-gap", failure_class: "opencli_contract" },
@@ -233,7 +355,8 @@ describe("X reader date projection", () => {
     const projections = databaseMocks.selects.map((select) => `${select.table}:${select.columns}`).join("|");
     expect(projections).not.toContain("evidence_refs");
     expect(projections).not.toContain("x_daily_viewpoint_segments:id,");
-    expect(databaseMocks.selects).toContainEqual({ table: "sync_tasks", columns: "id,status" });
+    expect(databaseMocks.selects).toContainEqual({ table: "x_daily_judgement_versions", columns: "batch_id,revision,coverage_status,output,schema_version,prompt_version" });
+    expect(databaseMocks.selects).toContainEqual({ table: "sync_tasks", columns: "id,status,collection_batch_id" });
     expect(databaseMocks.selects).toContainEqual({ table: "task_attempts", columns: "task_id,result,updated_at" });
     expect(databaseMocks.selects).toContainEqual({ table: "x_collection_gaps", columns: "source_id,natural_date,window_start_at,window_end_at" });
     expect(projections).not.toContain("failed_task_id");
