@@ -665,13 +665,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-empty { border-left: 3px solid #a9c1bc; margin: 0; padding: 0.7rem; color: #607579; font-size: 0.82rem; line-height: 1.5; }
 
-.agent-conversation { display: grid; grid-template-rows: auto minmax(10rem, 1fr) auto auto auto; min-width: 0; background: #fffefa; }
+.agent-conversation { display: grid; grid-template-rows: auto minmax(10rem, 1fr) auto auto; min-width: 0; background: #fffefa; }
 
 .agent-conversation-header { border-bottom: 1px solid #d6e1de; padding: clamp(1.25rem, 3vw, 2.25rem); }
 
 .agent-conversation-header h2 { font-size: clamp(1.55rem, 3vw, 2.35rem); }
-
-.agent-conversation-header > p:last-child { max-width: 60ch; margin: 0.65rem 0 0; color: #63757a; font-size: 0.88rem; line-height: 1.5; }
 
 .agent-message-list { display: grid; align-content: start; gap: 0.9rem; min-height: 10rem; overflow: auto; padding: clamp(1rem, 3vw, 2rem); }
 
@@ -691,14 +689,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-conversation-empty p { margin: 0; color: #315860; font-family: Georgia, "Times New Roman", serif; font-size: 1.25rem; }
 
-.agent-conversation-empty span { display: block; margin-top: 0.55rem; color: #708084; font-size: 0.82rem; }
-
-.agent-fail-closed { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem; border-top: 1px solid #dfd4bf; background: #fff9ed; padding: 0.75rem clamp(1rem, 3vw, 2rem); color: #735326; font-size: 0.78rem; }
-
-.agent-fail-closed strong { font-size: 0.82rem; }
-
-.agent-fail-closed span { text-align: right; }
-
 .agent-composer { display: grid; gap: 0.65rem; border-top: 1px solid #d6e1de; background: #f6f8f5; padding: 1rem clamp(1rem, 3vw, 2rem) 1.25rem; }
 
 .agent-composer > label { color: #315860; font-size: 0.78rem; font-weight: 850; }
@@ -713,13 +703,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-skill-picker button[aria-pressed="true"]:hover { border-color: #235a64; background: #235a64; }
 
-.agent-skill-selection { display: flex; align-items: center; gap: 0.55rem; width: fit-content; border-left: 3px solid #2b6873; background: #e5efed; padding: 0.42rem 0.65rem; color: #315860; font-size: 0.78rem; }
+.agent-composer-editor { display: flex; align-items: flex-start; gap: 0.45rem; min-height: 6rem; border: 1px solid #b8ceca; background: #fffefa; padding: 0.75rem; }
 
-.agent-skill-selection strong { color: #173d46; font-size: 0.86rem; }
+.agent-composer-editor:focus-within { outline: 3px solid #9cc9cc; outline-offset: 2px; }
 
-.agent-composer textarea { width: 100%; min-height: 6rem; resize: vertical; border-color: #b8ceca; background: #fffefa; padding: 0.75rem; color: var(--ink); line-height: 1.55; }
+.agent-skill-token { flex: 0 0 auto; margin-top: 0.02rem; border-radius: 4px; background: #e7f0ff; color: #0a5cac; padding: 0.18rem 0.35rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.84rem; font-weight: 750; line-height: 1.35; white-space: nowrap; }
 
-.agent-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: #708084; font-size: 0.75rem; }
+.agent-composer-editor textarea { flex: 1 1 auto; width: 100%; min-width: 0; min-height: 4.5rem; resize: vertical; border: 0; outline: 0; background: transparent; padding: 0; color: var(--ink); line-height: 1.55; }
+
+.agent-composer-footer { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; color: #708084; font-size: 0.75rem; }
 
 .agent-composer-footer button { min-width: 6.5rem; }
 
@@ -783,8 +775,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .agent-conversation-header { padding: 1rem; padding-right: 7rem; }
   .agent-message-list { min-height: 16rem; padding: 1rem; }
   .agent-message { max-width: 92%; }
-  .agent-fail-closed { align-items: flex-start; flex-direction: column; gap: 0.3rem; padding: 0.7rem 1rem; }
-  .agent-fail-closed span { text-align: left; }
   .agent-composer { padding: 0.85rem 1rem 1rem; }
   .agent-composer-footer { align-items: flex-end; flex-direction: column; gap: 0.6rem; }
   .agent-composer-footer button { width: 100%; }

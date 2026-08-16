@@ -23,7 +23,6 @@ describe("AgentPage", () => {
     expect(html).toContain("投资研究 Agent");
     expect(html).toContain('href="/agent"');
     expect(html).toContain('href="/agent" aria-current="page"');
-    expect(html).toContain("本地 Demo Runner");
     expect(html).not.toContain("可用额度");
     expect(threadMocks.listResearchThreads).toHaveBeenCalledWith("user-one");
   });

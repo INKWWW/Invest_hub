@@ -303,24 +303,24 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
       <header className="agent-conversation-header">
         <p className="agent-kicker">Private workspace</p>
         <h2>{activeThread?.title ?? "新的研究会话"}</h2>
-        <p>只保存当前账号的研究对话；回答完成后会回到同一 Research Thread。</p>
       </header>
       <div className="agent-message-list" aria-live="polite">
         {detail?.messages.length ? detail.messages.map((message) => <article className={messageClass(message)} key={message.id}>
           <p className="agent-message-role">{message.role === "user" ? "你" : "Agent"}</p>{message.role === "assistant" ? <SafeMarkdown content={message.content} /> : <p>{message.content}</p>}<time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
-        </article>) : <div className="agent-conversation-empty"><p>把一个投资问题留在这里，作为你的研究起点。</p><span>当前只提供私有 Thread 与纯文本消息保存。</span></div>}
+        </article>) : <div className="agent-conversation-empty"><p>把一个投资问题留在这里，作为你的研究起点。</p></div>}
       </div>
       {error ? <p className="agent-error" role="alert">{error}</p> : null}
-      <div className="agent-fail-closed" role="status"><strong>{activeRunId ? "Agent 处理中" : "本地 Demo Runner"}</strong><span>{activeRunId ? "正在等待助手回答，页面会自动更新。" : "每次发送都会创建一个可追踪的 Demo Run。"}</span></div>
       <form className="agent-composer" data-testid="agent-composer" onSubmit={(event) => void submitMessage(event)}>
         <label htmlFor="agent-message-input">发送纯文本消息</label>
         <div className="agent-skill-picker" aria-label="本条消息的 Skill 选择">
           <button type="button" aria-pressed={selectedSkill === null} onClick={() => setSelectedSkill(null)}>智能</button>
           {SKILL_DEFINITIONS.map((skill) => <button key={skill.id} type="button" aria-pressed={selectedSkill === skill.id} onClick={() => setSelectedSkill(skill.id)}>{skill.buttonLabel}</button>)}
         </div>
-        {selectedSkillDefinition ? <div className="agent-skill-selection" role="status"><span>已选择 Skill</span><strong>/{selectedSkillDefinition.buttonLabel}</strong></div> : null}
-        <textarea id="agent-message-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
-        <div className="agent-composer-footer"><span>消息会持久化到当前 Research Thread。</span><button type="submit" disabled={busy || !draft.trim()}>{busy ? "提交中…" : "发送问题"}</button></div>
+        <div className="agent-composer-editor">
+          {selectedSkillDefinition ? <span className="agent-skill-token" aria-label={`已选择 ${selectedSkillDefinition.buttonLabel}`}>/{selectedSkillDefinition.buttonLabel}</span> : null}
+          <textarea id="agent-message-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
+        </div>
+        <div className="agent-composer-footer"><button type="submit" disabled={busy || !draft.trim()}>{busy ? "提交中…" : "发送问题"}</button></div>
       </form>
     </section>
   </section>;

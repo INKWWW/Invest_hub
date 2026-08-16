@@ -36,13 +36,17 @@ describe("ResearchAgentShell", () => {
     expect(html).toContain("今天的研究");
     expect(html).toContain("昨天的研究");
     expect(html).toContain('data-testid="agent-composer"');
-    expect(html).toContain("本地 Demo Runner");
     expect(html).toContain("发送问题");
     expect(html).toContain('class="agent-skill-picker"');
     expect(html).toContain("大师投研");
     expect(html).toContain("持仓组合分析");
     expect(html).toContain("下单前巴菲特拷问");
     expect(html).toContain('aria-pressed="true">智能</button>');
+    expect(html).toContain('class="agent-composer-editor"');
+    expect(html).not.toContain("已选择 Skill");
+    expect(html).not.toContain("当前只提供私有 Thread 与纯文本消息保存");
+    expect(html).not.toContain("本地 Demo Runner");
+    expect(html).not.toContain("消息会持久化到当前 Research Thread");
     expect(html).not.toContain("研究额度");
     expect(html).not.toContain("Research Quota");
   });
