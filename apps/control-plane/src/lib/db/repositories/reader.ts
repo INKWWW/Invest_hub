@@ -89,6 +89,7 @@ export type XReaderBlogger = {
   source: { sourceKey: string; displayName: string };
   status: ReaderStatus;
   timedOut: boolean;
+  collectionGaps: Array<{ startAt: string; endAt: string }>;
   segments: XReaderSegment[];
 };
 
@@ -308,6 +309,14 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     return query.order("natural_date", { ascending: false }).order("occurred_from_at", { ascending: true })
       .order("source_id", { ascending: true }).order("id", { ascending: true }).range(from, to);
   });
+  const collectionGaps = await readAllChunkPages(sourceIdChunks, (ids, from, to) => {
+    let query = supabase.from("x_collection_gaps")
+      .select("source_id,natural_date,window_start_at,window_end_at")
+      .in("source_id", ids);
+    if (input.date) query = query.eq("natural_date", input.date);
+    return query.order("natural_date", { ascending: false }).order("window_start_at", { ascending: true })
+      .order("source_id", { ascending: true }).range(from, to);
+  });
   const requestedPostIds = new Set<string>();
   for (const segment of segments) {
     const refs = Array.isArray(segment.post_analysis_refs) ? segment.post_analysis_refs : [];
@@ -398,6 +407,15 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const key = `${segment.source_id}:${segment.natural_date}`;
     segmentGroups.set(key, [...(segmentGroups.get(key) ?? []), segment]);
   }
+  const collectionGapsBySourceAndDate = new Map<string, Array<{ startAt: string; endAt: string }>>();
+  for (const gap of collectionGaps) {
+    if (!sourceIdSet.has(gap.source_id)) continue;
+    const key = `${gap.source_id}:${gap.natural_date}`;
+    collectionGapsBySourceAndDate.set(key, [...(collectionGapsBySourceAndDate.get(key) ?? []), {
+      startAt: gap.window_start_at,
+      endAt: gap.window_end_at,
+    }]);
+  }
 
   const versionsByBatch = new Map<string, typeof versions>();
   for (const version of versions) {
@@ -462,6 +480,12 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const sourceId = key.slice(separator + 1);
     sourceIdsByDate.set(naturalDate, new Set([...(sourceIdsByDate.get(naturalDate) ?? []), sourceId]));
   }
+  for (const key of collectionGapsBySourceAndDate.keys()) {
+    const separator = key.indexOf(":");
+    const naturalDate = key.slice(separator + 1);
+    const sourceId = key.slice(0, separator);
+    sourceIdsByDate.set(naturalDate, new Set([...(sourceIdsByDate.get(naturalDate) ?? []), sourceId]));
+  }
 
   const bloggersByDate = new Map<string, XReaderBlogger[]>();
   for (const [naturalDate, dateSourceIds] of sourceIdsByDate) {
@@ -510,6 +534,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
           ? batchSourceReaderStatus(batchSource, taskId ? taskById.get(taskId) : undefined, taskId ? attemptResultByTaskId.get(taskId) : undefined)
           : "succeeded" as const,
         timedOut: batchSource?.settlement_status === "excluded" && batchSource.exclusion_code === "settlement_deadline_exceeded",
+        collectionGaps: collectionGapsBySourceAndDate.get(`${sourceId}:${naturalDate}`) ?? [],
         segments: projectedSegments,
       }];
     }).sort((left, right) => left.source.displayName.localeCompare(right.source.displayName));

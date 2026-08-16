@@ -19,6 +19,27 @@ function dates(days: XReaderDate[]) {
   return [...new Set(days.map((day) => day.naturalDate))];
 }
 
+function formatShanghaiDateTime(value: string) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("month")}月${part("day")}日 ${part("hour")}:${part("minute")}`;
+}
+
+function formatShanghaiGap(gap: { startAt: string; endAt: string }) {
+  const start = formatShanghaiDateTime(gap.startAt);
+  const end = formatShanghaiDateTime(gap.endAt);
+  return start.slice(0, 6) === end.slice(0, 6) ? `${start}–${end.slice(7)}` : `${start}–${end}`;
+}
+
+function CollectionGapNotice({ gaps }: { gaps: XReaderBlogger["collectionGaps"] | undefined }) {
+  if (!gaps?.length) return null;
+  return <div className="reader-status" data-status="partial_failure">
+    {gaps.map((gap) => <p role="status" key={`${gap.startAt}:${gap.endAt}`}>采集缺失：{formatShanghaiGap(gap)}</p>)}
+  </div>;
+}
+
 function validOrAll(value: string | undefined, values: string[]) {
   return value && values.includes(value) ? value : ALL;
 }
@@ -104,6 +125,7 @@ function JudgementCard({ judgement, index }: { judgement: ReaderJudgement; index
 function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
   return <section className="x-reader-blogger">
     <header className="x-reader-author-strip"><p>博主</p><h3 className="x-reader-author">{blogger.source.displayName}</h3></header>
+    <CollectionGapNotice gaps={blogger.collectionGaps} />
     {blogger.timedOut ? <div className="reader-status" data-status="partial_failure"><p role="status">采集超时：本机未在结算时间前完成采集。</p></div> : <ReaderStatus status={blogger.status} asOf={blogger.segments[0]?.occurredThroughAt} />}
     {!blogger.segments.length ? <p className="summary-empty">{blogger.timedOut ? "本批次未纳入该博主的完整信息。" : blogger.status === "partial_failure" ? "本批次未纳入该博主的完整信息。" : "本批次没有可展示的博主观点。"}</p> : null}
     {blogger.segments.map((segment, index) => <details className="x-reader-segment" key={segment.occurredThroughAt} open={index === 0}>

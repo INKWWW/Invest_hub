@@ -920,6 +920,32 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["x_collection_batch_sources"]["Insert"]>;
         Relationships: [];
       };
+      x_collection_gaps: {
+        Row: {
+          id: string;
+          source_id: string;
+          failed_task_id: string;
+          natural_date: string;
+          window_start_at: string;
+          window_end_at: string;
+          failure_class: string;
+          skipped_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          failed_task_id: string;
+          natural_date: string;
+          window_start_at: string;
+          window_end_at: string;
+          failure_class: string;
+          skipped_at?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["x_collection_gaps"]["Insert"]>;
+        Relationships: [];
+      };
       x_daily_judgement_runs: {
         Row: {
           id: string;

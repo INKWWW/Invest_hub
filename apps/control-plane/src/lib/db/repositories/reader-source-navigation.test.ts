@@ -110,6 +110,10 @@ describe("X reader date projection", () => {
   });
 
   it("retains archived history, builds snapshot placeholders, and projects safe revision history", async () => {
+    databaseMocks.rows.set("x_collection_gaps", [
+      { source_id: "source-a", natural_date: "2099-01-02", window_start_at: "2099-01-02T04:00:00.000Z", window_end_at: "2099-01-02T08:00:00.000Z", failed_task_id: "task-a-gap", failure_class: "opencli_contract" },
+      { source_id: "source-b", natural_date: "2099-01-01", window_start_at: "2099-01-01T04:00:00.000Z", window_end_at: "2099-01-01T08:00:00.000Z", failed_task_id: "task-b-gap", failure_class: "timeout" },
+    ]);
     const result = await readXDay();
     const serialized = JSON.stringify(result);
 
@@ -125,14 +129,14 @@ describe("X reader date projection", () => {
     expect(result[0]?.judgement.batches[1]).toMatchObject({ coverageStatus: "partial", includedSourceCount: 1, noNewSourceCount: 0, excludedSourceCount: 1, timedOutSourceCount: 1, stockViewpoints: [{ statement: "sixteen", supportingDisplayNames: ["Alpha at sixteen"] }] });
     expect(result[1]?.judgement.batches.map((batch) => batch.status)).toEqual(["judgement_pending", "judgement_failed"]);
     expect(result[0]?.bloggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "succeeded" }),
-      expect.objectContaining({ source: { sourceKey: "beta", displayName: "Beta" }, status: "no_new_messages", segments: [] }),
-      expect.objectContaining({ source: { sourceKey: "gamma", displayName: "Gamma archived" }, status: "succeeded", segments: [expect.objectContaining({ viewpoints: ["Archived Gamma viewpoint"] })] }),
+      expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "succeeded", collectionGaps: [{ startAt: "2099-01-02T04:00:00.000Z", endAt: "2099-01-02T08:00:00.000Z" }] }),
+      expect.objectContaining({ source: { sourceKey: "beta", displayName: "Beta" }, status: "no_new_messages", collectionGaps: [], segments: [] }),
+      expect.objectContaining({ source: { sourceKey: "gamma", displayName: "Gamma archived" }, status: "succeeded", collectionGaps: [], segments: [expect.objectContaining({ viewpoints: ["Archived Gamma viewpoint"] })] }),
     ]));
     expect(result[1]?.bloggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "processing", segments: [] }),
-      expect.objectContaining({ source: { sourceKey: "beta", displayName: "Beta" }, status: "failed", segments: [] }),
-      expect.objectContaining({ source: { sourceKey: "gamma", displayName: "Gamma archived" }, status: "partial_failure", timedOut: true, segments: [] }),
+      expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "processing", collectionGaps: [], segments: [] }),
+      expect.objectContaining({ source: { sourceKey: "beta", displayName: "Beta" }, status: "failed", collectionGaps: [{ startAt: "2099-01-01T04:00:00.000Z", endAt: "2099-01-01T08:00:00.000Z" }], segments: [] }),
+      expect.objectContaining({ source: { sourceKey: "gamma", displayName: "Gamma archived" }, status: "partial_failure", collectionGaps: [], timedOut: true, segments: [] }),
     ]));
     expect(databaseMocks.filters).not.toContainEqual({ table: "sources", field: "enabled", value: true });
     for (const forbidden of ["analysis_ids", "evidence_post_ids", "analysis-2", "post-2", "provider", "task-a-20", "task-global-latest", "evidence_refs", "settlement_deadline_exceeded"]) expect(serialized).not.toContain(forbidden);
@@ -231,6 +235,10 @@ describe("X reader date projection", () => {
     expect(projections).not.toContain("x_daily_viewpoint_segments:id,");
     expect(databaseMocks.selects).toContainEqual({ table: "sync_tasks", columns: "id,status" });
     expect(databaseMocks.selects).toContainEqual({ table: "task_attempts", columns: "task_id,result,updated_at" });
+    expect(databaseMocks.selects).toContainEqual({ table: "x_collection_gaps", columns: "source_id,natural_date,window_start_at,window_end_at" });
+    expect(projections).not.toContain("failed_task_id");
+    expect(projections).not.toContain("failure_class");
+    expect(projections).not.toContain("skipped_at");
     expect(databaseMocks.ins).toContainEqual(expect.objectContaining({ table: "sync_tasks", field: "id", values: expect.arrayContaining(["task-a-20", "task-b-20"]) }));
   });
 
