@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .config import LocalWorkerConfig, LocalWorkerConfigSet
 from .activation import activate_one_x_source
+from .agent_demo import run_agent_demo_once
 from .errors import ConfigError, ProtocolError, RemoteConflict
 from .protocol import WorkerProtocol
 from .runtime import (
@@ -68,11 +69,24 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_identity.add_argument("--opencli-executable", required=True)
     resolve_identity.add_argument("--evidence-dir", required=True)
     resolve_identity.add_argument("--worker-name", default="v2-x-identity-worker")
+    demo = subparsers.add_parser("run-agent-demo", help="run one explicitly selected investment research Demo run")
+    demo.add_argument("--control-plane-url", required=True)
+    demo.add_argument("--credential", required=True)
+    demo.add_argument("--bundle", required=True)
+    demo.add_argument("--run-root", required=True)
+    demo.add_argument("--run-id", required=True)
+    demo.add_argument("--enrolment-code-file")
+    demo.add_argument("--worker-name", default="agent-demo-worker")
+    demo.add_argument("--binary", default="codex")
+    demo.add_argument("--timeout-seconds", type=float, default=240.0)
+    demo.set_defaults(provider="codex_cli")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "run-agent-demo":
+        return _run_agent_demo(args)
     if args.command == "resolve-x-identity":
         return _resolve_x_identity(args)
     if args.command == "run-x-v3-verification":
@@ -459,6 +473,30 @@ def _read_private_text(path: Path) -> str:
     if not value:
         raise RuntimeError("enrolment code file is empty")
     return value
+
+
+def _run_agent_demo(args: argparse.Namespace) -> int:
+    try:
+        protocol = WorkerProtocol(args.control_plane_url, Path(args.credential), worker_name=args.worker_name)
+        if protocol.credential is None:
+            if not args.enrolment_code_file:
+                print(json.dumps({"status": "refused", "reason": "worker_enrolment_required"}, sort_keys=True), flush=True)
+                return 2
+            protocol.enrol(_read_private_text(Path(args.enrolment_code_file)))
+        status = run_agent_demo_once(
+            protocol,
+            args.run_id,
+            bundle=Path(args.bundle),
+            run_root=Path(args.run_root),
+            binary=args.binary,
+            timeout_seconds=args.timeout_seconds,
+            provider_name=args.provider,
+        )
+        print(json.dumps({"status": status, "provider": args.provider}, sort_keys=True), flush=True)
+        return 0 if status in {"succeeded", "no_claim"} else 1
+    except Exception as exc:
+        print(json.dumps({"status": "failed", "error": type(exc).__name__}, sort_keys=True), flush=True)
+        return 1
 
 
 if __name__ == "__main__":

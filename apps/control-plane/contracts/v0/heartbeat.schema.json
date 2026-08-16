@@ -14,7 +14,7 @@
     "capabilities": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "enum": ["discord_sync", "x_sync"] }
+      "items": { "enum": ["discord_sync", "x_sync", "agent_demo"] }
     }
   }
 }

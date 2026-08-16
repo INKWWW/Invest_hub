@@ -10,7 +10,7 @@ type Heartbeat = {
   worker_id: string;
   sent_at: string;
   status: "idle" | "claimed" | "executing" | "reporting" | "recovering" | "stopped";
-  capabilities: Array<"discord_sync" | "x_sync">;
+  capabilities: Array<"discord_sync" | "x_sync" | "agent_demo">;
 };
 
 export async function POST(request: Request) {

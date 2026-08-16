@@ -274,7 +274,7 @@ export interface Database {
           name: string;
           device_secret_hash: string;
           status: WorkerStatus;
-          capabilities: Array<"discord_sync" | "x_sync">;
+          capabilities: Array<"discord_sync" | "x_sync" | "agent_demo">;
           last_heartbeat_at: string | null;
           enrolled_at: string;
           revoked_at: string | null;
@@ -286,7 +286,7 @@ export interface Database {
           name: string;
           device_secret_hash: string;
           status?: WorkerStatus;
-          capabilities?: Array<"discord_sync" | "x_sync">;
+          capabilities?: Array<"discord_sync" | "x_sync" | "agent_demo">;
           last_heartbeat_at?: string | null;
           enrolled_at?: string;
           revoked_at?: string | null;

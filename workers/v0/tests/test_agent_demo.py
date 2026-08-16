@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+import tempfile
 
-from invest_hub_worker.agent_demo import ScriptedDemoProvider, run_demo_once
+from invest_hub_worker.agent_demo import CodexDemoProvider, ScriptedDemoProvider, run_agent_demo_once, run_demo_once
 
 
 class DemoProtocol:
@@ -19,6 +21,27 @@ class DemoProtocol:
     def complete_agent_demo_run(self, run_id: str, content: str, provider: str):
         self.completed = (run_id, content, provider)
         return {"run_id": run_id, "status": "succeeded"}
+
+
+class SkillDemoProtocol(DemoProtocol):
+    def claim_agent_demo_run(self, run_id: str):
+        return {
+            "run_id": run_id,
+            "question": "分析公开公司",
+            "status": "running",
+            "skill_id": "investment-research",
+            "history": [],
+        }
+
+
+class OnlineDemoProtocol(DemoProtocol):
+    def __init__(self) -> None:
+        super().__init__()
+        self.heartbeats: list[tuple[str, list[str]]] = []
+
+    def heartbeat(self, status: str, capabilities: list[str], sent_at: str):
+        self.heartbeats.append((status, capabilities))
+        return {"status": "online"}
 
 
 class AgentDemoTests(unittest.TestCase):
@@ -55,3 +78,57 @@ class AgentDemoTests(unittest.TestCase):
         protocol.claimed = True
         self.assertEqual(run_demo_once(protocol, "run-1"), "no_claim")
         self.assertIsNone(protocol.completed)
+
+    def test_skill_claim_uses_frozen_skill_instructions_without_general_product_prompt(self) -> None:
+        class CapturingProvider:
+            prompt: str | None = None
+
+            def complete(self, question: str, prompt: str | None = None) -> str:
+                self.prompt = prompt
+                return "# Skill result"
+
+        provider = CapturingProvider()
+        bundle = Path(__file__).resolve().parents[3] / "skills" / "upstream" / "d64751635308d1920bcdae234e6dd957fd79e736"
+        with tempfile.TemporaryDirectory() as directory:
+            protocol = SkillDemoProtocol()
+            self.assertEqual(run_demo_once(protocol, "run-1", provider, skill_bundle=bundle, run_root=Path(directory)), "succeeded")
+
+        assert provider.prompt is not None
+        self.assertIn("当前用户问题：分析公开公司", provider.prompt)
+        self.assertIn("investment-research", provider.prompt)
+        self.assertNotIn("invest-hub.agent-demo.general.v1", provider.prompt)
+
+    def test_codex_provider_returns_only_last_message_from_bounded_process(self) -> None:
+        calls: list[tuple[list[str], str]] = []
+
+        def runner(command: list[str], prompt: str, output_path: Path, timeout_seconds: float) -> None:
+            calls.append((command, prompt))
+            output_path.write_text("# 真实 Codex 结果\n", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as directory:
+            provider = CodexDemoProvider(Path(directory), runner=runner)
+            answer = provider.complete("研究公开公司", "受控 Prompt")
+
+        self.assertEqual(answer, "# 真实 Codex 结果\n")
+        self.assertEqual(calls[0][1], "受控 Prompt")
+        self.assertEqual(calls[0][0][0:2], ["codex", "exec"])
+        self.assertIn("--output-last-message", calls[0][0])
+
+    def test_real_runner_advertises_online_and_cleans_the_run_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            protocol = OnlineDemoProtocol()
+            self.assertEqual(
+                run_agent_demo_once(
+                    protocol,
+                    "run-1",
+                    bundle=root,
+                    run_root=root,
+                    provider=ScriptedDemoProvider(),
+                ),
+                "succeeded",
+            )
+            self.assertEqual(protocol.heartbeats, [("idle", ["agent_demo"])])
+            self.assertEqual(list(root.iterdir()), [])
+            assert protocol.completed is not None
+            self.assertEqual(protocol.completed[2], "scripted")

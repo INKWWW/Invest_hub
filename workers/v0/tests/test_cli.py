@@ -62,6 +62,19 @@ class JudgementDispatchFailingWorker(ScheduledWorker):
 
 
 class WorkerCliTests(unittest.TestCase):
+    def test_agent_demo_parser_requires_one_run_and_isolated_inputs(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args([
+            "run-agent-demo",
+            "--control-plane-url", "https://control.example.invalid",
+            "--credential", "/private/credentials.json",
+            "--bundle", "/private/skills",
+            "--run-root", "/private/runs",
+            "--run-id", "00000000-0000-0000-0000-000000000101",
+        ])
+        self.assertEqual(args.command, "run-agent-demo")
+        self.assertEqual(args.provider, "codex_cli")
+
     def test_run_once_requires_private_runtime_inputs_as_cli_arguments(self) -> None:
         parser = build_parser()
         args = parser.parse_args(

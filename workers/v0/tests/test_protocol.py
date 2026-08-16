@@ -108,6 +108,20 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(transport.calls[1]["headers"].get("Authorization"), f"Bearer {enrolment_response()['device_secret']}")
             self.assertEqual(transport.calls[1]["body"]["contract_version"], "v0")
 
+    def test_agent_demo_worker_can_advertise_its_capability(self) -> None:
+        heartbeat = {
+            "contract_version": "v0",
+            "worker_id": "worker-1",
+            "sent_at": "2099-01-01T00:00:00Z",
+            "status": "idle",
+            "capabilities": ["agent_demo"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, heartbeat))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+            self.assertEqual(protocol.heartbeat("idle", ["agent_demo"], "2099-01-01T00:00:00Z")["status"], "idle")
+
     def test_optional_local_vercel_bypass_is_forwarded_without_persisting_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport((201, enrolment_response()))
