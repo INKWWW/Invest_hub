@@ -31,6 +31,9 @@ class DemoRunProtocol(Protocol):
     def claim_agent_demo_run(self, run_id: str) -> dict[str, Any] | None:
         raise NotImplementedError
 
+    def next_agent_demo_run(self) -> str | None:
+        raise NotImplementedError
+
     def complete_agent_demo_run(self, run_id: str, content: str, provider: str) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -141,6 +144,21 @@ def run_demo_once(
     claim = protocol.claim_agent_demo_run(run_id)
     if claim is None:
         return "no_claim"
+    return _run_claimed_demo(protocol, claim, provider, skill_bundle=skill_bundle, run_root=run_root, provider_name=provider_name)
+
+
+def _run_claimed_demo(
+    protocol: DemoRunProtocol,
+    claim: dict[str, Any],
+    provider: DemoProvider | None,
+    *,
+    skill_bundle: Path | None,
+    run_root: Path | None,
+    provider_name: str,
+) -> str:
+    run_id = claim.get("run_id")
+    if not isinstance(run_id, str) or not run_id.strip():
+        raise ProtocolError("invalid demo run id")
     question = claim.get("question")
     if not isinstance(question, str) or not question.strip():
         raise ProtocolError("invalid demo question")
@@ -196,6 +214,48 @@ def run_agent_demo_once(
         return run_demo_once(
             protocol,
             run_id,
+            selected_provider,
+            skill_bundle=Path(bundle),
+            run_root=job_workspace,
+            provider_name=selected_name,
+        )
+    finally:
+        shutil.rmtree(job_workspace, ignore_errors=True)
+
+
+def run_agent_demo_worker_once(
+    protocol: DemoRunProtocol,
+    *,
+    bundle: Path,
+    run_root: Path,
+    provider: DemoProvider | None = None,
+    provider_name: str | None = None,
+    binary: str = "codex",
+    timeout_seconds: float = 240.0,
+) -> str:
+    """Poll once, claim at most one queued Demo run, and complete it."""
+
+    protocol.heartbeat("idle", ["agent_demo"], datetime.now(timezone.utc).isoformat())
+    run_id = protocol.next_agent_demo_run()
+    if run_id is None:
+        return "no_task"
+    claim = protocol.claim_agent_demo_run(run_id)
+    if claim is None:
+        return "no_claim"
+    root = Path(run_root)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    job_workspace = Path(tempfile.mkdtemp(prefix="agent-demo-job-", dir=str(root)))
+    try:
+        selected_provider = provider or CodexDemoProvider(
+            job_workspace,
+            binary=binary,
+            timeout_seconds=timeout_seconds,
+            readonly_dirs=(Path(bundle),),
+        )
+        selected_name = provider_name or ("codex_cli" if isinstance(selected_provider, CodexDemoProvider) else "scripted")
+        return _run_claimed_demo(
+            protocol,
+            claim,
             selected_provider,
             skill_bundle=Path(bundle),
             run_root=job_workspace,

@@ -161,6 +161,24 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(transport.calls[1]["url"], "https://control.example.invalid/api/worker/agent-demo/claim")
             self.assertEqual(transport.calls[2]["url"], f"https://control.example.invalid/api/worker/agent-demo/runs/{run_id}/complete")
 
+    def test_agent_demo_poll_discovers_a_queued_run_before_claiming_it(self) -> None:
+        run_id = "00000000-0000-0000-0000-000000000101"
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, {"run_id": run_id}))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(protocol.next_agent_demo_run(), run_id)
+            self.assertEqual(transport.calls[1]["url"], "https://control.example.invalid/api/worker/agent-demo/next")
+
+    def test_agent_demo_poll_returns_none_when_queue_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (204, None))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertIsNone(protocol.next_agent_demo_run())
+
     def test_window_claim_preserves_nullable_coverage_state_and_resume_progress(self) -> None:
         claim = {
             "contract_version": "v0",

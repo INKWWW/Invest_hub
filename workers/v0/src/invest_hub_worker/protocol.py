@@ -127,6 +127,18 @@ class WorkerProtocol:
         response["worker_id"] = credential.worker_id
         return response
 
+    def next_agent_demo_run(self) -> str | None:
+        """Find one queued Demo run without exposing its private payload."""
+        self._require_credential()
+        status, value = self._request("POST", "api/worker/agent-demo/next", {})
+        if status == 204 or value is None:
+            return None
+        response = self._object(value, "invalid demo queue response")
+        run_id = response.get("run_id")
+        if not _uuid_like(run_id):
+            raise ProtocolError("invalid demo queue response")
+        return str(run_id)
+
     def complete_agent_demo_run(self, run_id: str, content: str, provider: str = "scripted") -> dict[str, Any]:
         self._require_credential()
         if not _uuid_like(run_id) or not isinstance(content, str) or not content.strip() or not isinstance(provider, str) or not provider.strip():

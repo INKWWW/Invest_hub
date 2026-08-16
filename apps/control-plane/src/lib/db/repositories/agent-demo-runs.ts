@@ -24,6 +24,19 @@ export type DemoRun = {
 
 const runFields = "id,owner_id,thread_id,request_id,user_message_id,assistant_message_id,question,invocation_mode,skill_id,status,provider,failure_code,created_at,started_at,completed_at,updated_at";
 
+export async function findNextQueuedDemoRunId(): Promise<string | null> {
+  const { data, error } = await createSupabaseAdminClient()
+    .from("agent_demo_runs")
+    .select("id")
+    .eq("status", "queued")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_demo_run_response");
   return value as Record<string, unknown>;

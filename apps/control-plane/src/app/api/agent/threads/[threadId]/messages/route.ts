@@ -7,6 +7,12 @@ import { validateDemoMessage } from "../../../../../../lib/agent-demo/contract";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function errorIncludes(error: unknown, value: string): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  return [record.message, record.details, record.hint].some((field) => typeof field === "string" && field.includes(value));
+}
+
 export async function POST(request: Request, context: { params: Promise<{ threadId: string }> }) {
   const current = await getCurrentUser();
   if (!current) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -48,10 +54,10 @@ export async function POST(request: Request, context: { params: Promise<{ thread
       },
     }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "invalid_message") return NextResponse.json({ error: "invalid_message" }, { status: 422 });
-    if (error instanceof Error && error.message.includes("demo_runner_busy")) return NextResponse.json({ error: "demo_runner_busy", message: "Agent 正忙，请稍后重试" }, { status: 409 });
-    if (error instanceof Error && error.message.includes("demo_runner_unavailable")) return NextResponse.json({ error: "demo_runner_unavailable", message: "Agent 暂时不可用" }, { status: 503 });
-    if (error instanceof Error && error.message.includes("foreign key")) return NextResponse.json({ error: "thread_not_found" }, { status: 404 });
+      if (errorIncludes(error, "invalid_message")) return NextResponse.json({ error: "invalid_message" }, { status: 422 });
+      if (errorIncludes(error, "demo_runner_busy")) return NextResponse.json({ error: "demo_runner_busy", message: "Agent 正忙，请稍后重试" }, { status: 409 });
+      if (errorIncludes(error, "demo_runner_unavailable")) return NextResponse.json({ error: "demo_runner_unavailable", message: "Agent 暂时不可用" }, { status: 503 });
+      if (errorIncludes(error, "foreign key")) return NextResponse.json({ error: "thread_not_found" }, { status: 404 });
     return NextResponse.json({ error: "message_create_failed" }, { status: 503 });
   }
 }

@@ -37,4 +37,15 @@ describe("/api/agent/threads/[threadId]/messages", () => {
     }
     expect(demoMocks.admitDemoRun).not.toHaveBeenCalled();
   });
+
+  it("maps a Supabase error detail containing the busy code to a conflict", async () => {
+    demoMocks.admitDemoRun.mockRejectedValue({ message: "Database error", details: "demo_runner_busy" });
+
+    const response = await POST(new Request("http://localhost", {
+      method: "POST", body: JSON.stringify({ content: "你好 在吗", request_id: "request-busy" }), headers: { "content-type": "application/json" },
+    }), context);
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "demo_runner_busy" });
+  });
 });

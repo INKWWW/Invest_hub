@@ -12,7 +12,7 @@ WorkerStatus = Literal["idle", "claimed", "executing", "reporting", "recovering"
 def build_heartbeat(
     worker_id: str,
     status: WorkerStatus,
-    capabilities: list[Literal["discord_sync", "x_sync"]] | None = None,
+    capabilities: list[Literal["discord_sync", "x_sync", "agent_demo"]] | None = None,
     sent_at: str | None = None,
 ) -> dict[str, object]:
     payload = {

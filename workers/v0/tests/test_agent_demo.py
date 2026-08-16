@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import tempfile
 
-from invest_hub_worker.agent_demo import CodexDemoProvider, ScriptedDemoProvider, run_agent_demo_once, run_demo_once
+from invest_hub_worker.agent_demo import CodexDemoProvider, ScriptedDemoProvider, run_agent_demo_once, run_agent_demo_worker_once, run_demo_once
 
 
 class DemoProtocol:
@@ -42,6 +42,11 @@ class OnlineDemoProtocol(DemoProtocol):
     def heartbeat(self, status: str, capabilities: list[str], sent_at: str):
         self.heartbeats.append((status, capabilities))
         return {"status": "online"}
+
+
+class PollingDemoProtocol(OnlineDemoProtocol):
+    def next_agent_demo_run(self):
+        return "run-1"
 
 
 class AgentDemoTests(unittest.TestCase):
@@ -132,3 +137,19 @@ class AgentDemoTests(unittest.TestCase):
             self.assertEqual(list(root.iterdir()), [])
             assert protocol.completed is not None
             self.assertEqual(protocol.completed[2], "scripted")
+
+    def test_polling_runner_discovers_and_completes_one_queued_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            protocol = PollingDemoProtocol()
+            self.assertEqual(
+                run_agent_demo_worker_once(
+                    protocol,
+                    bundle=Path(directory),
+                    run_root=Path(directory),
+                    provider=ScriptedDemoProvider(),
+                ),
+                "succeeded",
+            )
+            self.assertEqual(protocol.heartbeats, [("idle", ["agent_demo"])])
+            assert protocol.completed is not None
+            self.assertEqual(protocol.completed[0], "run-1")
