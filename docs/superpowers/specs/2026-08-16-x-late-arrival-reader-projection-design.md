@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 状态：已批准设计，待实现计划与单独实现授权
+- 状态：已批准设计，已批准计划，已授权实现
 - 日期：2026-08-16
 - 关联设计：`docs/superpowers/specs/2026-08-16-x-minimal-nonresident-scheduling-design.md`
 - 关联实现：`docs/superpowers/plans/2026-08-16-x-failed-window-skip.md`

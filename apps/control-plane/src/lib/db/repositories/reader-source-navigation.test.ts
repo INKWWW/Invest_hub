@@ -154,7 +154,7 @@ describe("X reader date projection", () => {
         source_id: "source-b",
         natural_date: "2099-01-03",
         range_task_id: "task-normal",
-        created_at: "2099-01-03T13:00:00.000Z",
+        created_at: "2099-01-04T01:00:00+08:00",
         occurred_from_at: "2099-01-03T12:00:00.000Z",
         occurred_through_at: "2099-01-03T13:00:00.000Z",
         window_viewpoints: ["正常成功的观点"],
@@ -172,7 +172,7 @@ describe("X reader date projection", () => {
       id: "batch-normal",
       natural_date: "2099-01-03",
       cutoff_at: "2099-01-03T13:00:00.000Z",
-      settlement_deadline_at: "2099-01-03T14:00:00.000Z",
+      settlement_deadline_at: "2099-01-03T18:00:00.000Z",
       status: "succeeded",
     }, {
       id: "batch-queued",

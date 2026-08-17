@@ -7,6 +7,7 @@ import {
   type ReaderCrossBloggerIntegration,
   type ReaderJudgement,
   type ReaderThesis,
+  type XReaderCollectionGap,
   type XReaderDate,
 } from "../../../../lib/db/repositories/reader";
 import { isValidReaderNaturalDate } from "../../../../lib/reader-date";
@@ -40,6 +41,25 @@ function readerStringArray(value: unknown): string[] {
 
 function readerSafeRecords(value: unknown): ReaderRecord[] {
   return Array.isArray(value) ? value.map(readerRecord).filter((item): item is ReaderRecord => item !== null) : [];
+}
+
+function readerSafeGapRanges(value: unknown): Array<{ startAt: string; endAt: string }> {
+  return readerSafeRecords(value).flatMap((gap) => {
+    const startAt = readerString(gap.startAt);
+    const endAt = readerString(gap.endAt);
+    return startAt && endAt ? [{ startAt, endAt }] : [];
+  });
+}
+
+function readerSafeGapNotices(value: unknown): XReaderCollectionGap[] {
+  return readerSafeRecords(value).flatMap((notice) => {
+    const source = readerRecord(notice.source);
+    const sourceKey = readerString(source?.sourceKey);
+    const displayName = readerString(source?.displayName);
+    if (!source || sourceKey === null || displayName === null) return [];
+    const gaps = readerSafeGapRanges(notice.gaps);
+    return gaps.length ? [{ source: { sourceKey, displayName }, gaps }] : [];
+  });
 }
 
 const readerActionIntents = new Set([
@@ -245,6 +265,7 @@ function readerSafeRevision(value: unknown) {
 function readerSafeXDays(days: XReaderDate[]) {
   return days.map((day) => ({
     naturalDate: day.naturalDate,
+    collectionGaps: readerSafeGapNotices(day.collectionGaps),
     judgement: {
       visible: day.judgement.visible,
       batches: day.judgement.batches.map((batch) => ({
@@ -260,6 +281,9 @@ function readerSafeXDays(days: XReaderDate[]) {
     bloggers: day.bloggers.map((blogger) => ({
       source: { sourceKey: blogger.source.sourceKey, displayName: blogger.source.displayName },
       status: blogger.status,
+      timedOut: blogger.timedOut === true,
+      lateArrival: blogger.lateArrival === true,
+      collectionGaps: readerSafeGapRanges(blogger.collectionGaps),
       segments: blogger.segments.map((segment) => ({
         occurredFromAt: segment.occurredFromAt,
         occurredThroughAt: segment.occurredThroughAt,

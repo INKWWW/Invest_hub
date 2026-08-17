@@ -797,10 +797,12 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
         const batchId = typeof task?.collection_batch_id === "string" ? task.collection_batch_id : undefined;
         const batch = batchId ? batchById.get(batchId) : undefined;
         const batchSource = batchId ? batchSourceByBatchAndSource.get(`${batchId}:${sourceId}`) : undefined;
+        const segmentCreatedAt = typeof segment.created_at === "string" ? Date.parse(segment.created_at) : NaN;
+        const settlementDeadlineAt = typeof batch?.settlement_deadline_at === "string" ? Date.parse(batch.settlement_deadline_at) : NaN;
         return Boolean(
           batch && batchSource && (
             batchSource.settlement_status === "excluded"
-            || (typeof segment.created_at === "string" && typeof batch.settlement_deadline_at === "string" && segment.created_at > batch.settlement_deadline_at)
+            || (Number.isFinite(segmentCreatedAt) && Number.isFinite(settlementDeadlineAt) && segmentCreatedAt > settlementDeadlineAt)
           ),
         );
       });

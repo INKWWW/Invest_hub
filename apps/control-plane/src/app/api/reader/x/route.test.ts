@@ -36,6 +36,10 @@ describe("GET /api/reader/x", () => {
       rawContent: rawContentSentinel,
       execution_health_status: "unavailable",
       execution_failure_category: "configuration_error",
+      collectionGaps: [{
+        source: { sourceKey: "gap-only", displayName: "Gap Only" },
+        gaps: [{ startAt: "2099-01-02T04:00:00.000Z", endAt: "2099-01-02T08:00:00.000Z" }],
+      }],
       judgement: {
         visible: true,
         batches: [{
@@ -160,6 +164,9 @@ describe("GET /api/reader/x", () => {
       bloggers: [{
         source: { sourceKey: "alpha", displayName: "Alpha", raw_content: rawContentSentinel },
         status: "succeeded",
+        timedOut: true,
+        lateArrival: true,
+        collectionGaps: [{ startAt: "2099-01-02T04:00:00.000Z", endAt: "2099-01-02T08:00:00.000Z" }],
         segments: [{
           occurredFromAt: "2099-01-02T08:00:00.000Z",
           occurredThroughAt: "2099-01-02T12:00:00.000Z",
@@ -254,7 +261,14 @@ describe("GET /api/reader/x", () => {
             })],
           })],
         })] }),
-        bloggers: [expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, segments: [expect.objectContaining({ analyses: [expect.objectContaining({ postLink: "https://x.com/alpha/status/1", postedAt: "2099-01-02T08:30:00.000Z", postType: "quote" })] })] })],
+        collectionGaps: [{ source: { sourceKey: "gap-only", displayName: "Gap Only" }, gaps: [{ startAt: "2099-01-02T04:00:00.000Z", endAt: "2099-01-02T08:00:00.000Z" }] }],
+        bloggers: [expect.objectContaining({
+          source: { sourceKey: "alpha", displayName: "Alpha" },
+          timedOut: true,
+          lateArrival: true,
+          collectionGaps: [{ startAt: "2099-01-02T04:00:00.000Z", endAt: "2099-01-02T08:00:00.000Z" }],
+          segments: [expect.objectContaining({ analyses: [expect.objectContaining({ postLink: "https://x.com/alpha/status/1", postedAt: "2099-01-02T08:30:00.000Z", postType: "quote" })] })],
+        })],
       }),
     ]) });
     expect(readerMocks.readXDay).toHaveBeenCalledWith({ sourceKey: undefined, date: undefined });
