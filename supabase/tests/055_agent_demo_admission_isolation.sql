@@ -16,8 +16,8 @@ insert into public.research_threads (id, owner_id, title)
 values
   ('00000000-0000-0000-0000-000000055011', '00000000-0000-0000-0000-000000055001', 'A 会话'),
   ('00000000-0000-0000-0000-000000055012', '00000000-0000-0000-0000-000000055002', 'B 会话');
-insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at)
-values ('00000000-0000-0000-0000-000000055099', 'demo-worker-055', 'demo-worker-055-secret', 'online', timezone('utc', now()));
+insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at, capabilities)
+values ('00000000-0000-0000-0000-000000055099', 'demo-worker-055', 'demo-worker-055-secret', 'online', timezone('utc', now()), array['agent_demo']);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000055001', true);

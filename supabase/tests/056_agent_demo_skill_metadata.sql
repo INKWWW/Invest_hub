@@ -10,8 +10,8 @@ values ('00000000-0000-0000-0000-000000056001', 'user', 'Demo Skill')
 on conflict (id) do nothing;
 insert into public.research_threads (id, owner_id, title)
 values ('00000000-0000-0000-0000-000000056011', '00000000-0000-0000-0000-000000056001', 'Skill 会话');
-insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at)
-values ('00000000-0000-0000-0000-000000056099', 'demo-worker-056', 'demo-worker-056-secret', 'online', timezone('utc', now()));
+insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at, capabilities)
+values ('00000000-0000-0000-0000-000000056099', 'demo-worker-056', 'demo-worker-056-secret', 'online', timezone('utc', now()), array['agent_demo']);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000056001', true);
