@@ -43,6 +43,8 @@ describe("ResearchAgentShell", () => {
     expect(html).toContain("今天的研究");
     expect(html).toContain("昨天的研究");
     expect(html).toContain('data-testid="agent-composer"');
+    expect(html).not.toContain("发送纯文本消息");
+    expect(html).toContain('aria-label="输入投资研究问题"');
     expect(html).toContain("研究执行暂未开放");
     expect(html).toContain("可用额度");
     expect(html).toContain("已预占");

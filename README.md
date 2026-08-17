@@ -1,37 +1,35 @@
 # Invest Hub
 
-Invest Hub 是面向个人及少量受邀用户的投资信息与投资决策工作台，目标是持续沉淀外部投研信息、个人判断、交易策略和复盘结果。
+Invest Hub 是一个面向个人投资者的 AI 投研工作台，核心由“投研 Agent”和“信息收集”两大模块组成，帮助用户获得个股研究信息、整理外部投资观点，并辅助形成更清晰的投资判断。
 
-当前范围只有模块 1「投资信息收集」：将 Discord 和 X 的外部信息经过采集、持久化、规则清洗、结构化理解和分批次/日累计总结后，提供网页阅读与证据回溯能力。后续模块不在当前实现范围内。
+## 一、投研 Agent
 
-## 当前状态
+投研 Agent 是项目的核心能力。用户可以围绕个股和投资问题与 Agent 沟通，获得结构化的专业投研信息。
 
-V0「基础设施与技术验证」已通过：控制面、工作节点、Active Adapter、Provider 边界、管理员调试页、RLS 和恢复测试框架均已验证。隔离 Supabase 迁移和 Vercel 预览已部署；合成任务已完成远程注册 → 心跳 → 领取 → 持久化 → 回报结果并确认检查点落库，普通用户管理员阻断与租约恢复也已补测。2026-07-19 已完成用户明确授权的真实 Discord 有界单页任务：首次超时未推进检查点，第 2 次完成采集、结构化、远程持久化、结果回报与非空安全检查点确认。
+投研 Agent 具备以下三个核心 Skill 能力：
 
-V1 的多来源、摘要、正式 `/discord` 阅读页、定时补采和公开 fixture 验收已完成：115 条 pgTAP、54 个控制面测试、62 个 Worker 测试和 3 个 V1 E2E 测试通过。专用 V1 环境已完成真实双来源 history、两轮增量去重/checkpoint、可操作失败隔离与恢复；受邀普通用户真实阅读、桌面/手机视觉、两来源质量抽检及 production 日志审阅也已通过。因此，当前结论为 **V1 Discord 正式可用 MVP**，实现已合并并同步至 GitHub `main`（`c493256`）。它不构成生产 SLA，且不包含 X、媒体/OCR/外部正文解析、独立用户来源或自动 fallback。
+- **大师投研**：结合巴菲特、芒格、段永平和李录四位价值投资大师的视角，分析公司的商业模式、竞争优势、管理层和长期投资价值。
+- **持仓分析**：根据用户提供的持仓信息，分析组合结构、集中度和潜在风险，并提供辅助性的调整建议。
+- **投资前巴菲特拷问**：在用户准备买入个股前，通过一系列问题帮助检查投资逻辑、能力圈、安全边际和可能忽略的风险。
 
-仓库现在包含 V0 验证实现和脱敏 E2E harness，但不包含真实内容、凭据、Prompt、完整响应或本地 evidence。V0 的真实页面和远程部署验收已完成；进入 V1 必须独立编写并批准 V1 Spec 与 implementation plan。
+Agent 会基于 AI 分析给出投资建议与判断参考，用户需要结合自身情况仔细斟酌。本 Agent 不对个人投资结果负责。
 
-详见 [docs/project-status.md](docs/project-status.md)。
+## 二、信息收集
 
-## 重要文档
+### 2.1 X 投资信息收集
 
-- [docs/intake.md](docs/intake.md)：前期讨论形成的需求输入、产品边界、推进版本、测试要求和待确认事项。
-- [AGENTS.md](AGENTS.md)：项目治理规则、当前阶段门禁、数据安全和工作方式。
-- [docs/project-status.md](docs/project-status.md)：当前阶段、批准状态和后续工作入口。
-- [docs/superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md](docs/superpowers/specs/2026-07-18-v0-infrastructure-technical-validation-design.md)：V0 已批准 Spec。
-- [docs/superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md](docs/superpowers/plans/2026-07-18-v0-infrastructure-technical-validation.md)：V0 已批准 implementation plan。
-- [docs/engineering-journal/2026-07-18-v0.md](docs/engineering-journal/2026-07-18-v0.md)：V0 执行记录与验证证据。
-- [docs/spikes/2026-07-18-v0-decision-report.md](docs/spikes/2026-07-18-v0-decision-report.md)：V0 脱敏 Final Report。
-- [docs/engineering-journal/2026-07-19-v1.md](docs/engineering-journal/2026-07-19-v1.md)：V1 执行记录与本地验证证据。
-- [docs/spikes/2026-07-19-v1-decision-report.md](docs/spikes/2026-07-19-v1-decision-report.md)：V1 Final Report（正式可用 MVP）。
-- [docs/superpowers/specs/2026-07-19-v1-discord-mvp-design.md](docs/superpowers/specs/2026-07-19-v1-discord-mvp-design.md)：V1 Discord 正式可用 MVP Spec（已批准）。
-- [docs/superpowers/plans/2026-07-19-v1-discord-mvp.md](docs/superpowers/plans/2026-07-19-v1-discord-mvp.md)：V1 implementation plan（已批准）。
+项目已收集并配置一批投资博主，持续整理他们每日发布的贴文和投资信息，形成基于博主的内容总结。
 
-## 后续推进方向
+系统还会进一步提炼不同博主之间的共同观点与分歧，帮助用户快速了解他们对个股、行业趋势、近期市场表现、投资策略和投资心态的判断。用户无需逐一浏览社交媒体，即可更高效地获得有价值的信息输入，节省研究时间，并辅助形成更明确的投资观点。
 
-V1 Discord MVP 已完成。V2 X、媒体解析、独立用户来源、自动 fallback、V3 收敛以及模块 2–4 仍不在当前范围，必须先分别完成新的 Spec 与 Plan。新对话可从 [项目状态](docs/project-status.md) 开始交接。
+### 2.2 Discord 投资群信息收集
 
-## 安全边界
+项目通过付费加入部分 Discord 投资群，对群内高质量投资者和 KOL 的观点进行整理和输出。
 
-不要提交密钥、Cookie、Chrome Profile、私有来源信息、邀请码、私有 Prompt、真实 fixture 或历史数据。项目从一开始按未来可能公开的仓库标准管理。
+这些群聊通常包含大量实时信息和讨论内容。系统帮助用户从繁杂的群聊中剔除噪音、抓住核心观点，获得有经验投资者的观点输出，提高信息阅读效率，并为投资判断提供辅助。
+
+## 申请体验
+
+网站采用邀请码注册。请先打开[注册页面](https://invest-hub-v0-control-plane.vercel.app/invite)，再通过邮箱联系作者申请邀请码：
+
+**whmink@foxmail.com**

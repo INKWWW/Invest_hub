@@ -316,8 +316,7 @@ export function ResearchAgentShell({ initialThreads, initialQuota = EMPTY_QUOTA 
       {error ? <p className="agent-error" role="alert">{error}</p> : null}
       <div className="agent-fail-closed" role="status"><strong>研究执行暂未开放</strong><span>本阶段不会启动 Agent Run、扣除额度或调用 Provider。</span></div>
       <form className="agent-composer" data-testid="agent-composer" onSubmit={(event) => void submitMessage(event)}>
-        <label htmlFor="agent-message-input">发送纯文本消息</label>
-        <textarea id="agent-message-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
+        <textarea id="agent-message-input" aria-label="输入投资研究问题" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
         <div className="agent-composer-footer"><span>消息会持久化到当前 Research Thread。</span><button type="submit" disabled={busy || !draft.trim()}>{busy ? "保存中…" : "保存消息"}</button></div>
       </form>
     </section>

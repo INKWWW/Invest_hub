@@ -13,6 +13,8 @@ describe("AdminShell", () => {
     expect(html).toContain('href="/admin/sources"');
     expect(html).toContain('href="/admin/tasks"');
     expect(html).toContain('href="/admin/workers"');
+    expect(html).not.toContain('href="/admin/agent"');
+    expect(html).not.toContain(">Agent</a>");
     expect(html).toContain('aria-current="page"');
     expect(html).toContain('data-testid="session-controls"');
     expect(html).toContain("admin@example.invalid");

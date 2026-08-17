@@ -27,7 +27,7 @@ describe("AdminAgentPage", () => {
     }]);
   });
 
-  it("renders an independent administrator quota area with authoritative counters", async () => {
+  it("renders the administrator quota area while its navigation entry stays hidden", async () => {
     const html = renderToStaticMarkup(await AdminAgentPage());
     expect(html).toContain("研究额度");
     expect(html).toContain("Agent One");

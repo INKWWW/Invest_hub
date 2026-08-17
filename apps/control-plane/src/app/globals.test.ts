@@ -32,3 +32,15 @@ describe("X Reader category and evidence styling", () => {
     expect(css).toMatch(/\.x-analysis-body[^}]*overflow-wrap:\s*anywhere;/s);
   });
 });
+
+describe("Agent conversation scrolling", () => {
+  it("fixes the desktop workbench at 1200px and makes the message list scroll internally", () => {
+    expect(css).toMatch(/\.agent-workbench\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\);[^}]*height:\s*1200px;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/s);
+    expect(css).toMatch(/\.agent-conversation\s*\{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto auto auto;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/s);
+    expect(css).toMatch(/\.agent-message-list\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/s);
+  });
+
+  it("keeps the mobile workbench within the same 1200px ceiling", () => {
+    expect(css).toMatch(/\.agent-workbench\s*\{[^}]*height:\s*min\(1200px, calc\(100dvh - 9rem\)\);/s);
+  });
+});
