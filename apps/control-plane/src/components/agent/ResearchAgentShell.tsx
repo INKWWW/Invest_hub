@@ -304,7 +304,7 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
         <p className="agent-kicker">Private workspace</p>
         <h2>{activeThread?.title ?? "新的研究会话"}</h2>
       </header>
-      <div className="agent-message-list" aria-live="polite">
+      <div className="agent-message-list" data-testid="agent-message-list" aria-live="polite">
         {detail?.messages.length ? detail.messages.map((message) => <article className={messageClass(message)} key={message.id}>
           <p className="agent-message-role">{message.role === "user" ? "你" : "Agent"}</p>{message.role === "assistant" ? <SafeMarkdown content={message.content} /> : <p>{message.content}</p>}<time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
         </article>) : <div className="agent-conversation-empty"><p>把一个投资问题留在这里，作为你的研究起点。</p></div>}

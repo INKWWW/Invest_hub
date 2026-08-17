@@ -36,6 +36,7 @@ describe("ResearchAgentShell", () => {
     expect(html).toContain("今天的研究");
     expect(html).toContain("昨天的研究");
     expect(html).toContain('data-testid="agent-composer"');
+    expect(html).toContain('data-testid="agent-message-list"');
     expect(html).toContain("发送问题");
     expect(html).toContain('class="agent-skill-picker"');
     expect(html).toContain("大师投研");

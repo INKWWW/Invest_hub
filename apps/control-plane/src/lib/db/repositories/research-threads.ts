@@ -1,8 +1,7 @@
-import { automaticThreadTitle } from "../../agent/thread-title";
+import { automaticThreadTitle, automaticThreadTitleUpdate, DEFAULT_THREAD_TITLE } from "../../agent/thread-title";
 
 import { createSupabaseServerClient } from "../supabase-server";
 
-const DEFAULT_THREAD_TITLE = "新研究会话";
 const threadFields = "id,owner_id,title,created_at,updated_at";
 const messageFields = "id,thread_id,owner_id,role,content,created_at";
 const artifactFields = "id,thread_id,owner_id,artifact_type,metadata,created_at";
@@ -78,14 +77,45 @@ function artifact(row: {
 }
 
 export async function listResearchThreads(ownerId: string): Promise<ResearchThread[]> {
-  const { data, error } = await (await createSupabaseServerClient())
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
     .from("research_threads")
     .select(threadFields)
     .eq("owner_id", ownerId)
     .order("updated_at", { ascending: false })
     .order("id", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map(thread);
+  const rows = data ?? [];
+  if (!rows.length) return [];
+  const { data: messages, error: messagesError } = await supabase
+    .from("research_messages")
+    .select("id,thread_id,content,created_at")
+    .eq("owner_id", ownerId)
+    .eq("role", "user")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+  if (messagesError) throw messagesError;
+  const firstMessageByThread = new Map<string, string>();
+  for (const row of messages ?? []) if (!firstMessageByThread.has(row.thread_id)) firstMessageByThread.set(row.thread_id, row.content);
+  return Promise.all(rows.map(async (row) => {
+    const firstUserMessage = firstMessageByThread.get(row.id);
+    const title = automaticThreadTitleUpdate(row.title, firstUserMessage);
+    if (!title) return thread(row);
+    try {
+      const { data: persisted, error: persistError } = await supabase
+        .from("research_threads")
+        .update({ title })
+        .eq("owner_id", ownerId)
+        .eq("id", row.id)
+        .eq("title", DEFAULT_THREAD_TITLE)
+        .select(threadFields)
+        .maybeSingle();
+      if (!persistError && persisted) return thread(persisted);
+    } catch {
+      // The derived title remains available for this response if persistence is temporarily unavailable.
+    }
+    return { ...thread(row), title };
+  }));
 }
 
 export async function createResearchThread(ownerId: string): Promise<ResearchThread> {
@@ -109,9 +139,28 @@ export async function getResearchThread(ownerId: string, threadId: string): Prom
   if (!threadResult.data) throw new ResearchThreadNotFoundError();
   if (messagesResult.error) throw messagesResult.error;
   if (artifactsResult.error) throw artifactsResult.error;
+  const messages = (messagesResult.data ?? []).map(message);
+  const firstUserMessage = messages.find((row) => row.role === "user")?.content;
+  let resolvedThread = thread(threadResult.data);
+  const title = automaticThreadTitleUpdate(threadResult.data.title, firstUserMessage);
+  if (title) {
+    try {
+      const { data: persisted, error: persistError } = await supabase
+        .from("research_threads")
+        .update({ title })
+        .eq("owner_id", ownerId)
+        .eq("id", threadId)
+        .eq("title", DEFAULT_THREAD_TITLE)
+        .select(threadFields)
+        .maybeSingle();
+      if (!persistError && persisted) resolvedThread = thread(persisted);
+    } catch {
+      resolvedThread = { ...resolvedThread, title };
+    }
+  }
   return {
-    ...thread(threadResult.data),
-    messages: (messagesResult.data ?? []).map(message),
+    ...resolvedThread,
+    messages,
     artifacts: (artifactsResult.data ?? []).map(artifact),
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { automaticThreadTitle } from "./thread-title";
+import { automaticThreadTitle, automaticThreadTitleUpdate } from "./thread-title";
 
 describe("automaticThreadTitle", () => {
   it("creates a short readable title from the first plain-text message", () => {
@@ -16,5 +16,11 @@ describe("automaticThreadTitle", () => {
 
   it("falls back to a neutral title for blank input", () => {
     expect(automaticThreadTitle(" \n\t ")).toBe("新研究会话");
+  });
+
+  it("returns a conditional storage update only for populated default threads", () => {
+    expect(automaticThreadTitleUpdate("新研究会话", "近期 GOOGL 的表现如何？")).toBe("近期 GOOGL 的表现如何？");
+    expect(automaticThreadTitleUpdate("我的重点公司", "近期 GOOGL 的表现如何？")).toBeNull();
+    expect(automaticThreadTitleUpdate("新研究会话", " ")).toBeNull();
   });
 });
