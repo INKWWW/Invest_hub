@@ -272,6 +272,22 @@ describe("XReader", () => {
     expect(normalHtml).not.toContain("后补采集：该内容在当日判断结算后完成采集，未纳入原跨博主日报。");
   });
 
+  it("shows gap-only notices without rendering a blogger card", () => {
+    const html = renderToStaticMarkup(<XReader days={[{
+      naturalDate: "2099-01-03",
+      judgement: { visible: true, batches: [] },
+      collectionGaps: [{
+        source: { sourceKey: "delta", displayName: "Delta" },
+        gaps: [{ startAt: "2099-01-03T04:00:00.000Z", endAt: "2099-01-03T08:00:00.000Z" }],
+      }],
+      bloggers: [],
+    }]} initialSourceKey="delta" initialNaturalDate="2099-01-03" />);
+
+    expect(html).toContain("Delta");
+    expect(html).toContain("采集缺失：01月03日 12:00–16:00");
+    expect(html).not.toContain('class="x-reader-blogger"');
+  });
+
   it("shows the range explanation, but never a narrowed judgement, for one blogger", () => {
     const html = renderToStaticMarkup(<XReader days={days} initialSourceKey="second" initialNaturalDate="2099-01-02" />);
 

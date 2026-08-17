@@ -1,0 +1,104 @@
+{
+  "run_id": "judgement-run-v5",
+  "batch_id": "batch-v5",
+  "attempt": 1,
+  "prompt_version": "v5-x-cross-blogger-1",
+  "sources": [
+    {
+      "source_id": "source-alpha",
+      "display_name": "Synthetic Alpha",
+      "window_segments": [
+        {
+          "id": "segment-alpha",
+          "schema_version": "v4-x-window",
+          "prompt_version": "v4-x-window-1",
+          "occurred_from_at": "2026-08-07T00:00:00Z",
+          "occurred_through_at": "2026-08-07T08:00:00Z",
+          "segment_output": {
+            "schema_version": "v4-x-window",
+            "analysis_ids": [
+              "post-alpha@2",
+              "post-alpha-2@2"
+            ],
+            "evidence_post_ids": [
+              "post-alpha",
+              "post-alpha-2"
+            ]
+          },
+          "analyses": [
+            {
+              "analysis_id": "post-alpha@2",
+              "schema_version": "v4-x-post-analysis",
+              "prompt_version": "v4-x-post-analysis-1",
+              "analysis_output": {
+                "schema_version": "v4-x-post-analysis",
+                "post_id": "post-alpha",
+                "evidence_post_ids": [
+                  "post-alpha"
+                ]
+              },
+              "evidence_post_ids": [
+                "post-alpha"
+              ]
+            },
+            {
+              "analysis_id": "post-alpha-2@2",
+              "schema_version": "v4-x-post-analysis",
+              "prompt_version": "v4-x-post-analysis-1",
+              "analysis_output": {
+                "schema_version": "v4-x-post-analysis",
+                "post_id": "post-alpha-2",
+                "evidence_post_ids": [
+                  "post-alpha-2"
+                ]
+              },
+              "evidence_post_ids": [
+                "post-alpha-2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source_id": "source-beta",
+      "display_name": "Synthetic Beta",
+      "window_segments": [
+        {
+          "id": "segment-beta",
+          "schema_version": "v4-x-window",
+          "prompt_version": "v4-x-window-1",
+          "occurred_from_at": "2026-08-07T00:00:00Z",
+          "occurred_through_at": "2026-08-07T08:00:00Z",
+          "segment_output": {
+            "schema_version": "v4-x-window",
+            "analysis_ids": [
+              "post-beta@2"
+            ],
+            "evidence_post_ids": [
+              "post-beta"
+            ]
+          },
+          "analyses": [
+            {
+              "analysis_id": "post-beta@2",
+              "schema_version": "v4-x-post-analysis",
+              "prompt_version": "v4-x-post-analysis-1",
+              "analysis_output": {
+                "schema_version": "v4-x-post-analysis",
+                "post_id": "post-beta",
+                "evidence_post_ids": [
+                  "post-beta"
+                ]
+              },
+              "evidence_post_ids": [
+                "post-beta"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "excluded_sources": []
+}

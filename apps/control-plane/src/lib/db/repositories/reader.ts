@@ -55,11 +55,52 @@ export type ReaderJudgement = {
   statement: string;
   actionIntent?: ReaderActionIntent | null;
   actionScope?: string;
-  actionScopeStatus?: ReaderActionScopeStatus;
+  actionScopeStatus?: ReaderActionScopeStatus | null;
   conditions?: string[];
   supportingDisplayNames: string[];
   dissentingDisplayNames: string[];
   uncertainties: string[];
+};
+
+export type ReaderThesis = {
+  headline: string;
+  synthesis: string;
+  scenarioBranches: Array<{ condition: string; outcome: string; uncertainties: string[] }>;
+  attributedActions: Array<{
+    displayName: string;
+    actionIntent: ReaderActionIntent;
+    actionScope: string;
+    actionScopeStatus: ReaderActionScopeStatus;
+    conditions: string[];
+    uncertainties: string[];
+  }>;
+  supportingDisplayNames: string[];
+  dissentingDisplayNames: string[];
+  uncertainties: string[];
+};
+
+export type ReaderCrossBloggerIntegration = {
+  headline: string;
+  synthesis: string;
+  commonPoints: Array<{ statement: string; displayNames: string[] }>;
+  conflictPoints: Array<{ issue: string; positions: Array<{ position: string; displayNames: string[] }> }>;
+  uncertainties: string[];
+};
+
+export type ReaderAiAssessment = {
+  headline: string;
+  judgement: string;
+  importanceReason: string;
+  reasoning: string;
+  keyAssumptions: string[];
+  risks: string[];
+  watchVariables: string[];
+  uncertainties: string[];
+};
+
+export type ReaderAiSynthesis = {
+  crossBloggerIntegrations: ReaderCrossBloggerIntegration[];
+  aiAssessments: ReaderAiAssessment[];
 };
 
 type XReaderSegment = {
@@ -94,12 +135,22 @@ export type XReaderBlogger = {
   segments: XReaderSegment[];
 };
 
+export type XReaderCollectionGap = {
+  source: { sourceKey: string; displayName: string };
+  gaps: XReaderBlogger["collectionGaps"];
+};
+
 export type XReaderJudgementRevision = {
   revision: number;
   coverageStatus: "complete" | "partial" | "no_new_information";
+  presentationKind: "legacy" | "v5";
   stockViewpoints: ReaderJudgement[];
   marketIndustryViewpoints: ReaderJudgement[];
   strategyMindsetViewpoints?: ReaderJudgement[];
+  aiSynthesis?: ReaderAiSynthesis;
+  securityIndustryTheses?: ReaderThesis[];
+  marketStructureTheses?: ReaderThesis[];
+  strategyMindsetTheses?: ReaderThesis[];
   uncertainties: string[];
 };
 
@@ -112,9 +163,14 @@ export type XReaderDate = {
       coverageStatus: XReaderJudgementRevision["coverageStatus"] | null;
       status: "succeeded" | "judgement_pending" | "judgement_failed";
       revision: number;
+      presentationKind: XReaderJudgementRevision["presentationKind"];
       stockViewpoints: ReaderJudgement[];
       marketIndustryViewpoints: ReaderJudgement[];
       strategyMindsetViewpoints?: ReaderJudgement[];
+      aiSynthesis?: ReaderAiSynthesis;
+      securityIndustryTheses?: ReaderThesis[];
+      marketStructureTheses?: ReaderThesis[];
+      strategyMindsetTheses?: ReaderThesis[];
       uncertainties: string[];
       includedSourceCount: number;
       noNewSourceCount: number;
@@ -129,6 +185,7 @@ export type XReaderDate = {
       };
     }>;
   };
+  collectionGaps?: XReaderCollectionGap[];
   bloggers: XReaderBlogger[];
 };
 
@@ -212,19 +269,21 @@ function actionScopeStatus(intent: InputActionIntent, scope: string, value: unkn
   return !scope || /(?:未|不|无法)(?:明确|说明|提供|确认).{0,24}(?:标的|对象|资产|范围)|(?:标的|对象|资产|范围).{0,24}(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知)/.test(scope) || uncertainties.some((item) => /(?:未|不|无法)(?:明确|说明|提供|确认).{0,24}(?:标的|对象|资产|范围)|(?:标的|对象|资产|范围).{0,24}(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知)/.test(item)) ? "unspecified" : "specified";
 }
 
-function judgementItems(value: unknown, displayNames: Map<string, string>): ReaderJudgement[] {
+function judgementItems(value: unknown, displayNames: Map<string, string>, replacements: Map<string, string>): ReaderJudgement[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     const judgement = object(item);
     if (!judgement || typeof judgement.statement !== "string") return [];
     const actionIntent = inputActionIntent(judgement.action_intent) ?? "none";
-    const actionScope = typeof judgement.action_scope === "string" ? judgement.action_scope : "";
-    const conditions = strings(judgement.conditions);
-    const uncertainties = strings(judgement.uncertainties);
+    const statement = readableText(judgement.statement, replacements);
+    const actionScope = readableText(judgement.action_scope, replacements) ?? "";
+    const conditions = readableTexts(judgement.conditions, replacements);
+    const uncertainties = readableTexts(judgement.uncertainties, replacements);
     const scopeStatus = actionScopeStatus(actionIntent, actionScope, judgement.action_scope_status, uncertainties);
-    const validAction = actionIntent === "none" ? actionScope === "" : scopeStatus !== null;
+    const validAction = Boolean(statement) && (actionIntent === "none" ? actionScope === "" : scopeStatus !== null);
+    if (!validAction || !statement) return [];
     return [{
-      statement: judgement.statement,
+      statement,
       actionIntent: validAction && actionIntent !== "none" ? actionIntent : null,
       actionScope: validAction ? actionScope : "",
       actionScopeStatus: validAction ? scopeStatus ?? undefined : undefined,
@@ -236,19 +295,194 @@ function judgementItems(value: unknown, displayNames: Map<string, string>): Read
   });
 }
 
-function bloggerViewpointItems(value: unknown): ReaderJudgement[] {
+function displayNameItems(value: unknown, displayNames: Map<string, string>): string[] {
+  return strings(value).flatMap((sourceId) => displayNames.has(sourceId) ? [displayNames.get(sourceId)!] : []);
+}
+
+function textReplacements(output: Record<string, unknown> | null, displayNames: Map<string, string>): Map<string, string> {
+  const replacements = new Map<string, string>(displayNames);
+  if (!output) return replacements;
+  for (const key of ["security_industry_theses", "market_structure_theses", "strategy_mindset_theses"] as const) {
+    const theses = output[key];
+    if (!Array.isArray(theses)) continue;
+    for (const item of theses) {
+      const thesis = object(item);
+      if (typeof thesis?.thesis_id === "string" && typeof thesis.headline === "string") replacements.set(thesis.thesis_id, thesis.headline);
+    }
+  }
+  return replacements;
+}
+
+function readableText(value: unknown, replacements: Map<string, string>): string | null {
+  if (typeof value !== "string") return null;
+  let text = value;
+  for (const [token, replacement] of replacements) text = text.replaceAll(token, replacement);
+  text = text
+    .replace(/\b(?:integration|assessment|thesis|security|market|strategy|source|post|analysis|batch|run|segment)-[a-z0-9_-]+(?:@\d+)?\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return text && /[\p{L}\p{N}]/u.test(text) ? text : null;
+}
+
+function readableTexts(value: unknown, replacements: Map<string, string>): string[] {
+  return strings(value).flatMap((item) => {
+    const text = readableText(item, replacements);
+    return text ? [text] : [];
+  });
+}
+
+function bloggerViewpointItems(value: unknown, replacements: Map<string, string>): ReaderJudgement[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     const viewpoint = object(item);
     const actionIntent = inputActionIntent(viewpoint?.action_intent) ?? "none";
-    const actionScope = typeof viewpoint?.action_scope === "string" ? viewpoint.action_scope : "";
-    const statement = typeof viewpoint?.statement === "string" ? viewpoint.statement : "";
-    const uncertainties = strings(viewpoint?.uncertainties);
+    const actionScope = readableText(viewpoint?.action_scope, replacements) ?? "";
+    const statement = readableText(viewpoint?.statement, replacements) ?? "";
+    const uncertainties = readableTexts(viewpoint?.uncertainties, replacements);
     const scopeStatus = actionScopeStatus(actionIntent, actionScope, viewpoint?.action_scope_status, uncertainties);
     if (!statement || (actionIntent === "none" ? actionScope !== "" : !scopeStatus)) return [];
     return [{ statement, actionIntent: actionIntent === "none" ? null : actionIntent, actionScope, actionScopeStatus: scopeStatus ?? undefined,
-      conditions: strings(viewpoint?.conditions), supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties }];
+      conditions: readableTexts(viewpoint?.conditions, replacements), supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties }];
   });
+}
+
+function thesisScenarioBranches(value: unknown, replacements: Map<string, string>): ReaderThesis["scenarioBranches"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const branch = object(item);
+    const condition = readableText(branch?.condition, replacements);
+    const outcome = readableText(branch?.outcome, replacements);
+    return condition && outcome
+      ? [{ condition, outcome, uncertainties: readableTexts(branch?.uncertainties, replacements) }]
+      : [];
+  });
+}
+
+function thesisAttributedActions(
+  value: unknown,
+  displayNames: Map<string, string>,
+  replacements: Map<string, string>,
+): ReaderThesis["attributedActions"] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const action = object(item);
+    const displayName = typeof action?.source_id === "string" ? displayNames.get(action.source_id) : undefined;
+    const actionIntent = inputActionIntent(action?.action_intent);
+    const actionScope = readableText(action?.action_scope, replacements) ?? "";
+    const uncertainties = readableTexts(action?.uncertainties, replacements);
+    const scopeStatus = actionIntent ? actionScopeStatus(actionIntent, actionScope, action?.action_scope_status, uncertainties) : null;
+    if (!displayName || !actionIntent || actionIntent === "none" || !scopeStatus) return [];
+    return [{
+      displayName,
+      actionIntent,
+      actionScope,
+      actionScopeStatus: scopeStatus,
+      conditions: readableTexts(action?.conditions, replacements),
+      uncertainties,
+    }];
+  });
+}
+
+function thesisItems(value: unknown, displayNames: Map<string, string>, replacements: Map<string, string>): ReaderThesis[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const thesis = object(item);
+    const headline = readableText(thesis?.headline, replacements);
+    const synthesis = readableText(thesis?.synthesis, replacements);
+    return headline && synthesis
+      ? [{
+        headline,
+        synthesis,
+        scenarioBranches: thesisScenarioBranches(thesis?.scenario_branches, replacements),
+        attributedActions: thesisAttributedActions(thesis?.attributed_actions, displayNames, replacements),
+        supportingDisplayNames: displayNameItems(thesis?.supporting_source_ids, displayNames),
+        dissentingDisplayNames: displayNameItems(thesis?.dissenting_source_ids, displayNames),
+        uncertainties: readableTexts(thesis?.uncertainties, replacements),
+      }]
+      : [];
+  });
+}
+
+function integrationItems(
+  value: unknown,
+  displayNames: Map<string, string>,
+  replacements: Map<string, string>,
+): ReaderCrossBloggerIntegration[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const integration = object(item);
+    const headline = readableText(integration?.headline, replacements);
+    const synthesis = readableText(integration?.synthesis, replacements);
+    if (!headline || !synthesis) return [];
+    const commonPoints = Array.isArray(integration?.common_points)
+      ? integration.common_points.flatMap((point) => {
+        const commonPoint = object(point);
+        const statement = readableText(commonPoint?.statement, replacements);
+        return statement
+          ? [{ statement, displayNames: displayNameItems(commonPoint?.source_ids, displayNames) }]
+          : [];
+      })
+      : [];
+    const conflictPoints = Array.isArray(integration?.conflict_points)
+      ? integration.conflict_points.flatMap((point) => {
+        const conflictPoint = object(point);
+        const issue = readableText(conflictPoint?.issue, replacements);
+        if (!issue || !Array.isArray(conflictPoint?.positions)) return [];
+        return [{
+          issue,
+          positions: conflictPoint.positions.flatMap((position) => {
+            const item = object(position);
+            const text = readableText(item?.position, replacements);
+            return text
+              ? [{ position: text, displayNames: displayNameItems(item?.source_ids, displayNames) }]
+              : [];
+          }),
+        }];
+      })
+      : [];
+    return [{
+      headline,
+      synthesis,
+      commonPoints,
+      conflictPoints,
+      uncertainties: readableTexts(integration?.uncertainties, replacements),
+    }];
+  });
+}
+
+function aiAssessments(value: unknown, replacements: Map<string, string>): ReaderAiAssessment[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const assessment = object(item);
+    const headline = readableText(assessment?.headline, replacements);
+    const judgement = readableText(assessment?.judgement, replacements);
+    const importanceReason = readableText(assessment?.importance_reason, replacements);
+    const reasoning = readableText(assessment?.reasoning, replacements);
+    return headline
+      && judgement
+      && importanceReason
+      && reasoning
+      ? [{
+        headline,
+        judgement,
+        importanceReason,
+        reasoning,
+        keyAssumptions: readableTexts(assessment?.key_assumptions, replacements),
+        risks: readableTexts(assessment?.risks, replacements),
+        watchVariables: readableTexts(assessment?.watch_variables, replacements),
+        uncertainties: readableTexts(assessment?.uncertainties, replacements),
+      }]
+      : [];
+  });
+}
+
+function aiSynthesis(value: unknown, displayNames: Map<string, string>): ReaderAiSynthesis {
+  const synthesis = object(value);
+  const replacements = textReplacements(object({ ai_synthesis: synthesis }), displayNames);
+  return {
+    crossBloggerIntegrations: integrationItems(synthesis?.cross_blogger_integrations, displayNames, replacements),
+    aiAssessments: aiAssessments(synthesis?.ai_assessments, replacements),
+  };
 }
 
 function judgementStatus(status: string): "succeeded" | "judgement_pending" | "judgement_failed" {
@@ -257,17 +491,51 @@ function judgementStatus(status: string): "succeeded" | "judgement_pending" | "j
 }
 
 function judgementRevision(
-  version: { revision: number; coverage_status: "complete" | "partial" | "no_new_information"; output: unknown },
+  version: { revision: number; coverage_status: "complete" | "partial" | "no_new_information"; output: unknown; schema_version?: unknown; prompt_version?: unknown },
   displayNames: Map<string, string>,
 ): XReaderJudgementRevision {
   const output = object(version.output);
+  const schemaVersion = typeof version.schema_version === "string" ? version.schema_version : "";
+  const promptVersion = typeof version.prompt_version === "string" ? version.prompt_version : "";
+  const versionPair = `${schemaVersion}:${promptVersion}`;
+  if (versionPair === "v5-x-cross-blogger:v5-x-cross-blogger-1") {
+    const replacements = textReplacements(output, displayNames);
+    return {
+      revision: version.revision,
+      coverageStatus: version.coverage_status,
+      presentationKind: "v5",
+      stockViewpoints: [],
+      marketIndustryViewpoints: [],
+      strategyMindsetViewpoints: [],
+      aiSynthesis: {
+        crossBloggerIntegrations: integrationItems(output?.ai_synthesis && object(output.ai_synthesis)?.cross_blogger_integrations, displayNames, replacements),
+        aiAssessments: aiAssessments(output?.ai_synthesis && object(output.ai_synthesis)?.ai_assessments, replacements),
+      },
+      securityIndustryTheses: thesisItems(output?.security_industry_theses, displayNames, replacements),
+      marketStructureTheses: thesisItems(output?.market_structure_theses, displayNames, replacements),
+      strategyMindsetTheses: thesisItems(output?.strategy_mindset_theses, displayNames, replacements),
+      uncertainties: readableTexts(output?.uncertainties, replacements),
+    };
+  }
+  if (["v2-x-cross-blogger:v2-x-cross-blogger-1", "v3-x-cross-blogger:v3-x-cross-blogger-1", "v4-x-cross-blogger:v4-x-cross-blogger-1"].includes(versionPair)) {
+    return {
+      revision: version.revision,
+      coverageStatus: version.coverage_status,
+      presentationKind: "legacy",
+      stockViewpoints: judgementItems(output?.security_industry_viewpoints ?? output?.stock_viewpoints, displayNames, textReplacements(output, displayNames)),
+      marketIndustryViewpoints: judgementItems(output?.market_structure_viewpoints ?? output?.market_industry_viewpoints, displayNames, textReplacements(output, displayNames)),
+      strategyMindsetViewpoints: judgementItems(output?.strategy_mindset_viewpoints, displayNames, textReplacements(output, displayNames)),
+      uncertainties: readableTexts(output?.uncertainties, textReplacements(output, displayNames)),
+    };
+  }
   return {
     revision: version.revision,
     coverageStatus: version.coverage_status,
-    stockViewpoints: judgementItems(output?.security_industry_viewpoints ?? output?.stock_viewpoints, displayNames),
-    marketIndustryViewpoints: judgementItems(output?.market_structure_viewpoints ?? output?.market_industry_viewpoints, displayNames),
-    strategyMindsetViewpoints: judgementItems(output?.strategy_mindset_viewpoints, displayNames),
-    uncertainties: strings(output?.uncertainties),
+    presentationKind: "legacy",
+    stockViewpoints: [],
+    marketIndustryViewpoints: [],
+    strategyMindsetViewpoints: [],
+    uncertainties: [],
   };
 }
 
@@ -355,7 +623,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const batchIdChunks = chunkValues(batchIds, READER_QUERY_BATCH_SIZE);
   const [versions, allBatchSources, replays] = await Promise.all([
     readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_daily_judgement_versions")
-      .select("batch_id,revision,coverage_status,output").in("batch_id", ids)
+      .select("batch_id,revision,coverage_status,output,schema_version,prompt_version").in("batch_id", ids)
       .order("batch_id", { ascending: true }).order("revision", { ascending: false }).range(from, to)),
     readAllChunkPages(batchIdChunks, (ids, from, to) => supabase.from("x_collection_batch_sources")
       .select("batch_id,source_id,source_display_name,x_sync_task_id,settlement_status,exclusion_code").in("batch_id", ids)
@@ -422,6 +690,19 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       endAt: gap.window_end_at,
     }]);
   }
+  const collectionGapNoticesByDate = new Map<string, XReaderCollectionGap[]>();
+  for (const [key, gaps] of collectionGapsBySourceAndDate) {
+    if (segmentGroups.get(key)?.length) continue;
+    const separator = key.indexOf(":");
+    const sourceId = key.slice(0, separator);
+    const naturalDate = key.slice(separator + 1);
+    const source = sourceById.get(sourceId);
+    if (!source) continue;
+    collectionGapNoticesByDate.set(naturalDate, [
+      ...(collectionGapNoticesByDate.get(naturalDate) ?? []),
+      { source: { sourceKey: source.source_key, displayName: source.display_name }, gaps },
+    ]);
+  }
 
   const versionsByBatch = new Map<string, typeof versions>();
   for (const version of versions) {
@@ -436,6 +717,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const current = currentVersion ? judgementRevision(currentVersion, displayNamesBySourceId) : {
       revision: 0,
       coverageStatus: null,
+      presentationKind: "legacy" as const,
       stockViewpoints: [],
       marketIndustryViewpoints: [],
       strategyMindsetViewpoints: [],
@@ -455,7 +737,13 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const acceptance = replay ? acceptanceByParentReplayId.get(replay.id) : undefined;
     const verificationVersion = acceptance ? verificationVersionByAcceptanceId.get(acceptance.id) : undefined;
     if (batch.status === "judgement_failed" && verificationVersion) {
-      const recovery = judgementRevision({ revision: 1, coverage_status: "complete", output: verificationVersion.output }, displayNamesBySourceId);
+      const recovery = judgementRevision({
+        revision: 1,
+        coverage_status: "complete",
+        output: verificationVersion.output,
+        schema_version: verificationVersion.schema_version,
+        prompt_version: verificationVersion.prompt_version,
+      }, displayNamesBySourceId);
       judgement.verificationRecovery = {
         stockViewpoints: recovery.stockViewpoints,
         marketIndustryViewpoints: recovery.marketIndustryViewpoints,
@@ -502,6 +790,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       const taskId = typeof batchSource?.x_sync_task_id === "string" ? batchSource.x_sync_task_id : undefined;
       const daySegments = [...(segmentGroups.get(`${sourceId}:${naturalDate}`) ?? [])]
         .sort((left, right) => right.occurred_through_at.localeCompare(left.occurred_through_at));
+      if (!daySegments.length && (collectionGapsBySourceAndDate.get(`${sourceId}:${naturalDate}`)?.length ?? 0) > 0) return [];
       const lateArrival = daySegments.some((segment) => {
         const rangeTaskId = typeof segment.range_task_id === "string" ? segment.range_task_id : undefined;
         const task = rangeTaskId ? taskById.get(rangeTaskId) : undefined;
@@ -529,23 +818,26 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
           if (!analysis || !context) return [];
           const output = (["v3-x-post-analysis", "v4-x-post-analysis"].includes(String(analysis.schema_version)) && ["v3-x-post-analysis-1", "v4-x-post-analysis-1"].includes(String(analysis.prompt_version))) ? object(analysis.analysis_output) : null;
           if (analysisVersion === 2 && !output) return [];
+          const replacements = textReplacements(output, new Map());
           const actionIntent = inputActionIntent(output?.action_intent) ?? "none";
-          const actionScope = typeof output?.action_scope === "string" ? output.action_scope : "";
-          const uncertainties = strings(analysis.uncertainties);
+          const actionScope = readableText(output?.action_scope, replacements) ?? "";
+          const uncertainties = readableTexts(analysis.uncertainties, replacements);
           const scopeStatus = actionScopeStatus(actionIntent, actionScope, output?.action_scope_status, uncertainties);
           const validAction = actionIntent === "none" ? actionScope === "" : scopeStatus !== null;
-          return [{ postLink: context.post_url, postedAt: canonical.occurred_at ?? null, postType: context.post_type ?? null, bloggerViewpoint: output && typeof output.blogger_viewpoint === "string" ? output.blogger_viewpoint : analysis.blogger_viewpoint,
-            actionIntent: validAction && actionIntent !== "none" ? actionIntent : null, actionScope: validAction ? actionScope : "", actionScopeStatus: validAction ? scopeStatus ?? undefined : undefined, conditions: validAction ? strings(output?.conditions) : [],
-            arguments: strings(analysis.arguments), quotedPostViewpoint: analysis.quoted_post_viewpoint,
+          const bloggerViewpoint = readableText(output?.blogger_viewpoint ?? analysis.blogger_viewpoint, replacements);
+          return [{ postLink: context.post_url, postedAt: canonical.occurred_at ?? null, postType: context.post_type ?? null, bloggerViewpoint,
+            actionIntent: validAction && actionIntent !== "none" ? actionIntent : null, actionScope: validAction ? actionScope : "", actionScopeStatus: validAction ? scopeStatus ?? undefined : undefined, conditions: validAction ? readableTexts(output?.conditions, replacements) : [],
+            arguments: readableTexts(analysis.arguments, replacements), quotedPostViewpoint: readableText(analysis.quoted_post_viewpoint, replacements),
             uncertainties }];
         });
-        const segmentOutput = (["v3-x-window", "v4-x-window"].includes(String(segment.schema_version)) && ["v3-x-window-1", "v4-x-window-1"].includes(String(segment.prompt_version))) ? object(segment.segment_output) : null;
+          const segmentOutput = (["v3-x-window", "v4-x-window"].includes(String(segment.schema_version)) && ["v3-x-window-1", "v4-x-window-1"].includes(String(segment.prompt_version))) ? object(segment.segment_output) : null;
+        const segmentReplacements = textReplacements(segmentOutput, new Map());
         return { occurredFromAt: segment.occurred_from_at, occurredThroughAt: segment.occurred_through_at,
-          viewpoints: segmentOutput ? [] : strings(segment.window_viewpoints),
-          securityIndustryViewpoints: bloggerViewpointItems(segmentOutput?.security_industry_viewpoints),
-          marketStructureViewpoints: bloggerViewpointItems(segmentOutput?.market_structure_viewpoints),
-          strategyMindsetViewpoints: bloggerViewpointItems(segmentOutput?.strategy_mindset_viewpoints),
-          uncertainties: segmentOutput ? strings(segmentOutput.uncertainties) : [], analyses };
+          viewpoints: segmentOutput ? [] : readableTexts(segment.window_viewpoints, segmentReplacements),
+          securityIndustryViewpoints: bloggerViewpointItems(segmentOutput?.security_industry_viewpoints, segmentReplacements),
+          marketStructureViewpoints: bloggerViewpointItems(segmentOutput?.market_structure_viewpoints, segmentReplacements),
+          strategyMindsetViewpoints: bloggerViewpointItems(segmentOutput?.strategy_mindset_viewpoints, segmentReplacements),
+          uncertainties: segmentOutput ? readableTexts(segmentOutput.uncertainties, segmentReplacements) : [], analyses };
       });
       return [{
         source: { sourceKey: source.source_key, displayName: batchSource?.source_display_name ?? source.display_name },
@@ -570,6 +862,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     judgement: input.sourceKey
       ? { visible: false, batches: [] }
       : { visible: true, batches: (batchesByDate.get(naturalDate) ?? []).sort((left, right) => right.cutoffAt.localeCompare(left.cutoffAt)) },
+    collectionGaps: collectionGapNoticesByDate.get(naturalDate) ?? [],
     bloggers: (bloggersByDate.get(naturalDate) ?? []).sort((left, right) => left.source.displayName.localeCompare(right.source.displayName)),
   })).sort((left, right) => right.naturalDate.localeCompare(left.naturalDate));
 }

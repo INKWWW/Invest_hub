@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const databaseMocks = vi.hoisted(() => ({
@@ -57,8 +60,27 @@ vi.mock("../supabase-server", () => ({
 
 import { readXDay } from "./reader";
 
+const repoRoot = resolve(process.cwd(), "..", "..");
+const xDailyV5CompletionFixture = JSON.parse(
+  readFileSync(resolve(repoRoot, "tests/fixtures/x_daily_v5/completion.json"), "utf8"),
+) as Record<string, unknown>;
+
+function readerV5Fixture() {
+  return JSON.parse(JSON.stringify(xDailyV5CompletionFixture)
+    .replaceAll("\"source-alpha\"", "\"source-a\"")
+    .replaceAll("\"source-beta\"", "\"source-b\"")) as Record<string, unknown>;
+}
+
+const internalReadableTokenSentinel = "Analysis-17, BATCH-42; run-9 / SEGMENT-3 thesis-99 source-hidden post-hidden@2 integration-hidden assessment-hidden";
+
 describe("X reader date projection", () => {
   beforeEach(() => {
+    const currentV5 = readerV5Fixture();
+    currentV5.uncertainties = [
+      "仅基于当日已完成采集的博主窗口，仍可能遗漏尚未纳入的覆盖范围。",
+      internalReadableTokenSentinel,
+    ];
+
     databaseMocks.rows.clear();
     databaseMocks.filters.length = 0;
     databaseMocks.ins.length = 0;
@@ -80,9 +102,9 @@ describe("X reader date projection", () => {
       { id: "batch-failed", natural_date: "2099-01-01", cutoff_at: "2099-01-01T08:00:00.000Z", status: "judgement_failed" },
     ]);
     databaseMocks.rows.set("x_daily_judgement_versions", [
-      { batch_id: "batch-16", revision: 1, coverage_status: "partial", output: { stock_viewpoints: [{ statement: "sixteen", supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["analysis-16"], evidence_post_ids: ["post-16"], uncertainties: [] }], market_industry_viewpoints: [], uncertainties: [] } },
-      { batch_id: "batch-20", revision: 1, coverage_status: "complete", output: { stock_viewpoints: [{ statement: "stale", supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["analysis-1"], evidence_post_ids: ["post-1"], uncertainties: [] }], market_industry_viewpoints: [], uncertainties: [] } },
-      { batch_id: "batch-20", revision: 2, coverage_status: "complete", output: { security_industry_viewpoints: [{ statement: "latest", action_intent: "buy", action_scope: "测试个股", conditions: ["等待趋势确认"], supporting_source_ids: ["source-b"], dissenting_source_ids: ["source-a"], analysis_ids: ["analysis-2"], evidence_post_ids: ["post-2"], uncertainties: ["uncertain"] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [{ statement: "strategy", action_intent: "watch", action_scope: "高波动市场", conditions: ["等待波动收敛"], supporting_source_ids: ["source-b"], dissenting_source_ids: [], analysis_ids: ["analysis-2"], evidence_post_ids: ["post-2"], uncertainties: [] }], uncertainties: [] } },
+      { batch_id: "batch-16", revision: 1, coverage_status: "partial", schema_version: "v4-x-cross-blogger", prompt_version: "v4-x-cross-blogger-1", output: { stock_viewpoints: [{ statement: "sixteen analysis-17 batch-42", supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["analysis-16"], evidence_post_ids: ["post-16"], uncertainties: ["legacy run-9"] }], market_industry_viewpoints: [], uncertainties: [] } },
+      { batch_id: "batch-20", revision: 1, coverage_status: "complete", schema_version: "v4-x-cross-blogger", prompt_version: "v4-x-cross-blogger-1", output: { security_industry_viewpoints: [{ statement: "stale analysis-17 batch-42", action_intent: "buy", action_scope: "旧版测试个股 run-9 segment-3", conditions: ["旧版条件 source-hidden"], supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["analysis-1"], evidence_post_ids: ["post-1"], uncertainties: ["legacy post-hidden@2"] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: ["legacy analysis-17"] } },
+      { batch_id: "batch-20", revision: 2, coverage_status: "complete", schema_version: "v5-x-cross-blogger", prompt_version: "v5-x-cross-blogger-1", output: currentV5 },
     ]);
     databaseMocks.rows.set("x_collection_batch_sources", [
       { batch_id: "batch-16", source_id: "source-a", source_display_name: "Alpha at sixteen", x_sync_task_id: "task-a-16", settlement_status: "excluded", exclusion_code: "settlement_deadline_exceeded" },
@@ -234,9 +256,13 @@ describe("X reader date projection", () => {
     expect(day?.judgement.batches).toEqual(expect.arrayContaining([expect.objectContaining({ coverageStatus: null })]));
     expect(normalIncluded?.lateArrival).toBe(false);
     expect(queuedWithoutSegment?.segments).toEqual([]);
-    expect(gapOnly?.collectionGaps).toEqual([{
-      startAt: "2099-01-03T04:00:00.000Z",
-      endAt: "2099-01-03T08:00:00.000Z",
+    expect(gapOnly).toBeUndefined();
+    expect(day?.collectionGaps).toEqual([{
+      source: { sourceKey: "delta", displayName: "Delta" },
+      gaps: [{
+        startAt: "2099-01-03T04:00:00.000Z",
+        endAt: "2099-01-03T08:00:00.000Z",
+      }],
     }]);
     expect(JSON.stringify(result)).not.toContain("settlement_deadline_exceeded");
     expect(JSON.stringify(result)).not.toContain("task-late");
@@ -249,16 +275,75 @@ describe("X reader date projection", () => {
     ]);
     const result = await readXDay();
     const serialized = JSON.stringify(result);
+    const current = result[0]?.judgement.batches[0];
+    const history = current?.revisionHistory[0];
 
     expect(result.map((day) => day.naturalDate)).toEqual(["2099-01-02", "2099-01-01"]);
     expect(result[0]?.judgement.batches.map((batch) => batch.cutoffAt)).toEqual(["2099-01-02T12:00:00.000Z", "2099-01-02T08:00:00.000Z"]);
-    expect(result[0]?.judgement.batches[0]).toMatchObject({
+    expect(current).toMatchObject({
       revision: 2,
-      stockViewpoints: [{ statement: "latest", actionIntent: "buy", actionScope: "测试个股", conditions: ["等待趋势确认"], supportingDisplayNames: ["Beta"], dissentingDisplayNames: ["Alpha"] }],
-      strategyMindsetViewpoints: [{ statement: "strategy", actionIntent: "watch", actionScope: "高波动市场", conditions: ["等待波动收敛"], supportingDisplayNames: ["Beta"] }],
-      revisionHistory: [{ revision: 1, coverageStatus: "complete", stockViewpoints: [{ statement: "stale", supportingDisplayNames: ["Alpha"] }] }],
+      presentationKind: "v5",
+      stockViewpoints: [],
+      marketIndustryViewpoints: [],
+      strategyMindsetViewpoints: [],
+      aiSynthesis: {
+        crossBloggerIntegrations: [expect.objectContaining({
+          headline: "两位博主都围绕 AI 基础设施展开，但结论侧重点不同。",
+          synthesis: "共同点是都把产业链变化视作主线，分歧在于更偏向确认性配置还是等待节奏验证。",
+          commonPoints: [expect.objectContaining({
+            statement: "两位博主都把 AI 基础设施需求变化视为当前观察主线。",
+            displayNames: ["Alpha", "Beta"],
+          })],
+          conflictPoints: [expect.objectContaining({
+            issue: "是否已经进入可以明确加大配置的阶段。",
+            positions: [
+              expect.objectContaining({ position: "其中一位博主更偏向确认产业链景气并提前布局。", displayNames: ["Alpha"] }),
+              expect.objectContaining({ position: "另一位博主仍强调先观察兑现节奏再决定是否扩大仓位。", displayNames: ["Beta"] }),
+            ],
+          })],
+        })],
+        aiAssessments: [expect.objectContaining({
+          headline: "单一重要博主的市场结构判断仍值得保留。",
+          judgement: expect.stringContaining("单博主市场结构判断"),
+          importanceReason: "它直接影响后续是否把产业链景气从观察提升为更明确的配置判断。",
+          reasoning: "该博主给出的链条约束和节奏判断较完整，因此即使目前只有单一博主支持，仍值得纳入 AI synthesis 的重点观察。",
+          keyAssumptions: ["需求兑现仍将按当前节奏推进。"],
+          risks: [expect.stringContaining("订单兑现节奏延后")],
+          watchVariables: ["订单兑现节奏", "算力链库存变化"],
+        })],
+      },
+      securityIndustryTheses: [expect.objectContaining({
+        headline: "两位博主都认为 AI 基础设施链条仍在延续。",
+        synthesis: "两位博主都延续看多 AI 基础设施主线，但其中一位更强调可以逐步建立观察仓位。",
+        scenarioBranches: [{ condition: "若新增需求继续兑现。", outcome: "产业链景气判断将进一步强化。", uncertainties: [] }],
+        attributedActions: [{
+          displayName: "Alpha",
+          actionIntent: "build_position",
+          actionScope: "AI 基础设施链条龙头",
+          actionScopeStatus: "specified",
+          conditions: ["若新增需求继续兑现。"],
+          uncertainties: [],
+        }],
+        supportingDisplayNames: ["Alpha", "Beta"],
+        dissentingDisplayNames: [],
+      })],
+      marketStructureTheses: [expect.objectContaining({
+        headline: "有博主认为当前节奏仍受兑现约束。",
+        supportingDisplayNames: ["Alpha"],
+        dissentingDisplayNames: [],
+      })],
+      strategyMindsetTheses: [],
+      uncertainties: ["仅基于当日已完成采集的博主窗口，仍可能遗漏尚未纳入的覆盖范围。"],
     });
-    expect(result[0]?.judgement.batches[0]).toMatchObject({ coverageStatus: "complete", includedSourceCount: 1, noNewSourceCount: 1 });
+    expect(history).toMatchObject({
+      revision: 1,
+      presentationKind: "legacy",
+      coverageStatus: "complete",
+      stockViewpoints: [{ statement: "stale", supportingDisplayNames: ["Alpha"] }],
+      marketIndustryViewpoints: [],
+      strategyMindsetViewpoints: [],
+    });
+    expect(current).toMatchObject({ coverageStatus: "complete", includedSourceCount: 1, noNewSourceCount: 1 });
     expect(result[0]?.judgement.batches[1]).toMatchObject({ coverageStatus: "partial", includedSourceCount: 1, noNewSourceCount: 0, excludedSourceCount: 1, timedOutSourceCount: 1, stockViewpoints: [{ statement: "sixteen", supportingDisplayNames: ["Alpha at sixteen"] }] });
     expect(result[1]?.judgement.batches.map((batch) => batch.status)).toEqual(["judgement_pending", "judgement_failed"]);
     expect(result[0]?.bloggers).toEqual(expect.arrayContaining([
@@ -268,11 +353,55 @@ describe("X reader date projection", () => {
     ]));
     expect(result[1]?.bloggers).toEqual(expect.arrayContaining([
       expect.objectContaining({ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "processing", collectionGaps: [], segments: [] }),
-      expect.objectContaining({ source: { sourceKey: "beta", displayName: "Beta" }, status: "failed", collectionGaps: [{ startAt: "2099-01-01T04:00:00.000Z", endAt: "2099-01-01T08:00:00.000Z" }], segments: [] }),
       expect.objectContaining({ source: { sourceKey: "gamma", displayName: "Gamma archived" }, status: "partial_failure", collectionGaps: [], timedOut: true, segments: [] }),
     ]));
+    expect(result[1]?.collectionGaps).toEqual([{
+      source: { sourceKey: "beta", displayName: "Beta" },
+      gaps: [{ startAt: "2099-01-01T04:00:00.000Z", endAt: "2099-01-01T08:00:00.000Z" }],
+    }]);
     expect(databaseMocks.filters).not.toContainEqual({ table: "sources", field: "enabled", value: true });
-    for (const forbidden of ["analysis_ids", "evidence_post_ids", "analysis-2", "post-2", "provider", "task-a-20", "task-global-latest", "evidence_refs", "settlement_deadline_exceeded"]) expect(serialized).not.toContain(forbidden);
+    for (const forbidden of [
+      "analysis_ids",
+      "evidence_post_ids",
+      "analysis-2",
+      "post-2",
+      "provider",
+      "task-a-20",
+      "task-global-latest",
+      "evidence_refs",
+      "settlement_deadline_exceeded",
+      "integration-01",
+      "assessment-01",
+      "security-01",
+      "market-01",
+      "thesis_id",
+      "integration_id",
+      "assessment_id",
+      "related_thesis_ids",
+      "source_ids",
+      "source-a",
+      "source-b",
+      "post-alpha@2",
+      "post-beta@2",
+      "post-alpha-2@2",
+      "post-alpha",
+      "post-beta",
+      "post-alpha-2",
+      "analysis-17",
+      "BATCH-42",
+      "run-9",
+      "SEGMENT-3",
+      "thesis-99",
+      "source-hidden",
+      "post-hidden@2",
+      "integration-hidden",
+      "assessment-hidden",
+      "batch-42",
+      "run-9",
+      "segment-3",
+      "source-hidden",
+      "post-hidden@2",
+    ]) expect(serialized).not.toContain(forbidden);
   });
 
   it("publishes judgement coverage only when a persisted version proves it", async () => {
@@ -284,6 +413,7 @@ describe("X reader date projection", () => {
     ]);
     databaseMocks.rows.set("x_daily_judgement_versions", [{
       batch_id: "batch-no-new", revision: 1, coverage_status: "no_new_information",
+      schema_version: "v4-x-cross-blogger", prompt_version: "v4-x-cross-blogger-1",
       output: { stock_viewpoints: [], market_industry_viewpoints: [], uncertainties: [] },
     }]);
     databaseMocks.rows.set("x_collection_batch_sources", [
@@ -308,6 +438,42 @@ describe("X reader date projection", () => {
     ]);
   });
 
+  it("fails closed for unknown or mismatched judgement schema and prompt pairs", async () => {
+    const existingVersions = databaseMocks.rows.get("x_daily_judgement_versions") ?? [];
+    const retainedVersions = existingVersions.filter((row) => row && typeof row === "object" && (row as Record<string, unknown>).batch_id !== "batch-20");
+    const unsafeOutput = (marker: string) => ({
+      stock_viewpoints: [{ statement: marker, supporting_source_ids: ["source-a"], dissenting_source_ids: [], uncertainties: [] }],
+      market_industry_viewpoints: [],
+      strategy_mindset_viewpoints: [],
+      ai_synthesis: {
+        cross_blogger_integrations: [{ headline: marker, synthesis: marker, common_points: [], conflict_points: [], uncertainties: [] }],
+        ai_assessments: [],
+      },
+      security_industry_theses: [{ headline: marker, synthesis: marker, scenario_branches: [], attributed_actions: [], supporting_source_ids: [], dissenting_source_ids: [], uncertainties: [] }],
+      market_structure_theses: [],
+      strategy_mindset_theses: [],
+      uncertainties: [marker],
+    });
+    databaseMocks.rows.set("x_daily_judgement_versions", [
+      ...retainedVersions,
+      { batch_id: "batch-20", revision: 3, coverage_status: "complete", schema_version: "v6-x-cross-blogger", prompt_version: "v6-x-cross-blogger-1", output: unsafeOutput("UNKNOWN_SCHEMA_V5_CONTENT") },
+      { batch_id: "batch-20", revision: 2, coverage_status: "complete", schema_version: "v5-x-cross-blogger", prompt_version: "v5-x-cross-blogger-mismatch", output: unsafeOutput("MISMATCHED_PROMPT_V5_CONTENT") },
+    ]);
+
+    const result = await readXDay();
+    const current = result[0]?.judgement.batches[0];
+    const history = current?.revisionHistory[0];
+
+    expect(current).toMatchObject({ revision: 3, presentationKind: "legacy", stockViewpoints: [], marketIndustryViewpoints: [], strategyMindsetViewpoints: [], uncertainties: [] });
+    expect(history).toMatchObject({ revision: 2, presentationKind: "legacy", stockViewpoints: [], marketIndustryViewpoints: [], strategyMindsetViewpoints: [], uncertainties: [] });
+    expect(current).not.toHaveProperty("aiSynthesis");
+    expect(current).not.toHaveProperty("securityIndustryTheses");
+    expect(history).not.toHaveProperty("aiSynthesis");
+    expect(history).not.toHaveProperty("securityIndustryTheses");
+    expect(JSON.stringify(result)).not.toContain("UNKNOWN_SCHEMA_V5_CONTENT");
+    expect(JSON.stringify(result)).not.toContain("MISMATCHED_PROMPT_V5_CONTENT");
+  });
+
   it("keeps the original judgement failure and projects only its succeeded one-off v3 recovery", async () => {
     databaseMocks.rows.set("sources", [{ id: "source-a", source_key: "alpha", display_name: "Alpha", enabled: true }]);
     databaseMocks.rows.set("x_daily_viewpoint_segments", []);
@@ -323,14 +489,15 @@ describe("X reader date projection", () => {
       { id: "acceptance-succeeded", parent_replay_id: "replay-failed", status: "succeeded" },
     ]);
     databaseMocks.rows.set("x_v3_verification_acceptance_versions", [
-      { acceptance_run_id: "acceptance-succeeded", output: { security_industry_viewpoints: [{ statement: "恢复后的 v3 判断", action_intent: "watch", action_scope: "测试标的", conditions: [], supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["private-analysis"], evidence_post_ids: ["private-evidence"], uncertainties: [] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: [] }, schema_version: "v3-x-cross-blogger", prompt_version: "v3-x-cross-blogger-1" },
+      { acceptance_run_id: "acceptance-succeeded", output: { security_industry_viewpoints: [{ statement: "恢复后的 v3 判断 analysis-17 batch-42", action_intent: "watch", action_scope: "测试标的 run-9", conditions: ["条件 segment-3"], supporting_source_ids: ["source-a"], dissenting_source_ids: [], analysis_ids: ["private-analysis"], evidence_post_ids: ["private-evidence"], uncertainties: ["legacy source-hidden"] }], market_structure_viewpoints: [], strategy_mindset_viewpoints: [], uncertainties: ["recovery post-hidden@2"] }, schema_version: "v3-x-cross-blogger", prompt_version: "v3-x-cross-blogger-1" },
     ]);
 
     const result = await readXDay();
     const batch = result[0]?.judgement.batches[0] as unknown as { status: string; verificationRecovery?: { stockViewpoints: Array<{ statement: string }> } };
 
     expect(batch.status).toBe("judgement_failed");
-    expect(batch.verificationRecovery?.stockViewpoints).toEqual([{ statement: "恢复后的 v3 判断", actionIntent: "watch", actionScope: "测试标的", actionScopeStatus: "specified", conditions: [], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: [] }]);
+    expect(batch.verificationRecovery?.stockViewpoints).toEqual([{ statement: "恢复后的 v3 判断", actionIntent: "watch", actionScope: "测试标的", actionScopeStatus: "specified", conditions: ["条件"], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: ["legacy"] }]);
+    expect(batch.verificationRecovery?.uncertainties).toEqual(["recovery"]);
     expect(JSON.stringify(batch)).not.toContain("acceptance-succeeded");
     expect(JSON.stringify(batch)).not.toContain("private-analysis");
     expect(JSON.stringify(batch)).not.toContain("private-evidence");
@@ -427,13 +594,13 @@ describe("X reader date projection", () => {
       source_id: `wide-source-${index}`, natural_date: "2099-01-06",
       occurred_from_at: `2099-01-06T10:00:00.${padded(index)}Z`,
       occurred_through_at: `2099-01-06T10:00:00.${padded(index)}Z`,
-      window_viewpoints: [`segment-${index}`], post_analysis_refs: [{ post_id: `external-${index}` }],
+      window_viewpoints: [`window ${index}`], post_analysis_refs: [{ post_id: `external-${index}` }],
     })));
     databaseMocks.rows.set("canonical_messages", Array.from({ length: count }, (_, index) => ({
       id: `canonical-${index}`, source_id: `wide-source-${index}`, external_message_id: `external-${index}`,
     })));
     databaseMocks.rows.set("x_post_analyses", Array.from({ length: count }, (_, index) => ({
-      canonical_message_id: `canonical-${index}`, analysis_version: 1, blogger_viewpoint: `analysis-${index}`,
+      canonical_message_id: `canonical-${index}`, analysis_version: 1, blogger_viewpoint: `analysis text ${index}`,
       arguments: [`argument-${index}`], quoted_post_viewpoint: null, uncertainties: [],
     })));
     databaseMocks.rows.set("x_post_contexts", Array.from({ length: count }, (_, index) => ({
@@ -445,6 +612,7 @@ describe("X reader date projection", () => {
     })));
     databaseMocks.rows.set("x_daily_judgement_versions", Array.from({ length: count }, (_, index) => ({
       batch_id: `wide-batch-${index}`, revision: 1, coverage_status: "complete",
+      schema_version: "v4-x-cross-blogger", prompt_version: "v4-x-cross-blogger-1",
       output: { stock_viewpoints: [{ statement: `judgement-${index}`, supporting_source_ids: [`wide-source-${index}`], dissenting_source_ids: [], uncertainties: [] }], market_industry_viewpoints: [], uncertainties: [] },
     })));
     databaseMocks.rows.set("x_collection_batch_sources", Array.from({ length: count }, (_, index) => ({
@@ -475,11 +643,11 @@ describe("X reader date projection", () => {
     expect(day?.bloggers).toHaveLength(count);
     expect(day?.bloggers[0]).toMatchObject({
       source: { sourceKey: "wide-0", displayName: "Snapshot 000" },
-      segments: [{ viewpoints: ["segment-0"], analyses: [{ postLink: "https://x.test/post/0", bloggerViewpoint: "analysis-0" }] }],
+      segments: [{ viewpoints: ["window 0"], analyses: [{ postLink: "https://x.test/post/0", bloggerViewpoint: "analysis text 0" }] }],
     });
     expect(day?.bloggers[234]).toMatchObject({
       source: { sourceKey: "wide-234", displayName: "Snapshot 234" },
-      segments: [{ viewpoints: ["segment-234"], analyses: [{ postLink: "https://x.test/post/234", bloggerViewpoint: "analysis-234" }] }],
+      segments: [{ viewpoints: ["window 234"], analyses: [{ postLink: "https://x.test/post/234", bloggerViewpoint: "analysis text 234" }] }],
     });
     expect(day?.judgement.batches).toHaveLength(count);
     expect(day?.judgement.batches[0]).toMatchObject({ cutoffAt: "2099-01-06T12:00:00.234Z", stockViewpoints: [{ statement: "judgement-234", supportingDisplayNames: ["Snapshot 234"] }] });
@@ -520,7 +688,7 @@ describe("X reader date projection", () => {
     databaseMocks.rows.set("x_daily_viewpoint_segments", Array.from({ length: segmentCount }, (_, index) => ({
       id: `paged-segment-${padded(index)}`, source_id: "paged-source-0000", natural_date: "2099-12-31",
       occurred_from_at: "2099-12-31T10:00:00.000Z", occurred_through_at: "2099-12-31T10:00:00.000Z",
-      window_viewpoints: [`segment-${padded(index)}`], post_analysis_refs: [],
+      window_viewpoints: [`window ${padded(index)}`], post_analysis_refs: [],
     })).reverse());
     databaseMocks.rows.set("x_collection_batches", batches.reverse());
     databaseMocks.rows.set("x_daily_judgement_versions", []);
@@ -546,8 +714,8 @@ describe("X reader date projection", () => {
     expect(oldestDay?.bloggers).toHaveLength(1);
     expect(firstBlogger?.status).toBe("no_new_messages");
     expect(firstBlogger?.segments).toHaveLength(segmentCount);
-    expect(firstBlogger?.segments[0]?.viewpoints).toEqual(["segment-0000"]);
-    expect(firstBlogger?.segments[1004]?.viewpoints).toEqual(["segment-1004"]);
+    expect(firstBlogger?.segments[0]?.viewpoints).toEqual(["window 0000"]);
+    expect(firstBlogger?.segments[1004]?.viewpoints).toEqual(["window 1004"]);
     expect(newestDay?.judgement.batches.map((batch) => batch.cutoffAt)).toEqual([
       "2099-12-31T20:00:00+08:00", "2099-12-31T16:00:00+08:00", "2099-12-31T12:00:00+08:00",
       "2099-12-31T08:00:00+08:00", "2099-12-31T00:00:00+08:00",

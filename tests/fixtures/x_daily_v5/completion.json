@@ -1,0 +1,155 @@
+{
+  "schema_version": "v5-x-cross-blogger",
+  "ai_synthesis": {
+    "cross_blogger_integrations": [
+      {
+        "integration_id": "integration-01",
+        "headline": "两位博主都围绕 AI 基础设施展开，但结论侧重点不同。",
+        "synthesis": "共同点是都把产业链变化视作主线，分歧在于更偏向确认性配置还是等待节奏验证。",
+        "common_points": [
+          {
+            "statement": "两位博主都把 AI 基础设施需求变化视为当前观察主线。",
+            "source_ids": [
+              "source-alpha",
+              "source-beta"
+            ],
+            "related_thesis_ids": [
+              "security-01",
+              "market-01"
+            ]
+          }
+        ],
+        "conflict_points": [
+          {
+            "issue": "是否已经进入可以明确加大配置的阶段。",
+            "positions": [
+              {
+                "position": "其中一位博主更偏向确认产业链景气并提前布局。",
+                "source_ids": [
+                  "source-alpha"
+                ],
+                "related_thesis_ids": [
+                  "security-01"
+                ]
+              },
+              {
+                "position": "另一位博主仍强调先观察兑现节奏再决定是否扩大仓位。",
+                "source_ids": [
+                  "source-beta"
+                ],
+                "related_thesis_ids": [
+                  "security-01"
+                ]
+              }
+            ]
+          }
+        ],
+        "related_thesis_ids": [
+          "security-01",
+          "market-01"
+        ],
+        "uncertainties": []
+      }
+    ],
+    "ai_assessments": [
+      {
+        "assessment_id": "assessment-01",
+        "headline": "单一重要博主的市场结构判断仍值得保留。",
+        "judgement": "market-01 提供了有价值的单博主市场结构判断，但仍应作为重点跟踪假设而非已经被充分验证的结论。",
+        "importance_reason": "它直接影响后续是否把产业链景气从观察提升为更明确的配置判断。",
+        "reasoning": "该博主给出的链条约束和节奏判断较完整，因此即使目前只有单一博主支持，仍值得纳入 AI synthesis 的重点观察。",
+        "key_assumptions": [
+          "需求兑现仍将按当前节奏推进。"
+        ],
+        "risks": [
+          "若订单兑现节奏延后，market-01 的前提会被削弱。"
+        ],
+        "watch_variables": [
+          "订单兑现节奏",
+          "算力链库存变化"
+        ],
+        "related_thesis_ids": [
+          "market-01"
+        ],
+        "uncertainties": []
+      }
+    ]
+  },
+  "security_industry_theses": [
+    {
+      "thesis_id": "security-01",
+      "headline": "两位博主都认为 AI 基础设施链条仍在延续。",
+      "synthesis": "两位博主都延续看多 AI 基础设施主线，但其中一位更强调可以逐步建立观察仓位。",
+      "scenario_branches": [
+        {
+          "condition": "若新增需求继续兑现。",
+          "outcome": "产业链景气判断将进一步强化。",
+          "source_ids": [
+            "source-alpha"
+          ],
+          "analysis_ids": [
+            "post-alpha@2"
+          ],
+          "evidence_post_ids": [
+            "post-alpha"
+          ],
+          "uncertainties": []
+        }
+      ],
+      "attributed_actions": [
+        {
+          "source_id": "source-alpha",
+          "action_intent": "build_position",
+          "action_scope_status": "specified",
+          "action_scope": "AI 基础设施链条龙头",
+          "conditions": [
+            "若新增需求继续兑现。"
+          ],
+          "analysis_ids": [
+            "post-alpha@2"
+          ],
+          "evidence_post_ids": [
+            "post-alpha"
+          ],
+          "uncertainties": []
+        }
+      ],
+      "supporting_source_ids": [
+        "source-alpha",
+        "source-beta"
+      ],
+      "dissenting_source_ids": [],
+      "analysis_ids": [
+        "post-alpha@2",
+        "post-beta@2"
+      ],
+      "evidence_post_ids": [
+        "post-alpha",
+        "post-beta"
+      ],
+      "uncertainties": []
+    }
+  ],
+  "market_structure_theses": [
+    {
+      "thesis_id": "market-01",
+      "headline": "有博主认为当前节奏仍受兑现约束。",
+      "synthesis": "该判断认为订单兑现与产业节奏仍是市场结构分析的关键变量，因此更适合先跟踪而不是直接外推出更强判断。",
+      "scenario_branches": [],
+      "attributed_actions": [],
+      "supporting_source_ids": [
+        "source-alpha"
+      ],
+      "dissenting_source_ids": [],
+      "analysis_ids": [
+        "post-alpha-2@2"
+      ],
+      "evidence_post_ids": [
+        "post-alpha-2"
+      ],
+      "uncertainties": []
+    }
+  ],
+  "strategy_mindset_theses": [],
+  "uncertainties": []
+}
