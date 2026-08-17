@@ -1,6 +1,6 @@
 begin;
 
-select plan(16);
+select plan(18);
 
 select has_table('public', 'agent_demo_runs', 'demo run table exists');
 select has_column('public', 'agent_demo_runs', 'invocation_mode', 'run stores invocation mode');
@@ -20,8 +20,10 @@ values ('00000000-0000-0000-0000-000000054001', 'user', 'Demo One')
 on conflict (id) do nothing;
 insert into public.research_threads (id, owner_id, title)
 values ('00000000-0000-0000-0000-000000054011', '00000000-0000-0000-0000-000000054001', '新研究会话');
-insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at)
-values ('00000000-0000-0000-0000-000000054099', 'demo-worker', 'demo-worker-secret-hash', 'online', timezone('utc', now()));
+insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at, capabilities)
+values
+  ('00000000-0000-0000-0000-000000054099', 'demo-worker', 'demo-worker-secret-hash', 'online', timezone('utc', now()), array['agent_demo']),
+  ('00000000-0000-0000-0000-000000054098', 'x-only-worker', 'x-only-worker-secret-hash', 'online', timezone('utc', now()), array['x_sync']);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000054001', true);
@@ -43,6 +45,17 @@ reset role;
 select is((public.claim_agent_demo_run((select id from public.agent_demo_runs where request_id = 'request-054-a'), '00000000-0000-0000-0000-000000054099') ->> 'status'), 'running', 'worker claims queued run');
 select is((public.complete_agent_demo_run((select id from public.agent_demo_runs where request_id = 'request-054-a'), '00000000-0000-0000-0000-000000054099', '# 完成\n\n脚本 Provider 结果。', 'scripted') ->> 'status'), 'succeeded', 'completion stores success');
 select is((select count(*)::integer from public.research_messages where thread_id = '00000000-0000-0000-0000-000000054011' and role = 'assistant'), 1, 'completion creates one assistant message');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000054001', true);
+select is((public.admit_agent_demo_run(
+  '00000000-0000-0000-0000-000000054001',
+  '00000000-0000-0000-0000-000000054011',
+  'request-054-b',
+  '第二个研究问题'
+)->>'status'), 'queued', 'a second Demo run can be queued after completion');
+reset role;
+select is(public.claim_agent_demo_run((select id from public.agent_demo_runs where request_id = 'request-054-b'), '00000000-0000-0000-0000-000000054098'), null, 'X-only Worker cannot claim an Agent Demo run');
 
 select * from finish();
 rollback;

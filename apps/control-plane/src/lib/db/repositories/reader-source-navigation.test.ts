@@ -788,11 +788,21 @@ describe("X reader date projection", () => {
     databaseMocks.rows.set("x_daily_viewpoint_segments", [
       { source_id: "source-a", natural_date: "2099-01-02", occurred_from_at: "2099-01-02T08:00:00.000Z", occurred_through_at: "2099-01-02T08:00:00.000Z", window_viewpoints: ["Alpha earlier"], post_analysis_refs: [] },
     ]);
+    databaseMocks.rows.set("x_collection_gaps", [{
+      source_id: "source-a",
+      natural_date: "2099-01-03",
+      window_start_at: "2099-01-03T04:00:00.000Z",
+      window_end_at: "2099-01-03T08:00:00.000Z",
+    }]);
     const result = await readXDay({ sourceKey: "alpha" });
 
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(3);
     expect(result.every((day) => day.judgement.visible === false && day.judgement.batches.length === 0)).toBe(true);
-    expect(result.every((day) => day.bloggers.length === 1 && day.bloggers[0]?.source.sourceKey === "alpha")).toBe(true);
-    expect(result[1]?.bloggers[0]).toMatchObject({ status: "processing", segments: [] });
+    expect(result.filter((day) => day.bloggers.length > 0).every((day) => day.bloggers.length === 1 && day.bloggers[0]?.source.sourceKey === "alpha")).toBe(true);
+    expect(result[0]?.collectionGaps).toEqual([{
+      source: { sourceKey: "alpha", displayName: "Alpha" },
+      gaps: [{ startAt: "2099-01-03T04:00:00.000Z", endAt: "2099-01-03T08:00:00.000Z" }],
+    }]);
+    expect(result[2]?.bloggers[0]).toMatchObject({ status: "processing", segments: [] });
   });
 });
