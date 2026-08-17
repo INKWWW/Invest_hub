@@ -268,6 +268,56 @@ describe("X reader date projection", () => {
     expect(JSON.stringify(result)).not.toContain("task-late");
   });
 
+  it("marks an included segment late when parsed persistence time exceeds its deadline", async () => {
+    databaseMocks.rows.set("sources", [
+      ...(databaseMocks.rows.get("sources") ?? []),
+      { id: "source-e", source_key: "epsilon", display_name: "Epsilon", enabled: true },
+    ]);
+    databaseMocks.rows.set("x_daily_viewpoint_segments", [
+      ...(databaseMocks.rows.get("x_daily_viewpoint_segments") ?? []),
+      {
+        source_id: "source-e",
+        natural_date: "2099-01-04",
+        range_task_id: "task-epsilon",
+        created_at: "2099-01-05T01:30:00+08:00",
+        occurred_from_at: "2099-01-04T08:00:00.000Z",
+        occurred_through_at: "2099-01-04T09:00:00.000Z",
+        window_viewpoints: ["超过截止时间仍持久化的观点"],
+        post_analysis_refs: [],
+        evidence_refs: [],
+      },
+    ]);
+    databaseMocks.rows.set("x_collection_batches", [
+      ...(databaseMocks.rows.get("x_collection_batches") ?? []),
+      {
+        id: "batch-epsilon",
+        natural_date: "2099-01-04",
+        cutoff_at: "2099-01-04T09:00:00.000Z",
+        settlement_deadline_at: "2099-01-04T17:00:00.000Z",
+        status: "succeeded",
+      },
+    ]);
+    databaseMocks.rows.set("x_collection_batch_sources", [
+      ...(databaseMocks.rows.get("x_collection_batch_sources") ?? []),
+      {
+        batch_id: "batch-epsilon",
+        source_id: "source-e",
+        source_display_name: "Epsilon",
+        x_sync_task_id: "task-epsilon",
+        settlement_status: "included",
+      },
+    ]);
+    databaseMocks.rows.set("sync_tasks", [
+      ...(databaseMocks.rows.get("sync_tasks") ?? []),
+      { id: "task-epsilon", source_id: "source-e", status: "succeeded", collection_batch_id: "batch-epsilon" },
+    ]);
+
+    const result = await readXDay();
+    const epsilon = result.find((candidate) => candidate.naturalDate === "2099-01-04")?.bloggers[0];
+
+    expect(epsilon).toMatchObject({ source: { sourceKey: "epsilon" }, lateArrival: true });
+  });
+
   it("retains archived history, builds snapshot placeholders, and projects safe revision history", async () => {
     databaseMocks.rows.set("x_collection_gaps", [
       { source_id: "source-a", natural_date: "2099-01-02", window_start_at: "2099-01-02T04:00:00.000Z", window_end_at: "2099-01-02T08:00:00.000Z", failed_task_id: "task-a-gap", failure_class: "opencli_contract" },

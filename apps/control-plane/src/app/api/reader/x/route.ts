@@ -253,6 +253,9 @@ function readerSafeRevision(value: unknown) {
   return {
     revision: revisionNumber,
     coverageStatus: readerSafeCoverageStatus(revision?.coverageStatus, revisionNumber),
+    includedSourceCount: readerNumber(revision?.includedSourceCount) ?? 0,
+    noNewSourceCount: readerNumber(revision?.noNewSourceCount) ?? 0,
+    timedOutSourceCount: readerNumber(revision?.timedOutSourceCount) ?? 0,
     ...readerSafeV5Fields(revision),
     stockViewpoints: readerSafeJudgements(revision?.stockViewpoints),
     marketIndustryViewpoints: readerSafeJudgements(revision?.marketIndustryViewpoints),

@@ -46,6 +46,9 @@ describe("GET /api/reader/x", () => {
           cutoffAt: "2099-01-02T12:00:00.000Z",
           coverageStatus: "complete",
           status: "succeeded",
+          includedSourceCount: 3,
+          noNewSourceCount: 1,
+          timedOutSourceCount: 2,
           revision: 2,
           presentationKind: "v5",
           provider: "must not escape",
@@ -201,6 +204,9 @@ describe("GET /api/reader/x", () => {
         judgement: expect.objectContaining({ batches: [expect.objectContaining({
           revision: 2,
           presentationKind: "v5",
+          includedSourceCount: 3,
+          noNewSourceCount: 1,
+          timedOutSourceCount: 2,
           aiSynthesis: {
             crossBloggerIntegrations: [expect.objectContaining({
               headline: "Safe integration",
