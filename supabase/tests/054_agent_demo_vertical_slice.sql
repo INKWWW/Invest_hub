@@ -58,6 +58,9 @@ reset role;
 select is(public.claim_agent_demo_run((select id from public.agent_demo_runs where request_id = 'request-054-b'), '00000000-0000-0000-0000-000000054098'), null, 'X-only Worker cannot claim an Agent Demo run');
 
 reset role;
+update public.agent_demo_runs
+set status = 'failed'
+where request_id = 'request-054-b';
 update public.workers
 set status = 'offline'
 where id = '00000000-0000-0000-0000-000000054099';

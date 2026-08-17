@@ -1,6 +1,6 @@
 begin;
 
-select plan(24);
+select plan(25);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000044001', 'authenticated', 'authenticated', 'x-expired-user@example.invalid', 'fixture-only', now());
@@ -132,6 +132,7 @@ select is((select count(*)::text from public.task_attempts where task_id = (sele
 select is((select status from public.task_attempts where task_id = (select (payload->>'id')::uuid from task_a) and attempt = 1), 'retryable_failed', 'first expired attempt remains retryable history');
 select is((select status from public.task_attempts where task_id = (select (payload->>'id')::uuid from task_a) and attempt = 2), 'failed', 'second expired attempt is terminal history');
 select is((select failure->>'failure_class' from public.task_attempts where task_id = (select (payload->>'id')::uuid from task_a) and attempt = 2), 'lease_expired', 'terminal attempt records a safe lease failure class');
+select is((select failure ? 'failure_stage' from public.task_attempts where task_id = (select (payload->>'id')::uuid from task_a) and attempt = 2), false, 'terminal lease expiry does not write an unknown failure stage');
 select is((select count(*)::text from public.x_collection_gaps where failed_task_id = (select (payload->>'id')::uuid from task_a)), '1', 'terminal lease expiry creates one gap');
 select is((select coverage_through_at::text from public.source_collection_coverage where source_id = '00000000-0000-0000-0000-000000044011'), '2099-01-02 08:00:00+00', 'gap transition advances only the failed source waterline');
 select is((select coverage_through_at::text from public.source_collection_coverage where source_id = '00000000-0000-0000-0000-000000044012'), '2099-01-02 04:00:00+00', 'other source waterline remains independent');

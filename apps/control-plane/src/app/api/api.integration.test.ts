@@ -934,7 +934,7 @@ describe("v0 control-plane API authorization", () => {
   });
 
   it("reports a next heartbeat deadline for an authenticated Worker", async () => {
-    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "enrolled" });
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "enrolled", capabilities: ["discord_sync"] });
     workerRepositoryMocks.updateWorkerHeartbeat.mockResolvedValue({ id: "worker-1", status: "online" });
 
     const response = await postHeartbeat(
@@ -970,6 +970,29 @@ describe("v0 control-plane API authorization", () => {
       "online",
       "2099-01-01T00:00:00.000Z",
       ["x_sync"],
+    );
+  });
+
+  it("does not let an Agent-only Worker self-report the X capability", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-agent", status: "online", capabilities: ["agent_demo"] });
+    workerRepositoryMocks.updateWorkerHeartbeat.mockResolvedValue({ id: "worker-agent", status: "online" });
+
+    const response = await postHeartbeat(
+      jsonRequest("/api/worker/heartbeat", {
+        contract_version: "v0",
+        worker_id: "worker-agent",
+        sent_at: "2099-01-01T00:00:00.000Z",
+        status: "idle",
+        capabilities: ["agent_demo", "x_sync"],
+      }, { authorization: "Bearer device-secret" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(workerRepositoryMocks.updateWorkerHeartbeat).toHaveBeenCalledWith(
+      "worker-agent",
+      "online",
+      "2099-01-01T00:00:00.000Z",
+      ["agent_demo"],
     );
   });
 
