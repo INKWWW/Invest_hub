@@ -950,6 +950,29 @@ describe("v0 control-plane API authorization", () => {
     expect(await response.json()).toMatchObject({ worker_id: "worker-1", heartbeat_interval_seconds: 60 });
   });
 
+  it("does not let an X-only Worker self-report the Agent Demo capability", async () => {
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-x", status: "online", capabilities: ["x_sync"] });
+    workerRepositoryMocks.updateWorkerHeartbeat.mockResolvedValue({ id: "worker-x", status: "online" });
+
+    const response = await postHeartbeat(
+      jsonRequest("/api/worker/heartbeat", {
+        contract_version: "v0",
+        worker_id: "worker-x",
+        sent_at: "2099-01-01T00:00:00.000Z",
+        status: "idle",
+        capabilities: ["x_sync", "agent_demo"],
+      }, { authorization: "Bearer device-secret" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(workerRepositoryMocks.updateWorkerHeartbeat).toHaveBeenCalledWith(
+      "worker-x",
+      "online",
+      "2099-01-01T00:00:00.000Z",
+      ["x_sync"],
+    );
+  });
+
   it("lets the control plane calculate due scheduled windows without a Worker-submitted key", async () => {
     workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "online" });
     taskMocks.scheduleDueSourceTasks.mockResolvedValue({

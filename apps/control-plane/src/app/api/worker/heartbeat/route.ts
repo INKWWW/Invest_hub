@@ -25,7 +25,10 @@ export async function POST(request: Request) {
   if (body.worker_id !== worker.id) return NextResponse.json({ error: "worker_mismatch" }, { status: 403 });
   try {
     const status = body.status === "stopped" ? "offline" : "online";
-    await updateWorkerHeartbeat(worker.id, status, body.sent_at, body.capabilities);
+    const capabilities = body.capabilities.filter((capability) => (
+      capability !== "agent_demo" || worker.capabilities.includes("agent_demo")
+    ));
+    await updateWorkerHeartbeat(worker.id, status, body.sent_at, capabilities);
     return NextResponse.json({
       worker_id: worker.id,
       status,

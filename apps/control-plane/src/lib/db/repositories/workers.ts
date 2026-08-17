@@ -6,7 +6,7 @@ type WorkerInsert = Database["public"]["Tables"]["workers"]["Insert"];
 export async function listWorkers() {
   const { data, error } = await createSupabaseAdminClient()
     .from("workers")
-    .select("id,name,status,last_heartbeat_at,enrolled_at,revoked_at,created_at,updated_at")
+    .select("id,name,status,last_heartbeat_at,enrolled_at,revoked_at,created_at,updated_at,capabilities")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data;
@@ -36,7 +36,7 @@ export async function registerWorker(input: {
 export async function findWorkerBySecretHash(deviceSecretHash: string) {
   const { data, error } = await createSupabaseAdminClient()
     .from("workers")
-    .select("id,name,status,last_heartbeat_at,enrolled_at,revoked_at,created_at,updated_at")
+    .select("id,name,status,last_heartbeat_at,enrolled_at,revoked_at,created_at,updated_at,capabilities")
     .eq("device_secret_hash", deviceSecretHash)
     .maybeSingle();
   if (error) throw error;
