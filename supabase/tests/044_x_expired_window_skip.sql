@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(24);
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000044001', 'authenticated', 'authenticated', 'x-expired-user@example.invalid', 'fixture-only', now());
@@ -85,6 +85,22 @@ select is((select status from public.sync_tasks where id = (select (payload->>'i
 update public.sync_tasks
 set lease_owner = '00000000-0000-0000-0000-000000044010'
 where id = (select (payload->>'id')::uuid from task_a);
+
+update public.task_attempts
+set worker_id = '00000000-0000-0000-0000-000000044020'
+where task_id = (select (payload->>'id')::uuid from task_a) and attempt = 2;
+select is(
+  public.reap_expired_x_window_tasks(
+    '00000000-0000-0000-0000-000000044010'::uuid,
+    '2099-01-02T12:23:00Z'::timestamptz
+  )::text,
+  '0',
+  'worker A does not reap an expired attempt owned by another worker'
+);
+select is((select status from public.sync_tasks where id = (select (payload->>'id')::uuid from task_a)), 'leased', 'attempt owner guard leaves the task leased');
+update public.task_attempts
+set worker_id = '00000000-0000-0000-0000-000000044010'
+where task_id = (select (payload->>'id')::uuid from task_a) and attempt = 2;
 
 create temporary table claim_c_two as
 select public.claim_next_task('00000000-0000-0000-0000-000000044020', '2099-01-02T12:12:00Z') as payload;
