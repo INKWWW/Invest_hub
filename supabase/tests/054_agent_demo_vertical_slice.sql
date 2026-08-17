@@ -1,6 +1,6 @@
 begin;
 
-select plan(18);
+select plan(19);
 
 select has_table('public', 'agent_demo_runs', 'demo run table exists');
 select has_column('public', 'agent_demo_runs', 'invocation_mode', 'run stores invocation mode');
@@ -56,6 +56,17 @@ select is((public.admit_agent_demo_run(
 )->>'status'), 'queued', 'a second Demo run can be queued after completion');
 reset role;
 select is(public.claim_agent_demo_run((select id from public.agent_demo_runs where request_id = 'request-054-b'), '00000000-0000-0000-0000-000000054098'), null, 'X-only Worker cannot claim an Agent Demo run');
+
+reset role;
+update public.workers
+set status = 'offline'
+where id = '00000000-0000-0000-0000-000000054099';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000054001', true);
+select throws_ok(
+  $$select public.admit_agent_demo_run('00000000-0000-0000-0000-000000054001', '00000000-0000-0000-0000-000000054011', 'request-054-c', '没有 Agent Worker 的问题');$$,
+  'P0001', 'demo_runner_unavailable', 'admission rejects when only non-Agent Workers are online'
+);
 
 select * from finish();
 rollback;
