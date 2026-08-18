@@ -120,6 +120,15 @@ class WorkerProtocol:
             return None
         return _parse_x_daily_judgement_claim(self._object(value, "invalid x daily judgement claim"))
 
+    def claim_x_daily_judgement_for_run(self, run_id: str) -> dict[str, Any] | None:
+        self._require_credential()
+        if not isinstance(run_id, str) or not run_id:
+            raise ProtocolError("invalid x daily judgement run request")
+        status, value = self._request("POST", "api/worker/x-fixed-windows/run", {"action": "claim_judgement", "run_id": run_id})
+        if status == 204 or value is None:
+            return None
+        return _parse_x_daily_judgement_claim(self._object(value, "invalid x daily judgement claim"))
+
     def get_x_daily_judgement_context(self, run_id: str, attempt: int) -> dict[str, Any]:
         self._require_credential()
         _validate_x_daily_judgement_identity(run_id, attempt, "context")
@@ -257,6 +266,63 @@ class WorkerProtocol:
         if not isinstance(task.get("id"), str) or not task["id"] or task.get("source_id") != source_id or not isinstance(task.get("idempotent"), bool) or not isinstance(task.get("demo_fixed_window"), dict):
             raise ProtocolError("invalid x fixed-window creation response")
         return task
+
+    def create_x_demo_fixed_window_task_for_run(self, run_id: str, source_id: str, cutoff_at: str, account_id: str) -> dict[str, Any]:
+        self._require_credential()
+        if not all(isinstance(value, str) and value for value in (run_id, source_id, cutoff_at, account_id)):
+            raise ProtocolError("invalid x demo fixed-window task request")
+        _, value = self._request("POST", "api/worker/x-fixed-windows/run", {
+            "action": "create_task", "run_id": run_id, "source_id": source_id,
+            "cutoff_at": cutoff_at, "account_id": account_id,
+        })
+        task = self._object(value, "invalid x demo fixed-window task response")
+        if not isinstance(task.get("id"), str) or not task["id"] or task.get("source_id") != source_id or not isinstance(task.get("idempotent"), bool) or not isinstance(task.get("demo_fixed_window"), dict):
+            raise ProtocolError("invalid x demo fixed-window task response")
+        return task
+
+    def begin_x_demo_fixed_window_run(self, cutoff_at: str) -> dict[str, Any]:
+        self._require_credential()
+        if not isinstance(cutoff_at, str) or not cutoff_at:
+            raise ProtocolError("invalid x demo fixed-window run request")
+        _, value = self._request("POST", "api/worker/x-fixed-windows/run", {"action": "start", "cutoff_at": cutoff_at})
+        return self._object(value, "invalid x demo fixed-window run response")
+
+    def attach_x_demo_fixed_window_task(self, run_id: str, source_id: str, task_id: str) -> dict[str, Any]:
+        self._require_credential()
+        if not all(isinstance(value, str) and value for value in (run_id, source_id, task_id)):
+            raise ProtocolError("invalid x demo fixed-window task binding request")
+        _, value = self._request("POST", "api/worker/x-fixed-windows/run", {
+            "action": "bind_task", "run_id": run_id, "source_id": source_id, "task_id": task_id,
+        })
+        return self._object(value, "invalid x demo fixed-window task binding response")
+
+    def mark_x_demo_fixed_window_source_failed(self, run_id: str, source_id: str, reason: str) -> dict[str, Any]:
+        self._require_credential()
+        if not all(isinstance(value, str) and value for value in (run_id, source_id, reason)):
+            raise ProtocolError("invalid x demo fixed-window source failure request")
+        _, value = self._request("POST", "api/worker/x-fixed-windows/run", {
+            "action": "source_failure", "run_id": run_id, "source_id": source_id, "reason": reason,
+        })
+        return self._object(value, "invalid x demo fixed-window source failure response")
+
+    def settle_x_demo_fixed_window_run(self, run_id: str) -> dict[str, Any]:
+        self._require_credential()
+        if not isinstance(run_id, str) or not run_id:
+            raise ProtocolError("invalid x demo fixed-window settlement request")
+        _, value = self._request("POST", "api/worker/x-fixed-windows/run", {"action": "settle", "run_id": run_id})
+        return self._object(value, "invalid x demo fixed-window settlement response")
+
+    def terminalize_x_demo_fixed_window_judgement(self, demo_run_id: str, judgement_run_id: str) -> dict[str, Any]:
+        self._require_credential()
+        if not all(isinstance(value, str) and value for value in (demo_run_id, judgement_run_id)):
+            raise ProtocolError("invalid x demo fixed-window judgement failure request")
+        _, value = self._request("POST", "api/worker/x-fixed-windows/run", {
+            "action": "judgement_failure", "run_id": demo_run_id, "judgement_run_id": judgement_run_id,
+        })
+        response = self._object(value, "invalid x demo fixed-window judgement failure response")
+        if response.get("status") != "failed" or response.get("demo_run_id") != demo_run_id or response.get("judgement_run_id") != judgement_run_id or not isinstance(response.get("idempotent"), bool):
+            raise ProtocolError("invalid x demo fixed-window judgement failure response")
+        return response
 
     def claim_x_demo_fixed_window_task(self, task_id: str) -> dict[str, Any] | None:
         self._require_credential()

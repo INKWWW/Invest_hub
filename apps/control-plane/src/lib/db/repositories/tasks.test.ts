@@ -8,9 +8,20 @@ vi.mock("../supabase-server", () => ({
 }));
 vi.mock("./x-daily-judgements", () => judgementMocks);
 
-import { claimXDemoFixedWindowTask, completeWindowedCaptureRange, createXDemoFixedWindowTaskForWorker, scheduleDueSourceTasks } from "./tasks";
+import { claimXDemoFixedWindowTask, completeWindowedCaptureRange, createXDemoFixedWindowTaskForWorker, scheduleDueSourceTasks, terminalizeXDemoFixedWindowJudgement } from "./tasks";
 
 describe("due source scheduling", () => {
+  it("terminalizes only the exact Ticket 02R judgement identity", async () => {
+    databaseMocks.rpc.mockResolvedValue({ data: { status: "failed", demo_run_id: "demo-1", judgement_run_id: "judgement-1", idempotent: false }, error: null });
+
+    await expect(terminalizeXDemoFixedWindowJudgement({
+      demoRunId: "demo-1", judgementRunId: "judgement-1", workerId: "worker-x",
+    })).resolves.toEqual({ status: "failed", demo_run_id: "demo-1", judgement_run_id: "judgement-1", idempotent: false });
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("terminalize_x_demo_fixed_window_judgement", {
+      p_demo_run_id: "demo-1", p_judgement_run_id: "judgement-1", p_worker_id: "worker-x",
+    });
+  });
+
   it("creates one worker-scoped fixed window with the activated identity", async () => {
     databaseMocks.rpc.mockResolvedValue({
       data: { id: "task-fixed", source_id: "source-x", idempotent: false, demo_fixed_window: { natural_date: "2099-01-01" } },
