@@ -108,10 +108,13 @@ function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
     {!blogger.segments.length ? <p className="summary-empty">{blogger.timedOut ? "本批次未纳入该博主的完整信息。" : blogger.status === "partial_failure" ? "本批次未纳入该博主的完整信息。" : "本批次没有可展示的博主观点。"}</p> : null}
     {blogger.segments.map((segment, index) => <details className="x-reader-segment" key={segment.occurredThroughAt} open={index === 0}>
       <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(segment.occurredThroughAt))} · 博主观点</summary>
+      {segment.securityIndustryViewpoints?.length ? <ViewpointModule title="个股与产业观点" tone="security"><div className="x-reader-viewpoint-list">{segment.securityIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`security-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</div></ViewpointModule> : null}
+      {segment.marketStructureViewpoints?.length ? <ViewpointModule title="市场结构观点" tone="market"><div className="x-reader-viewpoint-list">{segment.marketStructureViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</div></ViewpointModule> : null}
+      {segment.strategyMindsetViewpoints?.length ? <ViewpointModule title="投资策略与心态" tone="strategy"><div className="x-reader-viewpoint-list">{segment.strategyMindsetViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`strategy-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</div></ViewpointModule> : null}
       {segment.viewpoints.length ? <div className="x-reader-unlinked-viewpoints"><p className="x-reader-unlinked-viewpoints-label">未关联帖子的博主观点</p><ul className="x-viewpoints">{segment.viewpoints.map((viewpoint, viewpointIndex) => <li key={viewpointIndex}>{viewpoint}</li>)}</ul></div> : null}
       {!segment.viewpoints.length && !segment.analyses.length ? <p className="summary-empty">本窗口没有形成新的博主观点。</p> : null}
       {segment.uncertainties.length ? <p className="topic-uncertainty">不确定性：{segment.uncertainties.join("；")}</p> : null}
-      {segment.analyses.map((analysis, analysisIndex) => <details className="x-analysis" key={analysisIndex} open>
+      {segment.analyses.map((analysis, analysisIndex) => <details className="x-analysis" key={analysisIndex}>
         <summary><a href={analysis.postLink} target="_blank" rel="noreferrer">{analysisLabel(analysis)}</a></summary>
         <div className="x-analysis-body">
           <p><strong>博主观点：</strong>{analysis.bloggerViewpoint ?? "未表达（例如普通 repost）"}</p>

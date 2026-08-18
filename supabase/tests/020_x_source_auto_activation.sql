@@ -8,10 +8,9 @@ values ('00000000-0000-0000-0000-000000020001', 'authenticated', 'authenticated'
 insert into public.profiles (id, role, display_name)
 values ('00000000-0000-0000-0000-000000020001', 'admin', 'Auto X admin');
 
-select throws_ok(
+select lives_ok(
   $$select public.create_x_source('x:auto-no-worker', 'Auto X', 'fixture_handle', 'x-standard-v2', '00000000-0000-0000-0000-000000020001')$$,
-  'P0001', 'x_worker_unavailable',
-  'X creation refuses to leave a source without an eligible local X Worker'
+  'X creation remains available while no Worker is online'
 );
 
 insert into public.workers (id, name, device_secret_hash, status, last_heartbeat_at, capabilities)
@@ -22,8 +21,8 @@ select public.create_x_source('x:auto-ready', 'Auto X ready', 'fixture_handle', 
 
 select is(
   (select authorized_worker_id::text from public.sources where id = (select (payload->>'id')::uuid from auto_x_source)),
-  '00000000-0000-0000-0000-000000020002',
-  'creation binds the only eligible X Worker to the source'
+  null,
+  'source creation does not bind an online Worker before activation'
 );
 
 select is(
@@ -36,6 +35,11 @@ select ok(
   (select initial_end_at <= timezone('utc', now()) from public.x_source_activations where source_id = (select (payload->>'id')::uuid from auto_x_source)),
   'initial activation boundary is never later than creation time'
 );
+
+-- Keep this legacy-adoption assertion focused on a source created before the
+-- Ticket 01 offline-save path; the newly created source is intentionally the
+-- first activation candidate under the new contract.
+update public.sources set enabled = false where source_key = 'x:auto-no-worker';
 
 update public.x_source_activations
 set stage = 'completed'

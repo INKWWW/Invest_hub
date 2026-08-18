@@ -30,7 +30,7 @@ describe("XPage", () => {
     expect(html.indexOf("信息来源")).toBeLessThan(html.indexOf("X 信息采集"));
   });
 
-  it("uses the current Shanghai date even when a stale date query is refreshed", async () => {
+  it("shows the latest readable dates instead of forcing an empty current date", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-02T17:30:00.000Z"));
     readerMocks.readXDay.mockResolvedValue(days);
@@ -39,12 +39,12 @@ describe("XPage", () => {
     const html = renderToStaticMarkup(page);
 
     expect(html).toContain('<option value="second" selected="">Second Author</option>');
-    expect(html).toContain('<option value="2026-08-03" selected="">2026-08-03</option>');
+    expect(html).toContain('<option value="all" selected="">全部</option>');
     expect(html).not.toContain('<option value="2026-07-26" selected="">');
-    expect(html).toContain("没有找到符合当前博主和日期筛选的 X 信息。");
+    expect(html).toContain("Second Author");
   });
 
-  it("defaults to the current Shanghai date when no date query is present", async () => {
+  it("defaults to all readable dates when no date query is present", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-02T17:30:00.000Z"));
     readerMocks.readXDay.mockResolvedValue(days);
@@ -52,7 +52,7 @@ describe("XPage", () => {
     const defaultPage = await XPage({});
     const defaultHtml = renderToStaticMarkup(defaultPage);
 
-    expect(defaultHtml).toContain('<option value="2026-08-03" selected="">2026-08-03</option>');
-    expect(defaultHtml).not.toContain('<label>日期<select><option value="all" selected="">全部</option>');
+    expect(defaultHtml).toContain('<option value="all" selected="">全部</option>');
+    expect(defaultHtml).toContain("Second Author");
   });
 });
