@@ -1,15 +1,18 @@
 export type MarkdownInline =
   | { kind: "text"; value: string }
+  | { kind: "strong"; value: string }
   | { kind: "link"; label: string; href: string };
 
 export type MarkdownBlock =
   | { kind: "heading"; level: 1 | 2 | 3; inlines: MarkdownInline[] }
   | { kind: "paragraph"; inlines: MarkdownInline[] }
+  | { kind: "labeled-point"; label: string; inlines: MarkdownInline[] }
   | { kind: "list"; ordered: boolean; items: MarkdownInline[][] }
   | { kind: "code"; value: string };
 
-const linkPattern = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+const inlinePattern = /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*/g;
 const safeUrl = /^https:\/\/[^\s<>"']+$/i;
+const labeledPointPattern = /^(?:\*\*)?(来源事实|Agent\s*推断)(?:\*\*)?：\s*([\s\S]+)$/;
 
 export function parseSafeMarkdown(markdown: string): MarkdownBlock[] {
   if (typeof markdown !== "string") throw new Error("invalid_markdown");
@@ -20,7 +23,11 @@ export function parseSafeMarkdown(markdown: string): MarkdownBlock[] {
 
   const flushParagraph = () => {
     const value = paragraph.join("\n").trim();
-    if (value) blocks.push({ kind: "paragraph", inlines: parseInline(value) });
+    if (value) {
+      const labeledPoint = value.match(labeledPointPattern);
+      if (labeledPoint) blocks.push({ kind: "labeled-point", label: labeledPoint[1], inlines: parseInline(labeledPoint[2]) });
+      else blocks.push({ kind: "paragraph", inlines: parseInline(value) });
+    }
     paragraph = [];
   };
 
@@ -41,6 +48,7 @@ export function parseSafeMarkdown(markdown: string): MarkdownBlock[] {
       flushParagraph();
       continue;
     }
+    if (/^(?:\*\*)?(来源事实|Agent\s*推断)(?:\*\*)?：/.test(line.trim()) && paragraph.length) flushParagraph();
     const heading = line.match(/^(#{1,3})\s+(.+)$/);
     if (heading) {
       flushParagraph();
@@ -66,13 +74,15 @@ export function parseSafeMarkdown(markdown: string): MarkdownBlock[] {
 export function parseInline(value: string): MarkdownInline[] {
   const result: MarkdownInline[] = [];
   let cursor = 0;
-  for (const match of value.matchAll(linkPattern)) {
+  for (const match of value.matchAll(inlinePattern)) {
     const index = match.index ?? 0;
     if (index > cursor) result.push({ kind: "text", value: value.slice(cursor, index) });
-    const label = match[1];
-    const href = match[2];
-    if (safeUrl.test(href)) result.push({ kind: "link", label, href });
-    else result.push({ kind: "text", value: match[0] });
+    if (match[1] && match[2]) {
+      const label = match[1];
+      const href = match[2];
+      if (safeUrl.test(href)) result.push({ kind: "link", label, href });
+      else result.push({ kind: "text", value: match[0] });
+    } else if (match[3]) result.push({ kind: "strong", value: match[3] });
     cursor = index + match[0].length;
   }
   if (cursor < value.length) result.push({ kind: "text", value: value.slice(cursor) });

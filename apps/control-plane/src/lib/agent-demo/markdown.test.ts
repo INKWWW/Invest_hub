@@ -19,4 +19,12 @@ describe("safe Demo Markdown", () => {
     expect(JSON.stringify(blocks)).toContain("<script>alert(1)</script>");
     expect(blocks[0]).not.toMatchObject({ kind: "link", href: "javascript:alert(1)" });
   });
+
+  it("renders fact and inference labels as separate bullet points with bold inline text", () => {
+    expect(parseSafeMarkdown("来源事实：GOOL 费率为 **0.99%**。\n\nAgent 推断：近期走势明显回撤。")).toEqual([
+      { kind: "labeled-point", label: "来源事实", inlines: [{ kind: "text", value: "GOOL 费率为 " }, { kind: "strong", value: "0.99%" }, { kind: "text", value: "。" }] },
+      { kind: "labeled-point", label: "Agent 推断", inlines: [{ kind: "text", value: "近期走势明显回撤。" }] },
+    ]);
+    expect(parseSafeMarkdown("来源事实：GOOL 费率为 0.99%。\nAgent 推断：近期走势明显回撤。").map((block) => block.kind)).toEqual(["labeled-point", "labeled-point"]);
+  });
 });

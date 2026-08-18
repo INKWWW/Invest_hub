@@ -12,15 +12,25 @@ import type {
 
 type ThreadSummary = Pick<ResearchThread, "id" | "title" | "createdAt" | "updatedAt">;
 type AgentThreadDetail = Omit<ResearchThreadDetail, "ownerId" | "messages" | "artifacts"> & {
-  messages: Array<Pick<ResearchMessage, "id" | "role" | "content" | "createdAt">>;
+  messages: Array<Pick<ResearchMessage, "id" | "role" | "content" | "skillId" | "createdAt">>;
   artifacts: Array<Pick<ResearchThreadDetail["artifacts"][number], "id" | "artifactType" | "metadata" | "createdAt">>;
 };
 type ApiThread = { id: string; title: string; created_at: string; updated_at: string };
 type ApiThreadDetail = ApiThread & {
-  messages: Array<{ id: string; role: "user" | "assistant"; content: string; created_at: string }>;
+  messages: Array<{ id: string; role: "user" | "assistant"; content: string; skill_id: SkillId | null; created_at: string }>;
   artifacts: Array<{ id: string; artifact_type: string; metadata: AgentThreadDetail["artifacts"][number]["metadata"]; created_at: string }>;
 };
-type ApiDemoRun = { id: string; status: "queued" | "running" | "succeeded" | "failed"; thread_id: string; assistant_message_id: string | null; invocation_mode?: "explicit" | "auto"; skill_id?: SkillId | null };
+type ApiDemoRun = {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  thread_id: string;
+  assistant_message_id: string | null;
+  invocation_mode?: "explicit" | "auto";
+  skill_id?: SkillId | null;
+  created_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
 
 export function mapThread(thread: ApiThread): ThreadSummary {
   return { id: thread.id, title: thread.title, createdAt: thread.created_at, updatedAt: thread.updated_at };
@@ -36,6 +46,7 @@ export function mapThreadDetail(thread: ApiThreadDetail): AgentThreadDetail {
       id: message.id,
       role: message.role,
       content: message.content,
+      skillId: message.skill_id,
       createdAt: message.created_at,
     })),
     artifacts: thread.artifacts.map((artifact) => ({
@@ -91,6 +102,18 @@ function messageTime(value: string): string {
   }).format(new Date(value));
 }
 
+function skillButtonLabel(skillId: SkillId | null | undefined): string | null {
+  if (!skillId) return null;
+  return SKILL_DEFINITIONS.find((skill) => skill.id === skillId)?.buttonLabel ?? null;
+}
+
+function runStatusCopy(status: ApiDemoRun["status"]): { title: string; detail: string } {
+  if (status === "queued") return { title: "已排队", detail: "Agent 正在等待执行，预计 1–4 分钟返回结果。" };
+  if (status === "running") return { title: "研究中", detail: "Agent 正在调用 Skill 并生成回答，预计还需 1–3 分钟。" };
+  if (status === "succeeded") return { title: "已完成", detail: "回答已写回当前研究会话。" };
+  return { title: "执行失败", detail: "本次研究没有完成，请保留原问题后重试。" };
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   const payload = await response.json() as T & { error?: string };
   if (!response.ok) throw new Error(payload.error ?? "agent_request_failed");
@@ -109,6 +132,7 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [activeRun, setActiveRun] = useState<ApiDemoRun | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<SkillId | null>(null);
 
   const activeThread = useMemo(
@@ -137,13 +161,17 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
       void fetch(`/api/agent/runs/${activeRunId}`, { cache: "no-store" })
         .then((response) => readJson<{ run: ApiDemoRun }>(response))
         .then(({ run }) => {
-          if (cancelled || (run.status !== "succeeded" && run.status !== "failed")) return;
+          if (cancelled) return;
+          setActiveRun(run);
+          if (run.status !== "succeeded" && run.status !== "failed") return;
           window.clearInterval(timer);
           setActiveRunId(null);
           if (run.status === "failed") {
+            setActiveRun(null);
             setError("Agent 执行失败，请重新发送。请保留原问题后重试。");
             return;
           }
+          setActiveRun(null);
           return fetch(`/api/agent/threads/${run.thread_id}`)
             .then((response) => readJson<{ thread: ApiThreadDetail }>(response))
             .then(({ thread }) => { if (!cancelled) setDetail(mapThreadDetail(thread)); });
@@ -159,6 +187,8 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
     setDeleteId(null);
     setRenameId(null);
     setSelectedSkill(null);
+    setActiveRun(null);
+    setActiveRunId(null);
   }
 
   async function createThread() {
@@ -172,6 +202,8 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
       setDetail({ ...thread, messages: [], artifacts: [] });
       setDrawerOpen(false);
       setSelectedSkill(null);
+      setActiveRun(null);
+      setActiveRunId(null);
     } catch {
       setError("新建会话失败，请重试。");
     } finally {
@@ -204,6 +236,7 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
       setDraft("");
       setSelectedSkill(null);
       setActiveRunId(accepted.run.id);
+      setActiveRun({ ...accepted.run, created_at: accepted.run.created_at ?? new Date().toISOString() });
       const refreshed = await readJson<{ thread: ApiThreadDetail }>(await fetch(`/api/agent/threads/${threadId}`));
       const refreshedThread = mapThreadDetail(refreshed.thread);
       setDetail(refreshedThread);
@@ -306,21 +339,24 @@ export function ResearchAgentShell({ initialThreads }: { initialThreads: ThreadS
       </header>
       <div className="agent-message-list" data-testid="agent-message-list" aria-live="polite">
         {detail?.messages.length ? detail.messages.map((message) => <article className={messageClass(message)} key={message.id}>
-          <p className="agent-message-role">{message.role === "user" ? "你" : "Agent"}</p>{message.role === "assistant" ? <SafeMarkdown content={message.content} /> : <p>{message.content}</p>}<time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
+          <p className="agent-message-role">{message.role === "user" ? "你" : "Agent"}</p>{message.role === "user" && message.skillId ? <p className="agent-message-skill">已调用 Skill <strong>/{skillButtonLabel(message.skillId)}</strong></p> : null}{message.role === "assistant" ? <SafeMarkdown content={message.content} /> : <p>{message.content}</p>}<time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
         </article>) : <div className="agent-conversation-empty"><p>把一个投资问题留在这里，作为你的研究起点。</p></div>}
       </div>
       {error ? <p className="agent-error" role="alert">{error}</p> : null}
+      {activeRun && (activeRun.status === "queued" || activeRun.status === "running") ? <div className={`agent-run-status agent-run-status-${activeRun.status}`} role="status" aria-live="polite" aria-busy="true">
+        <div className="agent-run-status-top"><strong>{runStatusCopy(activeRun.status).title}</strong><span>{activeRun.started_at ? `开始于 ${messageTime(activeRun.started_at)}` : "刚刚提交"}</span></div>
+        <p>{runStatusCopy(activeRun.status).detail}</p>
+      </div> : null}
       <form className="agent-composer" data-testid="agent-composer" onSubmit={(event) => void submitMessage(event)}>
-        <label htmlFor="agent-message-input">发送纯文本消息</label>
         <div className="agent-skill-picker" aria-label="本条消息的 Skill 选择">
           <button type="button" aria-pressed={selectedSkill === null} onClick={() => setSelectedSkill(null)}>智能</button>
           {SKILL_DEFINITIONS.map((skill) => <button key={skill.id} type="button" aria-pressed={selectedSkill === skill.id} onClick={() => setSelectedSkill(skill.id)}>{skill.buttonLabel}</button>)}
         </div>
         <div className="agent-composer-editor">
           {selectedSkillDefinition ? <span className="agent-skill-token" aria-label={`已选择 ${selectedSkillDefinition.buttonLabel}`}>/{selectedSkillDefinition.buttonLabel}</span> : null}
-          <textarea id="agent-message-input" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
+          <textarea id="agent-message-input" aria-label="记录你的投资研究问题" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="记录你的投资研究问题……" maxLength={20000} rows={4} />
         </div>
-        <div className="agent-composer-footer"><button type="submit" disabled={busy || !draft.trim()}>{busy ? "提交中…" : "发送问题"}</button></div>
+        <div className="agent-composer-footer"><button type="submit" disabled={busy || !draft.trim()}>{busy ? "提交中…" : "点击发送（回车仅换行）"}</button></div>
       </form>
     </section>
   </section>;

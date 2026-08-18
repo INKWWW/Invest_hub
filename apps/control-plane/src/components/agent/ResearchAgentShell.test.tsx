@@ -20,11 +20,12 @@ describe("ResearchAgentShell", () => {
       ...thread,
       created_at: thread.createdAt,
       updated_at: thread.updatedAt,
-      messages: [{ id: "message-one", role: "user", content: "研究", created_at: "2099-01-01T00:00:02.000Z" }],
+      messages: [{ id: "message-one", role: "user", content: "研究", skill_id: "investment-research", created_at: "2099-01-01T00:00:02.000Z" }],
       artifacts: [],
     });
     expect(thread.updatedAt).toBe("2099-01-01T00:00:01.000Z");
     expect(detail.messages[0]?.createdAt).toBe("2099-01-01T00:00:02.000Z");
+    expect(detail.messages[0]?.skillId).toBe("investment-research");
   });
 
   it("renders the A workbench hierarchy with a mobile drawer trigger", () => {
@@ -37,7 +38,7 @@ describe("ResearchAgentShell", () => {
     expect(html).toContain("昨天的研究");
     expect(html).toContain('data-testid="agent-composer"');
     expect(html).toContain('data-testid="agent-message-list"');
-    expect(html).toContain("发送问题");
+    expect(html).toContain("点击发送（回车仅换行）");
     expect(html).toContain('class="agent-skill-picker"');
     expect(html).toContain("大师投研");
     expect(html).toContain("持仓组合分析");

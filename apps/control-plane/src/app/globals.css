@@ -595,7 +595,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-kicker { margin: 0 0 0.45rem; color: #40626a; font-size: 0.7rem; font-weight: 850; letter-spacing: 0.13em; text-transform: uppercase; }
 
-.agent-workbench { position: relative; display: grid; grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr); height: min(48rem, calc(100vh - 16rem)); min-height: 36rem; border: 1px solid #c7d6d2; background: #fffefa; box-shadow: 0 12px 35px rgba(23, 37, 45, 0.08); }
+.agent-workbench { position: relative; display: grid; grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: 1200px; min-height: 0; overflow: hidden; border: 1px solid #c7d6d2; background: #fffefa; box-shadow: 0 12px 35px rgba(23, 37, 45, 0.08); }
 
 .agent-quota-card { grid-column: 1 / -1; display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 1rem; border-bottom: 1px solid #c7d6d2; background: #edf5f1; padding: 0.85rem 1.15rem; }
 
@@ -683,7 +683,21 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-message .agent-message-role { margin-bottom: 0.35rem; color: #577177; font-size: 0.7rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
 
+.agent-message .agent-message-skill { margin: -0.05rem 0 0.45rem; color: #0a5cac; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.76rem; font-weight: 750; line-height: 1.4; }
+
+.agent-message .agent-message-skill strong { font-weight: 850; }
+
 .agent-message time { display: block; margin-top: 0.5rem; color: #728387; font-size: 0.68rem; }
+
+.agent-markdown p + p { margin-top: 0.85rem; }
+
+.agent-markdown .agent-labeled-point { margin: 0.85rem 0 0; padding-left: 1.25rem; line-height: 1.6; }
+
+.agent-markdown .agent-labeled-point + .agent-labeled-point { margin-top: 0.9rem; }
+
+.agent-markdown .agent-labeled-point li { padding-left: 0.15rem; }
+
+.agent-markdown .agent-labeled-point strong { color: #234f59; font-weight: 850; }
 
 .agent-conversation-empty { align-self: center; justify-self: center; max-width: 34rem; padding: 2rem; text-align: center; }
 
@@ -691,7 +705,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .agent-composer { display: grid; gap: 0.65rem; border-top: 1px solid #d6e1de; background: #f6f8f5; padding: 1rem clamp(1rem, 3vw, 2rem) 1.25rem; }
 
-.agent-composer > label { color: #315860; font-size: 0.78rem; font-weight: 850; }
+.agent-run-status { display: grid; gap: 0.3rem; border-left: 4px solid #2b6873; background: #eef7fa; padding: 0.65rem clamp(1rem, 3vw, 2rem); color: #275467; }
+
+.agent-run-status-queued { border-left-color: #a86b20; background: #fff7e8; color: #704a1b; }
+
+.agent-run-status-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+
+.agent-run-status-top strong { font-size: 0.82rem; }
+
+.agent-run-status-top span { color: #5d7a80; font-size: 0.7rem; }
+
+.agent-run-status p { margin: 0; font-size: 0.76rem; line-height: 1.45; }
 
 .agent-skill-picker { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; }
 
@@ -763,7 +787,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .agent-page { padding: 1.25rem 0 2rem; }
   .agent-page-header { padding: 0 1rem; }
   .agent-header-top { align-items: flex-start; flex-direction: column; margin-bottom: 1.5rem; }
-  .agent-workbench { display: block; height: auto; min-height: 0; border-right: 0; border-left: 0; }
+  .agent-workbench { grid-template-columns: 1fr; height: min(1200px, calc(100dvh - 9rem)); min-height: 0; border-right: 0; border-left: 0; }
   .agent-quota-card { display: grid; grid-template-columns: 1fr auto; gap: 0.65rem; padding: 0.85rem 1rem; }
   .agent-quota-card dl { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
   .agent-quota-note { grid-column: 1 / -1; }
@@ -771,7 +795,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .agent-thread-sidebar { position: fixed; z-index: 5; top: 0; bottom: 0; left: 0; display: none; width: min(86vw, 20rem); overflow-y: auto; border-right: 1px solid #b4c9c4; box-shadow: 12px 0 28px rgba(23, 37, 45, 0.16); }
   .agent-thread-sidebar-open { display: grid; }
   .agent-drawer-backdrop { display: block; position: fixed; z-index: 4; inset: 0; border: 0; border-radius: 0; background: rgba(23, 37, 45, 0.32); padding: 0; }
-  .agent-conversation { height: calc(100vh - 12rem); min-height: 34rem; }
+  .agent-conversation { min-height: 0; }
   .agent-conversation-header { padding: 1rem; padding-right: 7rem; }
   .agent-message-list { min-height: 0; padding: 1rem; }
   .agent-message { max-width: 92%; }
