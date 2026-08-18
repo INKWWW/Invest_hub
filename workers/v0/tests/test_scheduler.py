@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from invest_hub_worker.scheduler import due_windows, due_x_windows, is_x_schedule_window_key
+from invest_hub_worker.scheduler import due_windows, due_x_windows, fixed_x_window, is_x_schedule_window_key
 
 
 class SchedulerTests(unittest.TestCase):
@@ -41,6 +41,17 @@ class SchedulerTests(unittest.TestCase):
         ))
         self.assertTrue(is_x_schedule_window_key("2026-07-23T12:00+08:00"))
         self.assertFalse(is_x_schedule_window_key("2026-07-23T20:50+08:00"))
+
+    def test_fixed_x_window_uses_the_unique_previous_shanghai_cutoff(self) -> None:
+        self.assertEqual(
+            fixed_x_window("2026-08-18T00:00+08:00"),
+            {
+                "start_at": "2026-08-17T12:00:00+00:00",
+                "end_at": "2026-08-17T16:00:00+00:00",
+                "scheduled_window_key": "2026-08-18T00:00+08:00",
+                "natural_date": "2026-08-17",
+            },
+        )
 
 
 if __name__ == "__main__":
