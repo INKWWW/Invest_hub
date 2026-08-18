@@ -9,6 +9,11 @@ import {
 
 describe("agent demo skill routing contract", () => {
   it("keeps the three button labels, skill IDs, and commands in one exact mapping", () => {
+    expect(SKILL_DEFINITIONS).toContainEqual({
+      buttonLabel: "大师投研",
+      id: "investment-research",
+      command: "/investment-research",
+    });
     expect(SKILL_DEFINITIONS).toEqual([
       {
         buttonLabel: "大师投研",

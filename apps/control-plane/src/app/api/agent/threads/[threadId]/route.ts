@@ -31,6 +31,7 @@ function detailResponse(detail: Awaited<ReturnType<typeof getResearchThread>>) {
       id: message.id,
       role: message.role,
       content: message.content,
+      skill_id: message.skillId,
       created_at: message.createdAt,
     })),
     artifacts: detail.artifacts.map((artifact) => ({

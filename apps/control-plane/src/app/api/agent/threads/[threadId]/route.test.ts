@@ -24,7 +24,7 @@ describe("/api/agent/threads/[threadId]", () => {
       title: "宁德时代研究",
       createdAt: "2099-01-01T00:00:00.000Z",
       updatedAt: "2099-01-01T00:00:00.000Z",
-      messages: [{ id: "message-one", threadId: "thread-one", ownerId: "user-one", role: "user", content: "研究", createdAt: "2099-01-01T00:00:01.000Z" }],
+      messages: [{ id: "message-one", threadId: "thread-one", ownerId: "user-one", role: "user", content: "研究", skillId: "investment-research", createdAt: "2099-01-01T00:00:01.000Z" }],
       artifacts: [],
     });
     threadMocks.renameResearchThread.mockResolvedValue({
@@ -35,7 +35,9 @@ describe("/api/agent/threads/[threadId]", () => {
   it("opens a persisted thread only for the authenticated owner", async () => {
     const response = await GET(new Request("http://localhost"), context);
     expect(response.status).toBe(200);
-    expect((await response.json()).thread.messages).toHaveLength(1);
+    const payload = await response.json();
+    expect(payload.thread.messages).toHaveLength(1);
+    expect(payload.thread.messages[0]).toMatchObject({ skill_id: "investment-research" });
     expect(threadMocks.getResearchThread).toHaveBeenCalledWith("user-one", "00000000-0000-0000-0000-000000000001");
   });
 

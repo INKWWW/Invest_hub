@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from invest_hub_worker.agent_demo import run_demo_once
 from invest_hub_worker.skill_runtime import SkillRuntime, SkillRuntimeError
 
 
@@ -17,6 +18,45 @@ FROZEN_BUNDLE = (
 
 
 class SkillRuntimeTests(unittest.TestCase):
+    def test_claimed_investment_research_run_uses_full_frozen_skill_prompt(self) -> None:
+        class CapturingProvider:
+            prompt: str | None = None
+
+            def complete(self, question: str, prompt: str | None = None) -> str:
+                self.prompt = prompt
+                return "# 合成测试回答"
+
+        class ClaimProtocol:
+            def __init__(self) -> None:
+                self.completed: tuple[str, str, str] | None = None
+
+            def claim_agent_demo_run(self, run_id: str) -> dict[str, object]:
+                return {
+                    "run_id": run_id,
+                    "question": "请分析一家公开上市公司的长期竞争优势，区分事实、判断和待核实项。",
+                    "invocation_mode": "explicit",
+                    "skill_id": "investment-research",
+                }
+
+            def complete_agent_demo_run(self, run_id: str, content: str, provider: str) -> dict[str, object]:
+                self.completed = (run_id, content, provider)
+                return {"status": "succeeded"}
+
+        provider = CapturingProvider()
+        protocol = ClaimProtocol()
+        expected_skill = (FROZEN_BUNDLE / "investment-research" / "SKILL.md").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                run_demo_once(protocol, "run-research", provider, skill_bundle=FROZEN_BUNDLE, run_root=Path(directory)),
+                "succeeded",
+            )
+
+        self.assertIsNotNone(protocol.completed)
+        self.assertIsNotNone(provider.prompt)
+        assert provider.prompt is not None
+        self.assertIn(expected_skill, provider.prompt)
+        self.assertIn("当前用户问题：请分析一家公开上市公司的长期竞争优势，区分事实、判断和待核实项。", provider.prompt)
+
     def test_loads_only_the_three_frozen_skills_and_explicit_tools(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             runtime = SkillRuntime(FROZEN_BUNDLE, Path(directory) / "run")

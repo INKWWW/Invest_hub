@@ -1,4 +1,5 @@
 import { automaticThreadTitle, automaticThreadTitleUpdate, DEFAULT_THREAD_TITLE } from "../../agent/thread-title";
+import { SKILL_DEFINITIONS, type SkillId } from "../../agent-demo/skill-routing";
 
 import { createSupabaseServerClient } from "../supabase-server";
 
@@ -60,8 +61,12 @@ function message(row: {
   role: "user" | "assistant";
   content: string;
   created_at: string;
-}): ResearchMessage {
-  return { id: row.id, threadId: row.thread_id, ownerId: row.owner_id, role: row.role, content: row.content, createdAt: row.created_at };
+}, skillId: SkillId | null = null): ResearchMessage {
+  return { id: row.id, threadId: row.thread_id, ownerId: row.owner_id, role: row.role, content: row.content, skillId, createdAt: row.created_at };
+}
+
+function persistedSkillId(value: unknown): SkillId | null {
+  return SKILL_DEFINITIONS.some((definition) => definition.id === value) ? value as SkillId : null;
 }
 
 function artifact(row: {
@@ -139,7 +144,22 @@ export async function getResearchThread(ownerId: string, threadId: string): Prom
   if (!threadResult.data) throw new ResearchThreadNotFoundError();
   if (messagesResult.error) throw messagesResult.error;
   if (artifactsResult.error) throw artifactsResult.error;
-  const messages = (messagesResult.data ?? []).map(message);
+  const messageRows = messagesResult.data ?? [];
+  const userMessageIds = messageRows.filter((row) => row.role === "user").map((row) => row.id);
+  const skillByUserMessageId = new Map<string, SkillId>();
+  if (userMessageIds.length) {
+    const { data: runs, error: runsError } = await supabase
+      .from("agent_demo_runs")
+      .select("user_message_id,skill_id")
+      .eq("owner_id", ownerId)
+      .in("user_message_id", userMessageIds);
+    if (runsError) throw runsError;
+    for (const run of runs ?? []) {
+      const skillId = persistedSkillId(run.skill_id);
+      if (skillId) skillByUserMessageId.set(run.user_message_id, skillId);
+    }
+  }
+  const messages = messageRows.map((row) => message(row, skillByUserMessageId.get(row.id) ?? null));
   const firstUserMessage = messages.find((row) => row.role === "user")?.content;
   let resolvedThread = thread(threadResult.data);
   const title = automaticThreadTitleUpdate(threadResult.data.title, firstUserMessage);

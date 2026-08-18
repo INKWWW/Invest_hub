@@ -28,6 +28,37 @@ describe("/api/agent/threads/[threadId]/messages", () => {
     expect(demoMocks.admitDemoRun).toHaveBeenCalledWith({ ownerId: "user-one", threadId: "00000000-0000-0000-0000-000000000001", requestId: "request-one", question: "研究宁德时代", invocationMode: "auto", skillId: null });
   });
 
+  it("persists the selected Master Research Skill as an explicit invocation", async () => {
+    demoMocks.admitDemoRun.mockResolvedValue({
+      runId: "run-research", userMessageId: "message-research", assistantMessageId: null,
+      status: "queued", idempotent: false, invocationMode: "explicit", skillId: "investment-research",
+    });
+
+    const response = await POST(new Request("http://localhost", {
+      method: "POST",
+      body: JSON.stringify({
+        content: "请分析一家公开上市公司的长期竞争优势，区分事实、判断和待核实项。",
+        request_id: "request-research",
+        invocation_mode: "explicit",
+        skill_id: "investment-research",
+      }),
+      headers: { "content-type": "application/json" },
+    }), context);
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      run: { id: "run-research", invocation_mode: "explicit", skill_id: "investment-research" },
+    });
+    expect(demoMocks.admitDemoRun).toHaveBeenCalledWith({
+      ownerId: "user-one",
+      threadId: "00000000-0000-0000-0000-000000000001",
+      requestId: "request-research",
+      question: "请分析一家公开上市公司的长期竞争优势，区分事实、判断和待核实项。",
+      invocationMode: "explicit",
+      skillId: "investment-research",
+    });
+  });
+
   it("rejects empty, overlong, or non-text messages", async () => {
     for (const content of ["", " ", "a".repeat(20001), 42]) {
       const response = await POST(new Request("http://localhost", {
