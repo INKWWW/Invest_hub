@@ -7,6 +7,7 @@ import {
 } from "./invite-code";
 import { canAttemptInviteRedemption, recordFailedInviteRedemption } from "../db/repositories/invite-rate-limits";
 import {
+  completeInvitedUserRegistration,
   consumeInvite,
   createInviteRecord,
   listRecentUserInviteRecords,
@@ -130,17 +131,41 @@ export async function redeemInviteAccount(input: {
   });
   if (error || !data.user) return { ok: false as const, error: "account_create_failed" as const };
 
-  const invite = await redeemInviteCode(input.code, data.user.id);
-  if (!invite) {
-    await admin.auth.admin.deleteUser(data.user.id);
-    await recordFailedInviteRedemption(sourceHash);
-    return { ok: false as const, error: "invite_replayed" as const };
+  const cleanup = async () => {
+    try {
+      const { error: deleteError } = await admin.auth.admin.deleteUser(data.user.id);
+      return !deleteError;
+    } catch {
+      return false;
+    }
+  };
+  const recordFailedAttempt = async () => {
+    try {
+      await recordFailedInviteRedemption(sourceHash);
+    } catch {
+      // A failed-attempt record must never turn a safe registration failure into
+      // an unsafe response or expose an internal database error.
+    }
+  };
+
+  let invite: Awaited<ReturnType<typeof completeInvitedUserRegistration>>;
+  try {
+    invite = await completeInvitedUserRegistration({
+      codeHashes: [hashUserInviteCode(input.code), hashLegacyInviteCode(input.code)],
+      userId: data.user.id,
+    });
+  } catch {
+    if (!await cleanup()) return { ok: false as const, error: "registration_cleanup_failed" as const };
+    return { ok: false as const, error: "registration_failed" as const };
   }
 
-  const { error: profileError } = await admin.from("profiles").upsert({
-    id: data.user.id,
-    role: invite.role,
-  });
-  if (profileError) return { ok: false as const, error: "profile_create_failed" as const };
+  if (!invite) {
+    const cleaned = await cleanup();
+    await recordFailedAttempt();
+    return cleaned
+      ? { ok: false as const, error: "registration_failed" as const }
+      : { ok: false as const, error: "registration_cleanup_failed" as const };
+  }
+
   return { ok: true as const, userId: data.user.id, role: invite.role };
 }

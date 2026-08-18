@@ -1141,6 +1141,10 @@ export interface Database {
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
     Functions: {
+      complete_invited_user_registration: {
+        Args: { p_code_hashes: string[]; p_user_id: string; p_now: string };
+        Returns: Json | null;
+      };
       consume_invite: {
         Args: { p_code_hash: string; p_purpose?: string; p_user_id: string; p_now: string };
         Returns: Json | null;

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const repositoryMocks = vi.hoisted(() => ({
+  completeInvitedUserRegistration: vi.fn(),
   createInviteRecord: vi.fn(),
   consumeInvite: vi.fn(),
   listRecentUserInviteRecords: vi.fn(),
@@ -42,6 +43,12 @@ describe("invite service boundaries", () => {
     adminMocks.createUser.mockResolvedValue({ data: { user: { id: "user-1" } }, error: null });
     adminMocks.deleteUser.mockResolvedValue({ error: null });
     adminMocks.upsert.mockResolvedValue({ error: null });
+    repositoryMocks.completeInvitedUserRegistration.mockResolvedValue({
+      invite_id: "invite-1",
+      role: "user",
+      purpose: "user",
+      expires_at: "2099-01-02T00:00:00.000Z",
+    });
   });
 
   it("persists a user mask, selected duration, and one shared creation timestamp", async () => {
@@ -129,14 +136,77 @@ describe("invite service boundaries", () => {
     expect(adminMocks.createUser).not.toHaveBeenCalled();
   });
 
+  it("creates the Profile and consumes the invite through one database boundary", async () => {
+    const result = await redeemInviteAccount({
+      code: "Invite-code-1",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      sourceHash: "source-hmac",
+    });
+
+    expect(result).toEqual({ ok: true, userId: "user-1", role: "user" });
+    expect(repositoryMocks.completeInvitedUserRegistration).toHaveBeenCalledWith({
+      codeHashes: [expect.any(String), expect.any(String)],
+      userId: "user-1",
+    });
+    expect(adminMocks.upsert).not.toHaveBeenCalled();
+    expect(adminMocks.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("deletes the new Auth identity when the registration boundary fails", async () => {
+    repositoryMocks.completeInvitedUserRegistration.mockRejectedValue(new Error("database failure"));
+
+    const result = await redeemInviteAccount({
+      code: "Invite-code-2",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      sourceHash: "source-hmac",
+    });
+
+    expect(result).toEqual({ ok: false, error: "registration_failed" });
+    expect(adminMocks.deleteUser).toHaveBeenCalledWith("user-1");
+    expect(result).not.toHaveProperty("database failure");
+  });
+
+  it("returns only a safe classification when new Auth cleanup fails", async () => {
+    repositoryMocks.completeInvitedUserRegistration.mockRejectedValue(new Error("database failure"));
+    adminMocks.deleteUser.mockResolvedValue({ error: { message: "service credential failure" } });
+
+    const result = await redeemInviteAccount({
+      code: "Invite-code-3",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      sourceHash: "source-hmac",
+    });
+
+    expect(result).toEqual({ ok: false, error: "registration_cleanup_failed" });
+    expect(JSON.stringify(result)).not.toContain("service credential");
+  });
+
+  it("cleans up an identity when the invite is not valid without consuming another record", async () => {
+    repositoryMocks.completeInvitedUserRegistration.mockResolvedValue(null);
+
+    const result = await redeemInviteAccount({
+      code: "Invite-code-4",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      sourceHash: "source-hmac",
+    });
+
+    expect(result).toEqual({ ok: false, error: "registration_failed" });
+    expect(adminMocks.deleteUser).toHaveBeenCalledWith("user-1");
+    expect(rateLimitMocks.recordFailedInviteRedemption).toHaveBeenCalledWith("source-hmac");
+  });
+
   it("keeps Worker consumption on the worker purpose", async () => {
     repositoryMocks.consumeInvite.mockResolvedValue({ invite_id: "worker-invite", role: "user", purpose: "worker" });
 
-    await consumeWorkerInvite("worker-code", "worker-1", "2099-01-01T00:00:00.000Z");
+    const workerId = "00000000-0000-0000-0000-000000000001";
+    await consumeWorkerInvite("worker-code", workerId, "2099-01-01T00:00:00.000Z");
 
     expect(repositoryMocks.consumeInvite).toHaveBeenCalledWith(
       expect.any(String),
-      "worker-1",
+      workerId,
       "worker",
       "2099-01-01T00:00:00.000Z",
     );

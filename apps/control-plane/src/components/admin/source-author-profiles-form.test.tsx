@@ -5,8 +5,8 @@ import { SourceAuthorProfilesForm, authorOptionLabel, profileStatusLabel, resolu
 
 describe("SourceAuthorProfilesForm", () => {
   it("treats observed identities as suggestions and accepts a direct author selector", () => {
-    expect(authorOptionLabel({ author_id: "stable-id", author_display: "作者甲", author_handle: "author-a" })).toBe("作者甲 @author-a");
-    expect(authorOptionLabel({ author_id: "stable-id", author_display: "作者甲", author_handle: null })).toBe("作者甲");
+    expect(authorOptionLabel({ author_display: "作者甲", author_handle: "author-a" })).toBe("作者甲 @author-a");
+    expect(authorOptionLabel({ author_display: "作者甲", author_handle: null })).toBe("作者甲");
     expect(profileStatusLabel(true)).toBe("已启用");
     expect(profileStatusLabel(false)).toBe("已停用");
     expect(resolutionStatusLabel("pending")).toBe("等待匹配");

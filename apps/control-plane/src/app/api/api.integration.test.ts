@@ -873,21 +873,117 @@ describe("v0 control-plane API authorization", () => {
     expect(inviteMocks.listRecentUserInvites).not.toHaveBeenCalled();
   });
 
-  it("returns one generic error for any failed invite redemption", async () => {
+  it("returns one generic error for an invalid invite redemption", async () => {
     inviteMocks.redeemInviteAccount.mockResolvedValue({ ok: false, error: "invite_replayed" });
 
     const response = await postAuthInvite(jsonRequest("/api/auth/invite", {
       code: "wrong-code",
       email: "person@example.invalid",
-      password: "password-123",
+      password: "Password1",
+      password_confirmation: "Password1",
     }, { "x-forwarded-for": "192.0.2.10" }));
 
     expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "invalid_invite" });
+    expect(await response.json()).toEqual({ error: "registration_failed" });
     expect(inviteMocks.redeemInviteAccount).toHaveBeenCalledWith(expect.objectContaining({
       code: "wrong-code",
       sourceHash: expect.any(String),
     }));
+  });
+
+  it("does not reveal duplicate-email or internal registration failures", async () => {
+    inviteMocks.redeemInviteAccount.mockResolvedValue({ ok: false, error: "account_create_failed" });
+
+    const response = await postAuthInvite(jsonRequest("/api/auth/invite", {
+      code: "Ab3xYz91",
+      email: "already-used@example.invalid",
+      password: "Password1",
+      password_confirmation: "Password1",
+    }));
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload).toEqual({ error: "registration_failed" });
+    expect(JSON.stringify(payload)).not.toContain("already-used@example.invalid");
+  });
+
+  it.each([
+    { code: "Ab3xYz91", email: "person@example.invalid", password: "short1", password_confirmation: "short1" },
+    { code: "Ab3xYz91", email: "person@example.invalid", password: "lowercase1", password_confirmation: "lowercase1" },
+    { code: "Ab3xYz91", email: "person@example.invalid", password: "UPPERCASE1", password_confirmation: "UPPERCASE1" },
+    { code: "Ab3xYz91", email: "person@example.invalid", password: "NoDigitsHere", password_confirmation: "NoDigitsHere" },
+    { code: "Ab3xYz91", email: "person@example.invalid", password: "Abcdefg1", password_confirmation: "Different1" },
+  ])("rejects invalid registration credentials before account creation: $password", async (body) => {
+    const response = await postAuthInvite(jsonRequest("/api/auth/invite", body));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_invite_request" });
+    expect(inviteMocks.redeemInviteAccount).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty registration fields before account creation", async () => {
+    const response = await postAuthInvite(jsonRequest("/api/auth/invite", {
+      code: " ",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      password_confirmation: "Abcdefg1",
+    }));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_invite_request" });
+    expect(inviteMocks.redeemInviteAccount).not.toHaveBeenCalled();
+  });
+
+  it("rejects unknown or client-authoritative registration fields", async () => {
+    const response = await postAuthInvite(jsonRequest("/api/auth/invite", {
+      code: "Ab3xYz91",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      password_confirmation: "Abcdefg1",
+      role: "admin",
+      redirect: "/admin",
+    }));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_invite_request" });
+    expect(inviteMocks.redeemInviteAccount).not.toHaveBeenCalled();
+  });
+
+  it("creates the invited account, establishes the existing session, and returns only the fixed agent destination", async () => {
+    inviteMocks.redeemInviteAccount.mockResolvedValue({ ok: true, userId: "user-1", role: "user" });
+    loginMocks.loginWithPassword.mockResolvedValue({ ok: true });
+
+    const response = await postAuthInvite(jsonRequest("/api/auth/invite", {
+      code: "  Ab3xYz91  ",
+      email: "  person@example.invalid  ",
+      password: "Abcdefg1",
+      password_confirmation: "Abcdefg1",
+    }));
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({ ok: true, redirect: "/agent" });
+    expect(inviteMocks.redeemInviteAccount).toHaveBeenCalledWith(expect.objectContaining({
+      code: "Ab3xYz91",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      sourceHash: expect.any(String),
+    }));
+    expect(loginMocks.loginWithPassword).toHaveBeenCalledWith("person@example.invalid", "Abcdefg1");
+  });
+
+  it("returns a generic registration failure when the new session cannot be established", async () => {
+    inviteMocks.redeemInviteAccount.mockResolvedValue({ ok: true, userId: "user-1", role: "user" });
+    loginMocks.loginWithPassword.mockResolvedValue({ ok: false, error: "invalid_credentials" });
+
+    const response = await postAuthInvite(jsonRequest("/api/auth/invite", {
+      code: "Ab3xYz91",
+      email: "person@example.invalid",
+      password: "Abcdefg1",
+      password_confirmation: "Abcdefg1",
+    }));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "registration_failed" });
   });
 
   it("returns a one-time Worker invite code only to an admin", async () => {
@@ -934,7 +1030,7 @@ describe("v0 control-plane API authorization", () => {
   });
 
   it("reports a next heartbeat deadline for an authenticated Worker", async () => {
-    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "enrolled", capabilities: ["discord_sync"] });
+    workerMocks.authenticateWorker.mockResolvedValue({ id: "worker-1", status: "enrolled", capabilities: ["discord_sync", "x_sync", "agent_demo"] });
     workerRepositoryMocks.updateWorkerHeartbeat.mockResolvedValue({ id: "worker-1", status: "online" });
 
     const response = await postHeartbeat(

@@ -55,3 +55,17 @@ export async function consumeInvite(
   if (error) throw error;
   return data as { invite_id: string; role: AppRole; purpose: "user" | "worker"; expires_at: string } | null;
 }
+
+export async function completeInvitedUserRegistration(input: {
+  codeHashes: string[];
+  userId: string;
+  now?: string;
+}) {
+  const { data, error } = await createSupabaseAdminClient().rpc("complete_invited_user_registration", {
+    p_code_hashes: input.codeHashes,
+    p_user_id: input.userId,
+    p_now: input.now ?? new Date().toISOString(),
+  });
+  if (error) throw error;
+  return data as { invite_id: string; role: AppRole; purpose: "user"; expires_at: string } | null;
+}

@@ -96,7 +96,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .session-admin-link { border: 1px solid #1f5663; border-radius: 2px; background: transparent; color: #1f5663; font-size: 0.625rem; font-weight: 800; padding: 0.45rem 0.6rem; text-decoration: none; white-space: nowrap; }
 
-.session-controls button:hover, .session-admin-link:hover { background: #e5efed; }
+.session-agent-link { border: 1px solid #b7ceca; border-radius: 2px; background: transparent; color: #1f5663; font-size: 0.625rem; font-weight: 800; padding: 0.45rem 0.6rem; text-decoration: none; white-space: nowrap; }
+
+.session-controls button:hover, .session-agent-link:hover, .session-admin-link:hover { background: #e5efed; }
 
 .session-controls button:disabled { cursor: wait; opacity: 0.7; }
 
@@ -566,6 +568,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-card h1 { font-size: clamp(1.8rem, 6vw, 2.55rem); }
 
 .auth-card > p:not(.reader-kicker) { color: #50636a; line-height: 1.6; }
+
+.auth-secondary-action { margin: 1rem 0 0; text-align: center; }
+
+.auth-card small { color: #607579; font-size: 0.78rem; font-weight: 500; line-height: 1.45; }
 
 .forbidden-page { max-width: 960px; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
 

@@ -14,7 +14,7 @@ export default function LoginPage() {
       body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
     });
     if (!response.ok) {
-      setError((await response.json()).error ?? "Unable to sign in.");
+      setError("邮箱或密码不正确，请重试。");
       return;
     }
     window.location.assign("/");
@@ -24,18 +24,19 @@ export default function LoginPage() {
     <main className="auth-page">
       <section className="auth-card">
         <p className="reader-kicker">Invest Hub</p>
-        <h1>Sign in to your research workspace</h1>
+        <h1>登录 Invest Hub</h1>
         <form onSubmit={submit}>
           <label>
-            Email
+            邮箱
             <input name="email" type="email" autoComplete="email" required />
           </label>
           <label>
-            Password
+            密码
             <input name="password" type="password" autoComplete="current-password" required />
           </label>
-          <button type="submit">Sign in</button>
+          <button type="submit">登录</button>
         </form>
+        <p className="auth-secondary-action"><a href="/invite">有邀请码？创建账号</a></p>
         {error ? <p role="alert">{error}</p> : null}
       </section>
     </main>

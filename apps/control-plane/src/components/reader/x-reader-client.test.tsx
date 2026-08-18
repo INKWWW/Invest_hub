@@ -19,6 +19,7 @@ vi.mock("react", async (importOriginal) => {
 });
 
 import { XReader } from "./XReader";
+import type { XReaderDate } from "../../lib/db/repositories/reader";
 
 type Element = { type?: unknown; props?: { children?: unknown; onChange?: (event: { target: { value: string } }) => void; value?: string } };
 
@@ -29,12 +30,12 @@ function elements(node: unknown, type: string): Element[] {
   return [(element.type === type ? [element] : []), elements(element.props?.children, type)].flat();
 }
 
-const days = [{
+const days: XReaderDate[] = [{
   naturalDate: "2099-01-02", judgement: { visible: true, batches: [] },
-  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", segments: [] }],
+  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, segments: [] }],
 }, {
   naturalDate: "2099-01-01", judgement: { visible: true, batches: [] },
-  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", segments: [] }],
+  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, segments: [] }],
 }];
 
 describe("XReader client selectors", () => {
