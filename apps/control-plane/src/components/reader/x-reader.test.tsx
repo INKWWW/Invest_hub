@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { XReaderDate } from "../../lib/db/repositories/reader";
 import { XReader } from "./XReader";
+import type { XReaderDate } from "../../lib/db/repositories/reader";
 
 const v5Day = {
   naturalDate: "2099-01-06",
@@ -197,7 +198,7 @@ const days = [{
     source: { sourceKey: "first", displayName: "First Author" }, status: "succeeded", timedOut: false, lateArrival: false, collectionGaps: [],
     segments: [{ occurredFromAt: "2099-01-01T12:00:00.000Z", occurredThroughAt: "2099-01-01T12:00:00.000Z", viewpoints: ["首位博主观点"], uncertainties: [], analyses: [] }],
   }],
-}];
+}] as unknown as XReaderDate[];
 
 describe("XReader", () => {
   it("skips a newer task-only date by default while keeping its current target status visible", () => {
@@ -486,9 +487,9 @@ describe("XReader", () => {
   it("keeps the latest cutoff open even when pending while failed states show no fabricated body", () => {
     const html = renderToStaticMarkup(<XReader days={[{
       naturalDate: "2099-01-03",
-      judgement: { visible: true, batches: [{ cutoffAt: "2099-01-03T12:00:00.000Z", coverageStatus: null, status: "judgement_pending", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], includedSourceCount: 0, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }, {
-        cutoffAt: "2099-01-03T08:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 1, stockViewpoints: [{ statement: "可见判断", supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], marketIndustryViewpoints: [], uncertainties: [], includedSourceCount: 1, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }, {
-        cutoffAt: "2099-01-03T04:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0, stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], includedSourceCount: 0, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }] },
+      judgement: { visible: true, batches: [{ cutoffAt: "2099-01-03T12:00:00.000Z", coverageStatus: null, status: "judgement_pending", revision: 0, presentationKind: "legacy", stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], includedSourceCount: 0, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }, {
+        cutoffAt: "2099-01-03T08:00:00.000Z", coverageStatus: "complete", status: "succeeded", revision: 1, presentationKind: "legacy", stockViewpoints: [{ statement: "可见判断", supportingDisplayNames: [], dissentingDisplayNames: [], uncertainties: [] }], marketIndustryViewpoints: [], uncertainties: [], includedSourceCount: 1, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }, {
+        cutoffAt: "2099-01-03T04:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0, presentationKind: "legacy", stockViewpoints: [], marketIndustryViewpoints: [], uncertainties: [], includedSourceCount: 0, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [] }] },
       bloggers: [],
     }]} initialNaturalDate="2099-01-03" />);
 
@@ -503,7 +504,7 @@ describe("XReader", () => {
     const html = renderToStaticMarkup(<XReader days={[{
       naturalDate: "2099-01-05",
       judgement: { visible: true, batches: [{
-        cutoffAt: "2099-01-05T08:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0,
+        cutoffAt: "2099-01-05T08:00:00.000Z", coverageStatus: null, status: "judgement_failed", revision: 0, presentationKind: "legacy",
         stockViewpoints: [], marketIndustryViewpoints: [], strategyMindsetViewpoints: [], uncertainties: [], includedSourceCount: 3, noNewSourceCount: 0, excludedSourceCount: 0, timedOutSourceCount: 0, revisionHistory: [],
         verificationRecovery: {
           stockViewpoints: [{ statement: "恢复后的判断", actionIntent: "watch", actionScope: "测试标的", conditions: [], supportingDisplayNames: ["Alpha"], dissentingDisplayNames: [], uncertainties: [] }],

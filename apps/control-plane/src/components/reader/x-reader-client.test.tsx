@@ -32,10 +32,10 @@ function elements(node: unknown, type: string): Element[] {
 
 const days: XReaderDate[] = [{
   naturalDate: "2099-01-02", judgement: { visible: true, batches: [] },
-  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, segments: [] }],
+  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, lateArrival: false, collectionGaps: [], segments: [] }],
 }, {
   naturalDate: "2099-01-01", judgement: { visible: true, batches: [] },
-  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, segments: [] }],
+  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, lateArrival: false, collectionGaps: [], segments: [] }],
 }];
 
 describe("XReader client selectors", () => {

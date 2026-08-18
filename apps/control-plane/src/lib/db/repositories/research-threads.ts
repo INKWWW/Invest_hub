@@ -21,6 +21,7 @@ export type ResearchMessage = {
   ownerId: string;
   role: "user" | "assistant";
   content: string;
+  skillId: SkillId | null;
   createdAt: string;
 };
 

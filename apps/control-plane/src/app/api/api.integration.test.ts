@@ -852,7 +852,7 @@ describe("v0 control-plane API authorization", () => {
       consumedAt: null,
     }]);
 
-    const response = await getAdminInvites(new Request("http://localhost/api/admin/invites"));
+    const response = await getAdminInvites();
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({ invites: [{
@@ -867,7 +867,7 @@ describe("v0 control-plane API authorization", () => {
   });
 
   it("blocks ordinary users from reading the invite list", async () => {
-    const response = await getAdminInvites(new Request("http://localhost/api/admin/invites"));
+    const response = await getAdminInvites();
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "forbidden" });
     expect(inviteMocks.listRecentUserInvites).not.toHaveBeenCalled();
@@ -2104,7 +2104,7 @@ describe("v0 control-plane API authorization", () => {
   it("clears the current session through the logout API without returning authentication data", async () => {
     logoutMocks.signOutCurrentUser.mockResolvedValue({ ok: true });
 
-    const response = await postLogout(new Request("http://localhost/api/auth/logout", { method: "POST" }));
+    const response = await postLogout();
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
