@@ -51,15 +51,17 @@ class ScriptedDemoProvider:
 class CodexDemoProvider:
     """Bounded real Codex CLI adapter for one isolated Demo Run."""
 
+    DEFAULT_TIMEOUT_SECONDS = 360.0
+
     def __init__(
         self,
         run_workspace: Path,
         *,
         binary: str = "codex",
-        timeout_seconds: float = 240.0,
+        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         readonly_dirs: tuple[Path, ...] = (),
         codex_home_source: Path | None = None,
-        runner: Callable[[list[str], str, Path, float], None] | None = None,
+        runner: Callable[[list[str], str, Path, float], str | None] | None = None,
     ) -> None:
         if not binary.strip() or timeout_seconds <= 0:
             raise ValueError("invalid Codex provider configuration")
@@ -68,6 +70,9 @@ class CodexDemoProvider:
         self.binary = binary
         self.timeout_seconds = timeout_seconds
         self.readonly_dirs = tuple(Path(path).resolve() for path in readonly_dirs)
+        self.last_execution_status = "not_started"
+        self.last_failure_class: str | None = None
+        self.last_diagnostic_path: Path | None = None
         self.codex_home = self.run_workspace / ".codex-home"
         self._prepare_codex_home(codex_home_source or (Path.home() / ".codex"))
         self.runner = runner or (lambda command, prompt, output_path, timeout: _run_codex_process(
@@ -87,6 +92,9 @@ class CodexDemoProvider:
         if not question.strip():
             raise ProtocolError("empty demo question")
         output_path = self.run_workspace / "codex-last-message.md"
+        output_path.unlink(missing_ok=True)
+        self.last_failure_class = None
+        self.last_diagnostic_path = output_path.with_suffix(".diagnostic.log")
         command = [
             self.binary,
             "exec",
@@ -103,7 +111,10 @@ class CodexDemoProvider:
         for readonly_dir in self.readonly_dirs:
             command.extend(["--add-dir", str(readonly_dir)])
         command.append("-")
-        self.runner(command, prompt or question, output_path, self.timeout_seconds)
+        self.last_execution_status = self.runner(command, prompt or question, output_path, self.timeout_seconds) or "answer_ready"
+        if self.last_execution_status not in {"answer_ready", "answer_ready_with_timeout"}:
+            self.last_failure_class = self.last_execution_status
+            raise ProtocolError("Codex process failed")
         try:
             answer = output_path.read_text(encoding="utf-8")
         except (OSError, UnicodeError) as exc:
@@ -113,23 +124,94 @@ class CodexDemoProvider:
         return answer
 
 
-def _run_codex_process(command: list[str], prompt: str, output_path: Path, timeout_seconds: float, codex_home: Path) -> None:
+def _run_codex_process(command: list[str], prompt: str, output_path: Path, timeout_seconds: float, codex_home: Path) -> str:
+    stdout_path = output_path.with_suffix(".stdout.log")
+    stderr_path = output_path.with_suffix(".stderr.log")
+    diagnostic_path = output_path.with_suffix(".diagnostic.log")
+    for path in (stdout_path, stderr_path, diagnostic_path):
+        path.unlink(missing_ok=True)
     try:
-        completed = subprocess.run(
-            command,
-            input=prompt,
-            text=True,
-            cwd=str(output_path.parent),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env={**os.environ, "CODEX_HOME": str(codex_home)},
-            timeout=timeout_seconds,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ProtocolError("Codex process failed") from exc
+        with (
+            stdout_path.open("w", encoding="utf-8") as stdout_file,
+            stderr_path.open("w", encoding="utf-8") as stderr_file,
+        ):
+            _restrict_file(stdout_path)
+            _restrict_file(stderr_path)
+            try:
+                completed = subprocess.run(
+                    command,
+                    input=prompt,
+                    text=True,
+                    cwd=str(output_path.parent),
+                    stdout=stdout_file,
+                    stderr=stderr_file,
+                    env={**os.environ, "CODEX_HOME": str(codex_home)},
+                    timeout=timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                stdout_file.flush()
+                stderr_file.flush()
+                _write_text(diagnostic_path, _safe_diagnostic(stdout_path, stderr_path, f"timeout after {exc.timeout} seconds"))
+                try:
+                    answer = output_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    answer = ""
+                if answer.strip():
+                    return "answer_ready_with_timeout"
+                return "timeout"
+            except OSError as exc:
+                stdout_file.flush()
+                stderr_file.flush()
+                _write_text(diagnostic_path, _safe_diagnostic(stdout_path, stderr_path, f"cli error: {type(exc).__name__}"))
+                return "cli_failed"
+    except subprocess.TimeoutExpired as exc:
+        _write_text(diagnostic_path, _safe_diagnostic(stdout_path, stderr_path, f"timeout after {exc.timeout} seconds"))
+        return "timeout"
     if completed.returncode != 0:
-        raise ProtocolError("Codex process failed")
+        diagnostic = _safe_diagnostic(stdout_path, stderr_path, f"exit code {completed.returncode}")
+        _write_text(diagnostic_path, diagnostic)
+        return _classify_failure(diagnostic)
+    return "answer_ready"
+
+
+def _safe_diagnostic(stdout_path: Path, stderr_path: Path, fallback: str) -> str:
+    """Keep raw streams local while returning only a bounded safe summary."""
+
+    try:
+        stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        stderr = ""
+    try:
+        stdout = stdout_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        stdout = ""
+    return (fallback + "\n" + stderr[-4000:] + "\n" + stdout[-1000:]).strip()
+
+
+def _classify_failure(diagnostic: str) -> str:
+    lowered = diagnostic.lower()
+    if any(marker in lowered for marker in ("unauthorized", "not authenticated", "authentication", "login required", "401")):
+        return "auth_failed"
+    if any(marker in lowered for marker in (
+        "connection", "network", "timed out", "dns", "failed to lookup", "nodename nor servname",
+        "failed to connect", "websocket", "502", "503", "504",
+    )):
+        return "network_failed"
+    return "provider_failed"
+
+
+def _restrict_file(path: Path) -> None:
+    try:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+
+
+def _write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value, encoding="utf-8")
+    _restrict_file(path)
 
 
 def run_demo_once(
@@ -195,7 +277,7 @@ def run_agent_demo_once(
     provider: DemoProvider | None = None,
     provider_name: str | None = None,
     binary: str = "codex",
-    timeout_seconds: float = 240.0,
+    timeout_seconds: float = CodexDemoProvider.DEFAULT_TIMEOUT_SECONDS,
 ) -> str:
     """Run exactly one authorized Demo request on the local machine."""
 
@@ -231,7 +313,7 @@ def run_agent_demo_worker_once(
     provider: DemoProvider | None = None,
     provider_name: str | None = None,
     binary: str = "codex",
-    timeout_seconds: float = 240.0,
+    timeout_seconds: float = CodexDemoProvider.DEFAULT_TIMEOUT_SECONDS,
 ) -> str:
     """Poll once, claim at most one queued Demo run, and complete it."""
 

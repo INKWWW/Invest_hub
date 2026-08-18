@@ -74,6 +74,7 @@ class WorkerCliTests(unittest.TestCase):
         ])
         self.assertEqual(args.command, "run-agent-demo")
         self.assertEqual(args.provider, "codex_cli")
+        self.assertEqual(args.timeout_seconds, 360.0)
 
     def test_agent_demo_worker_parser_supports_polling_without_a_run_id(self) -> None:
         parser = build_parser()
@@ -87,6 +88,7 @@ class WorkerCliTests(unittest.TestCase):
         self.assertEqual(args.command, "run-agent-demo-worker")
         self.assertEqual(args.poll_seconds, 5)
         self.assertFalse(args.once)
+        self.assertEqual(args.timeout_seconds, 360.0)
 
     def test_run_once_requires_private_runtime_inputs_as_cli_arguments(self) -> None:
         parser = build_parser()

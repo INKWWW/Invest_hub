@@ -3,8 +3,12 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
+
+import subprocess
 
 from invest_hub_worker.agent_demo import CodexDemoProvider, ScriptedDemoProvider, run_agent_demo_once, run_agent_demo_worker_once, run_demo_once
+from invest_hub_worker.errors import ProtocolError
 
 
 class DemoProtocol:
@@ -118,6 +122,78 @@ class AgentDemoTests(unittest.TestCase):
         self.assertEqual(calls[0][1], "受控 Prompt")
         self.assertEqual(calls[0][0][0:2], ["codex", "exec"])
         self.assertIn("--output-last-message", calls[0][0])
+
+    def test_codex_provider_defaults_to_six_minutes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            provider = CodexDemoProvider(Path(directory))
+
+        self.assertEqual(provider.timeout_seconds, 360.0)
+
+    def test_timeout_after_last_message_preserves_the_answer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            provider = CodexDemoProvider(workspace)
+
+            def timed_out(*_args: object, **_kwargs: object) -> None:
+                (workspace / "codex-last-message.md").write_text("# 已生成的回答\n", encoding="utf-8")
+                raise subprocess.TimeoutExpired("codex", 360.0)
+
+            with patch("invest_hub_worker.agent_demo.subprocess.run", side_effect=timed_out):
+                answer = provider.complete("研究公开公司")
+
+        self.assertEqual(answer, "# 已生成的回答\n")
+        self.assertEqual(provider.last_execution_status, "answer_ready_with_timeout")
+
+    def test_timeout_without_last_message_remains_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            provider = CodexDemoProvider(Path(directory))
+
+            def timed_out(*_args: object, **_kwargs: object) -> None:
+                raise subprocess.TimeoutExpired("codex", 360.0)
+
+            with patch("invest_hub_worker.agent_demo.subprocess.run", side_effect=timed_out):
+                with self.assertRaisesRegex(ProtocolError, "Codex process failed"):
+                    provider.complete("研究公开公司")
+
+    def test_cli_diagnostics_are_captured_locally_and_classified_safely(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            provider = CodexDemoProvider(workspace)
+
+            def failed_process(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+                stdout = kwargs["stdout"]
+                stderr = kwargs["stderr"]
+                assert hasattr(stdout, "write")
+                assert hasattr(stderr, "write")
+                stdout.write("normal progress\n")
+                stderr.write("401 unauthorized: token=should-stay-local\n")
+                return subprocess.CompletedProcess([], 1)
+
+            with patch("invest_hub_worker.agent_demo.subprocess.run", side_effect=failed_process):
+                with self.assertRaisesRegex(ProtocolError, "Codex process failed") as raised:
+                    provider.complete("研究公开公司")
+
+            self.assertEqual(provider.last_execution_status, "auth_failed")
+            assert provider.last_diagnostic_path is not None
+            self.assertTrue(provider.last_diagnostic_path.exists())
+            self.assertIn("unauthorized", provider.last_diagnostic_path.read_text(encoding="utf-8"))
+            self.assertNotIn("token=should-stay-local", str(raised.exception))
+            self.assertEqual(provider.last_diagnostic_path.stat().st_mode & 0o777, 0o600)
+
+    def test_cli_network_diagnostics_are_classified_without_exposing_details(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            provider = CodexDemoProvider(workspace)
+
+            def failed_process(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+                kwargs["stderr"].write("failed to lookup address information: nodename nor servname provided\n")
+                return subprocess.CompletedProcess([], 1)
+
+            with patch("invest_hub_worker.agent_demo.subprocess.run", side_effect=failed_process):
+                with self.assertRaises(ProtocolError):
+                    provider.complete("研究公开公司")
+
+            self.assertEqual(provider.last_execution_status, "network_failed")
 
     def test_real_runner_advertises_online_and_cleans_the_run_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
