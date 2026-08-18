@@ -1,6 +1,11 @@
 begin;
 
-select plan(18);
+select plan(22);
+
+select has_function(
+  'public', 'claim_x_demo_fixed_window_task', array['uuid', 'uuid', 'timestamp with time zone'],
+  'Ticket 01 exposes a target-bound claim path for the explicit fixed-window task'
+);
 
 select has_function(
   'public', 'claim_next_x_demo_fixed_window_task', array['uuid', 'timestamp with time zone'],
@@ -14,6 +19,11 @@ select ok(
   has_function_privilege('service_role', 'public.claim_next_x_demo_fixed_window_task(uuid, timestamp with time zone)', 'EXECUTE')
   and not has_function_privilege('authenticated', 'public.claim_next_x_demo_fixed_window_task(uuid, timestamp with time zone)', 'EXECUTE'),
   'only service_role can execute the scoped fixed-window claim'
+);
+select ok(
+  has_function_privilege('service_role', 'public.claim_x_demo_fixed_window_task(uuid, uuid, timestamp with time zone)', 'EXECUTE')
+  and not has_function_privilege('authenticated', 'public.claim_x_demo_fixed_window_task(uuid, uuid, timestamp with time zone)', 'EXECUTE'),
+  'only service_role can execute the target-bound fixed-window claim'
 );
 select ok(
   has_function_privilege('service_role', 'public.complete_windowed_capture_range(uuid, integer, uuid, jsonb)', 'EXECUTE')
@@ -40,18 +50,16 @@ select public.initialize_x_collection_coverage(
   '00000000-0000-0000-0000-000000041001', '2026-08-16T16:00:00+08:00'
 );
 
-insert into public.sync_tasks (
-  id, task_type, source_id, status, parameter_version, collection_scope, capture_range,
-  author_profile_snapshot, x_source_snapshot, queued_at
-) values (
-  '00000000-0000-0000-0000-000000041003', 'x_sync',
-  (select (payload->>'id')::uuid from scoped_source), 'retryable_failed', 'x-standard-v2',
-  '{"mode":"window"}'::jsonb,
-  '{"mode":"window","trigger":"scheduled","timezone":"Asia/Shanghai","start_at":"2026-08-16T08:00:00Z","end_at":"2026-08-16T12:00:00Z","scheduled_window_key":"2026-08-16T20:00+08:00","overlap_start_at":"2026-08-16T08:00:00Z"}'::jsonb,
-  '[]'::jsonb,
-  '{"source_type":"x","account_id":"scoped_fixture","display_name":"Ticket 01 scoped blogger","parameter_version":"x-standard-v2"}'::jsonb,
-  '2026-08-16T12:01:00Z'
-);
+create temporary table old_scoped_task as
+select public.create_x_demo_fixed_window_task_for_worker(
+  (select (payload->>'id')::uuid from scoped_source),
+  '2026-08-16T16:00:00+08:00',
+  '00000000-0000-0000-0000-000000041002',
+  'scoped_fixture'
+) as payload;
+update public.sync_tasks
+set status = 'retryable_failed'
+where id = (select (payload->>'id')::uuid from old_scoped_task);
 
 create temporary table scoped_task as
 select public.create_x_demo_fixed_window_task_for_worker(
@@ -95,25 +103,29 @@ select throws_ok(
 );
 
 create temporary table scoped_claim as
-select public.claim_next_task('00000000-0000-0000-0000-000000041002', '2026-08-18T00:00:00Z') as payload;
+select public.claim_x_demo_fixed_window_task(
+  (select (payload->>'id')::uuid from scoped_task),
+  '00000000-0000-0000-0000-000000041002',
+  '2026-08-18T00:00:00Z'
+) as payload;
 select is(
   (select payload->>'task_id' from scoped_claim),
   (select payload->>'id' from scoped_task),
-  'generic Worker claim selects the explicit fixed window before an older retryable gap'
+  'target-bound Worker claim selects the explicit fixed window despite an older demo backlog'
+);
+select is(
+  (select status from public.sync_tasks where id = (select (payload->>'id')::uuid from old_scoped_task)),
+  'retryable_failed', 'target-bound claim leaves the older demo task status unchanged'
+);
+select is(
+  (select count(*)::int from public.task_attempts where task_id = (select (payload->>'id')::uuid from old_scoped_task)),
+  0, 'target-bound claim does not create an attempt for the older demo task'
 );
 select is((select payload->'capture_range'->>'start_at' from scoped_claim), '2026-08-17T04:00:00+00:00', 'scoped claim keeps the exact target start');
 select is((select payload->'capture_range'->>'end_at' from scoped_claim), '2026-08-17T08:00:00+00:00', 'scoped claim keeps the exact target end');
 
--- Keep the completion assertions executable during Red: the baseline may have
--- leased the old gap, while the candidate must already have leased the target.
-update public.sync_tasks set status = 'succeeded', lease_owner = null, lease_expires_at = null
-where id = '00000000-0000-0000-0000-000000041003';
 create temporary table scoped_execution_claim as
-select case
-  when (select payload->>'task_id' from scoped_claim) = (select payload->>'id' from scoped_task)
-    then (select payload from scoped_claim)
-  else public.claim_next_task('00000000-0000-0000-0000-000000041002', '2026-08-18T00:00:00Z')
-end as payload;
+select payload from scoped_claim;
 
 insert into public.canonical_messages (id, source_id, external_message_id, occurred_at, author_display, content)
 values ('00000000-0000-0000-0000-000000041004', (select (payload->>'id')::uuid from scoped_source), 'scoped-post', '2026-08-17T05:00:00Z', 'Ticket 01 scoped blogger', '公开 synthetic fixture');
@@ -157,13 +169,11 @@ exception when others then
 end;
 $$;
 
-update public.sync_tasks set status = 'retryable_failed'
-where id = '00000000-0000-0000-0000-000000041003';
 select is((select payload->>'status' from scoped_completion), 'succeeded', 'the scoped fixed window completes through the existing range completion contract');
 select is((select status from public.sync_tasks where id = (select (payload->>'task_id')::uuid from scoped_execution_claim)), 'succeeded', 'the scoped task is marked succeeded');
 select is((select count(*)::int from public.x_post_analyses where canonical_message_id = '00000000-0000-0000-0000-000000041004'), 1, 'one v4 per-post analysis is persisted');
 select is((select count(*)::int from public.x_daily_viewpoint_segments where range_task_id = (select (payload->>'task_id')::uuid from scoped_execution_claim)), 1, 'one single-blogger window aggregate is persisted');
-select is((select status from public.sync_tasks where id = '00000000-0000-0000-0000-000000041003'), 'retryable_failed', 'the older gap remains audit history and does not block scoped completion');
+select is((select status from public.sync_tasks where id = (select (payload->>'id')::uuid from old_scoped_task)), 'retryable_failed', 'the older demo gap remains audit history and does not block scoped completion');
 
 select * from finish();
 rollback;

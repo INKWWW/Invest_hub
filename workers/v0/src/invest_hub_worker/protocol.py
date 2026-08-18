@@ -258,6 +258,18 @@ class WorkerProtocol:
             raise ProtocolError("invalid x fixed-window creation response")
         return task
 
+    def claim_x_demo_fixed_window_task(self, task_id: str) -> dict[str, Any] | None:
+        self._require_credential()
+        if not isinstance(task_id, str) or not task_id:
+            raise ProtocolError("invalid x fixed-window claim request")
+        status, value = self._request("POST", f"api/worker/x-fixed-windows/{task_id}/claim", {})
+        if status == 204 or value is None:
+            return None
+        try:
+            return load_contract("task-claim", value)
+        except ContractError as exc:
+            raise ProtocolError("invalid x fixed-window claim response") from exc
+
     def mark_x_activation_identity_failed(self, source_id: str, error_code: str) -> dict[str, Any]:
         self._require_credential()
         if not isinstance(source_id, str) or not source_id or error_code not in {'identity_mismatch', 'invalid_x_identity', 'profile_timeout', 'profile_invocation_failed', 'activation_protocol_failure', 'identity_resolution_failed'}:
