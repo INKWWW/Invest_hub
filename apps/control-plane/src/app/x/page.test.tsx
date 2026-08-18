@@ -39,12 +39,12 @@ describe("XPage", () => {
     const html = renderToStaticMarkup(page);
 
     expect(html).toContain('<option value="second" selected="">Second Author</option>');
-    expect(html).toContain('<option value="all" selected="">全部</option>');
+    expect(html).toContain('<option value="2026-07-28" selected="">2026-07-28</option>');
     expect(html).not.toContain('<option value="2026-07-26" selected="">');
     expect(html).toContain("Second Author");
   });
 
-  it("defaults to all readable dates when no date query is present", async () => {
+  it("defaults to the latest readable date when no date query is present", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-02T17:30:00.000Z"));
     readerMocks.readXDay.mockResolvedValue(days);
@@ -52,7 +52,8 @@ describe("XPage", () => {
     const defaultPage = await XPage({});
     const defaultHtml = renderToStaticMarkup(defaultPage);
 
-    expect(defaultHtml).toContain('<option value="all" selected="">全部</option>');
+    expect(defaultHtml).toContain('<option value="2026-07-28" selected="">2026-07-28</option>');
+    expect(defaultHtml).toMatch(/日期<select[^>]*><option value="all">全部<\/option><option value="2026-07-28" selected="">/);
     expect(defaultHtml).toContain("Second Author");
   });
 });

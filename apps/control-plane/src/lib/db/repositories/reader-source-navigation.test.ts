@@ -109,6 +109,26 @@ describe("X reader date projection", () => {
     ]);
   });
 
+  it("projects an explicit Ticket 01 fixed-window state beside the latest readable data", async () => {
+    databaseMocks.rows.set("sources", [{ id: "source-a", source_key: "alpha", display_name: "Alpha", enabled: true }]);
+    databaseMocks.rows.set("x_daily_viewpoint_segments", [{ source_id: "source-a", natural_date: "2099-01-01", occurred_from_at: "2099-01-01T04:00:00.000Z", occurred_through_at: "2099-01-01T08:00:00.000Z", window_viewpoints: ["latest readable"], post_analysis_refs: [], evidence_refs: [] }]);
+    databaseMocks.rows.set("x_collection_batches", []);
+    databaseMocks.rows.set("x_daily_judgement_versions", []);
+    databaseMocks.rows.set("x_collection_batch_sources", []);
+    databaseMocks.rows.set("x_v3_verification_replays", []);
+    databaseMocks.rows.set("task_attempts", []);
+    databaseMocks.rows.set("x_demo_fixed_window_tasks", [{ task_id: "demo-pending", source_id: "source-a", cutoff_at: "2099-01-02T00:00:00.000Z", natural_date: "2099-01-01" }]);
+    databaseMocks.rows.set("sync_tasks", [{ id: "demo-pending", status: "queued" }]);
+
+    const result = await readXDay();
+
+    expect(result[0]).toMatchObject({
+      naturalDate: "2099-01-01",
+      currentRun: { cutoffAt: "2099-01-02T00:00:00.000Z", status: "not_run" },
+      bloggers: [{ source: { sourceKey: "alpha", displayName: "Alpha" }, status: "processing" }],
+    });
+  });
+
   it("retains archived history, builds snapshot placeholders, and projects safe revision history", async () => {
     const result = await readXDay();
     const serialized = JSON.stringify(result);

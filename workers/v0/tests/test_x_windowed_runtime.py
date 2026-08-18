@@ -167,6 +167,23 @@ class XWindowedRuntimeTests(unittest.TestCase):
             canonicalizer=Canonicalizer(), provider=provider or Provider(), prompt_template="private",
         )
 
+    def test_scheduled_window_rejects_nonzero_seconds_at_python_boundary(self) -> None:
+        value = claim()
+        value["capture_range"] = {
+            **value["capture_range"],  # type: ignore[typeddict-item]
+            "end_at": "2026-07-23T08:00:01Z",
+            "scheduled_window_key": "2026-07-23T16:00:01+08:00",
+        }
+
+        class Connector:
+            def fetch_page(self, *_args: object, **_kwargs: object) -> RawPage:
+                raise AssertionError("invalid fixed-window claim reached collection")
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(RuntimeExecutionError) as raised:
+                self.runtime(Connector(), directory).execute_windowed(value)
+        self.assertEqual(raised.exception.failure_class, "preflight")
+
     def test_receipt_uses_overlap_start_as_lower_boundary_and_completes_the_window(self) -> None:
         class Connector:
             def fetch_page(self, _source: LocalWorkerConfig, cursor: str | None, *, lower_bound_at: datetime, end_at: datetime) -> RawPage:

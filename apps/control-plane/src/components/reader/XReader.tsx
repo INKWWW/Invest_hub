@@ -23,6 +23,27 @@ function validOrAll(value: string | undefined, values: string[]) {
   return value && values.includes(value) ? value : ALL;
 }
 
+function initialDate(value: string | undefined, values: string[]) {
+  if (value === ALL) return ALL;
+  if (value && values.includes(value)) return value;
+  return values[0] ?? ALL;
+}
+
+function currentRunText(status: NonNullable<XReaderDate["currentRun"]>["status"]) {
+  if (status === "not_run") return "当前应运行窗口尚未运行。";
+  if (status === "processing") return "当前应运行窗口处理中。";
+  if (status === "failed") return "当前应运行窗口失败，未生成新的可读内容。";
+  return "当前应运行窗口已完成。";
+}
+
+function cutoffLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(date);
+}
+
 function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches"] }) {
   if (!batches.length) return <p className="summary-empty">本时段没有形成新的跨博主判断。</p>;
   return <div className="x-reader-judgements">{batches.flatMap((batch, index) => [<details className="x-reader-judgement" key={batch.cutoffAt} open={index === 0}>
@@ -133,6 +154,7 @@ function XReaderDateCard({ day, sourceKey }: { day: XReaderDate; sourceKey: stri
   const bloggers = sourceKey === ALL ? day.bloggers : day.bloggers.filter((blogger) => blogger.source.sourceKey === sourceKey);
   return <section className="reader-day-card">
     <header><h2 className="x-reader-date"><span>日期</span>{day.naturalDate}</h2></header>
+    {day.currentRun ? <div className={`reader-status reader-status--${day.currentRun.status}`}><p role="status">截止 {cutoffLabel(day.currentRun.cutoffAt)}：{currentRunText(day.currentRun.status)}</p></div> : null}
     <section className="x-reader-judgement-section"><h2>当日判断总结</h2>{sourceKey === ALL && day.judgement.visible ? <JudgementList batches={day.judgement.batches} /> : <p>跨博主当日判断总结仅在全部博主视图展示。</p>}</section>
     <section className="x-reader-bloggers"><h2>单个博主观点</h2>{bloggers.map((blogger) => <XReaderBloggerCard key={blogger.source.sourceKey} blogger={blogger} />)}</section>
   </section>;
@@ -146,12 +168,10 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
   if (!days.length) return <p>尚无可阅读的 X 信息。</p>;
   const sourceOptions = useMemo(() => sources(days), [days]);
   const dateOptions = useMemo(() => {
-    const availableDates = dates(days);
-    if (initialNaturalDate && initialNaturalDate !== ALL && !availableDates.includes(initialNaturalDate)) return [initialNaturalDate, ...availableDates];
-    return availableDates;
+    return dates(days);
   }, [days, initialNaturalDate]);
   const [sourceKey, setSourceKey] = useState(() => validOrAll(initialSourceKey, sourceOptions.map((source) => source.sourceKey)));
-  const [naturalDate, setNaturalDate] = useState(() => validOrAll(initialNaturalDate, dateOptions));
+  const [naturalDate, setNaturalDate] = useState(() => initialDate(initialNaturalDate, dateOptions));
   const visibleDays = useMemo(() => days.filter((day) =>
     (naturalDate === ALL || day.naturalDate === naturalDate) && (sourceKey === ALL || day.bloggers.some((blogger) => blogger.source.sourceKey === sourceKey)),
   ), [days, naturalDate, sourceKey]);
