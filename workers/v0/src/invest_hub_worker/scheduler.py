@@ -69,7 +69,7 @@ def fixed_x_window(cutoff: str | datetime) -> dict[str, str]:
 
     cutoff_at = _parse_x_cutoff(cutoff)
     local_cutoff = cutoff_at.astimezone(_SHANGHAI)
-    if (local_cutoff.hour, local_cutoff.minute) not in _X_WINDOW_TIMES:
+    if (local_cutoff.hour, local_cutoff.minute) not in _X_WINDOW_TIMES or local_cutoff.second != 0 or local_cutoff.microsecond != 0:
         raise ValueError("cutoff must be an approved Shanghai X boundary")
 
     previous_hour = {0: 20, 8: 0, 12: 8, 16: 12, 20: 16}[local_cutoff.hour]

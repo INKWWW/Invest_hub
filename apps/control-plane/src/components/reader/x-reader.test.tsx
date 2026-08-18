@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { XReaderDate } from "../../lib/db/repositories/reader";
 import { XReader } from "./XReader";
 
 const days = [{
@@ -45,6 +46,23 @@ const days = [{
 }];
 
 describe("XReader", () => {
+  it("defaults to the latest readable success and separates current run state", () => {
+    const stateDays: XReaderDate[] = [{
+      naturalDate: "2099-01-03", currentRun: { cutoffAt: "2099-01-03T08:00:00.000Z", status: "not_run" }, judgement: { visible: true, batches: [] }, bloggers: [],
+    }, {
+      naturalDate: "2099-01-02", currentRun: { cutoffAt: "2099-01-02T08:00:00.000Z", status: "processing" }, judgement: { visible: true, batches: [] }, bloggers: [],
+    }, {
+      naturalDate: "2099-01-01", currentRun: { cutoffAt: "2099-01-01T08:00:00.000Z", status: "failed" }, judgement: { visible: true, batches: [] }, bloggers: [],
+    }];
+    const html = renderToStaticMarkup(<XReader days={stateDays} />);
+    const allDatesHtml = renderToStaticMarkup(<XReader days={stateDays} initialNaturalDate="all" />);
+
+    expect(html).toContain('<option value="2099-01-03" selected="">2099-01-03</option>');
+    expect(allDatesHtml).toContain("当前应运行窗口尚未运行");
+    expect(allDatesHtml).toContain("当前应运行窗口处理中");
+    expect(allDatesHtml).toContain("当前应运行窗口失败");
+  });
+
   it("renders each date as judgement first then stable one-column blogger sections", () => {
     const html = renderToStaticMarkup(<XReader days={days} initialNaturalDate="2099-01-02" />);
 

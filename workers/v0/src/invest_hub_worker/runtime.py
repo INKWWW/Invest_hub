@@ -479,7 +479,7 @@ class WindowedCaptureRange:
         if isinstance(scheduled_window_key, str):
             scheduled_end_at = _required_instant(scheduled_window_key, "scheduled_window_key")
             local_boundary = scheduled_end_at.astimezone(ZoneInfo("Asia/Shanghai"))
-            if not scheduled_window_key.endswith("+08:00") or local_boundary.strftime("%H:%M") not in {"00:00", "08:00", "12:00", "16:00", "20:00", "20:50"}:
+            if scheduled_end_at.second != 0 or scheduled_end_at.microsecond != 0 or not scheduled_window_key.endswith("+08:00") or local_boundary.strftime("%H:%M") not in {"00:00", "08:00", "12:00", "16:00", "20:00", "20:50"}:
                 raise ValueError("scheduled_window_key is not a Shanghai schedule boundary")
             if scheduled_end_at != end_at:
                 raise ValueError("scheduled_window_key does not equal window end_at")

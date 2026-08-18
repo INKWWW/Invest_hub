@@ -58,7 +58,7 @@ insert into public.sync_tasks (id, task_type, source_id, status, parameter_versi
 values (
   '00000000-0000-0000-0000-000000040003', 'x_sync',
   (select id from public.sources where source_key = 'x:ticket-01-offline'), 'failed', 'x-standard-v2',
-  '{"mode":"window","trigger":"scheduled","timezone":"Asia/Shanghai","start_at":"2026-08-18T00:00:00Z","end_at":"2026-08-18T04:00:00Z","scheduled_window_key":"2026-08-18T12:00+08:00","overlap_start_at":"2026-08-18T00:00:00Z"}'::jsonb,
+  '{"mode":"window","trigger":"scheduled","timezone":"Asia/Shanghai","start_at":"2026-08-17T00:00:00Z","end_at":"2026-08-17T04:00:00Z","scheduled_window_key":"2026-08-17T12:00+08:00","overlap_start_at":"2026-08-17T00:00:00Z"}'::jsonb,
   '{"mode":"window"}'::jsonb,
   '{"source_type":"x","account_id":"fixture_handle","display_name":"Ticket 01 blogger","parameter_version":"x-standard-v2"}'::jsonb
 );
@@ -66,24 +66,24 @@ values (
 select lives_ok(
   $$select public.create_x_demo_fixed_window_task(
     (select id from public.sources where source_key = 'x:ticket-01-offline'),
-    '2026-08-18T16:00:00+08:00',
+    '2026-08-18T00:00:00+08:00',
     '00000000-0000-0000-0000-000000040001'
   )$$,
   'a later fixed window is created without repairing an earlier failed task'
 );
 select is(
-  (select capture_range->>'start_at' from public.sync_tasks task join public.x_demo_fixed_window_tasks demo on demo.task_id = task.id where demo.cutoff_at = '2026-08-18T16:00:00+08:00'),
-  '2026-08-18T04:00:00+00:00',
+  (select capture_range->>'start_at' from public.sync_tasks task join public.x_demo_fixed_window_tasks demo on demo.task_id = task.id where demo.cutoff_at = '2026-08-18T00:00:00+08:00'),
+  '2026-08-17T12:00:00+00:00',
   'the later fixed window starts at the unique preceding cutoff'
 );
 select is(
-  (select capture_range->>'end_at' from public.sync_tasks task join public.x_demo_fixed_window_tasks demo on demo.task_id = task.id where demo.cutoff_at = '2026-08-18T16:00:00+08:00'),
-  '2026-08-18T08:00:00+00:00',
+  (select capture_range->>'end_at' from public.sync_tasks task join public.x_demo_fixed_window_tasks demo on demo.task_id = task.id where demo.cutoff_at = '2026-08-18T00:00:00+08:00'),
+  '2026-08-17T16:00:00+00:00',
   'the later fixed window ends at its explicit cutoff'
 );
 select is(
-  (select natural_date::text from public.x_demo_fixed_window_tasks where cutoff_at = '2026-08-18T16:00:00+08:00'),
-  '2026-08-18',
+  (select natural_date::text from public.x_demo_fixed_window_tasks where cutoff_at = '2026-08-18T00:00:00+08:00'),
+  '2026-08-17',
   'the fixed window keeps its Shanghai natural date'
 );
 select is(

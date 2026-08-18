@@ -197,6 +197,9 @@ begin
   if not exists (select 1 from public.profiles where id = p_requested_by and role = 'admin') then
     raise exception 'actor_not_authorized' using errcode = '42501';
   end if;
+  if p_cutoff_at > clock_timestamp() then
+    raise exception 'future_x_demo_cutoff' using errcode = '22023';
+  end if;
   select * into v_source from public.sources where id = p_source_id and source_type = 'x' and enabled for update;
   if not found then raise exception 'source_not_found' using errcode = '22023'; end if;
   select * into v_profile from public.x_source_profiles where source_id = p_source_id and enabled for update;

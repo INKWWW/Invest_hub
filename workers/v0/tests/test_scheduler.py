@@ -53,6 +53,21 @@ class SchedulerTests(unittest.TestCase):
             },
         )
 
+    def test_fixed_x_window_accepts_only_exact_five_cutoffs(self) -> None:
+        expected = {
+            "2026-08-18T00:00+08:00": ("2026-08-17T12:00:00+00:00", "2026-08-17T16:00:00+00:00"),
+            "2026-08-18T08:00+08:00": ("2026-08-17T16:00:00+00:00", "2026-08-18T00:00:00+00:00"),
+            "2026-08-18T12:00+08:00": ("2026-08-18T00:00:00+00:00", "2026-08-18T04:00:00+00:00"),
+            "2026-08-18T16:00+08:00": ("2026-08-18T04:00:00+00:00", "2026-08-18T08:00:00+00:00"),
+            "2026-08-18T20:00+08:00": ("2026-08-18T08:00:00+00:00", "2026-08-18T12:00:00+00:00"),
+        }
+        for cutoff, (start_at, end_at) in expected.items():
+            with self.subTest(cutoff=cutoff):
+                result = fixed_x_window(cutoff)
+                self.assertEqual((result["start_at"], result["end_at"]), (start_at, end_at))
+        with self.assertRaisesRegex(ValueError, "approved Shanghai X boundary"):
+            fixed_x_window("2026-08-18T16:00:01+08:00")
+
 
 if __name__ == "__main__":
     unittest.main()
