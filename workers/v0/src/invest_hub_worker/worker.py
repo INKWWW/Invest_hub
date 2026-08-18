@@ -76,7 +76,7 @@ class Worker:
             return self._recover(None, exc)
         return self._run_claim(claim)
 
-    def run_once_for_task(self, task_id: str) -> RunOutcome:
+    def run_once_for_task(self, task_id: str, *, x_external_max_attempts: int | None = None) -> RunOutcome:
         try:
             self.protocol.heartbeat("idle", self.capabilities, self.clock().isoformat())
         except Exception as exc:
@@ -86,9 +86,9 @@ class Worker:
             claim = self.protocol.claim_x_demo_fixed_window_task(task_id)
         except Exception as exc:
             return self._recover(task_id, exc)
-        return self._run_claim(claim)
+        return self._run_claim(claim, x_external_max_attempts=x_external_max_attempts)
 
-    def _run_claim(self, claim: dict[str, Any] | None) -> RunOutcome:
+    def _run_claim(self, claim: dict[str, Any] | None, *, x_external_max_attempts: int | None = None) -> RunOutcome:
         if claim is None:
             self.state = WorkerState.IDLE
             return RunOutcome("no_task")
@@ -101,7 +101,7 @@ class Worker:
                 raise LeaseUncertain("lease expired before execution")
             self.preflight(claim)
             self.state = WorkerState.EXECUTING
-            execution = self._execute_claim(claim)
+            execution = self._execute_claim(claim, x_external_max_attempts=x_external_max_attempts)
             window_acknowledgement = self._complete_windowed_execution(execution)
             if window_acknowledgement is not None:
                 self.state = WorkerState.IDLE
@@ -114,7 +114,7 @@ class Worker:
             self.state = WorkerState.IDLE
             return RunOutcome("succeeded", task_id, acknowledgement=acknowledgement)
         except Exception as exc:
-            self._report_failure(claim, exc)
+            self._report_failure(claim, exc, x_external_max_attempts=x_external_max_attempts)
             return self._recover(task_id, exc)
 
     def schedule_tick(self) -> dict[str, Any]:
@@ -159,6 +159,44 @@ class Worker:
             self._report_x_daily_judgement_failure(run_id, attempt, exc)
             return self._recover(run_id, exc)
 
+    def run_x_daily_judgement_for_run(
+        self,
+        run_id: str,
+        execute: Callable[[dict[str, object], dict[str, object]], dict[str, object]],
+    ) -> RunOutcome:
+        """Settle only the judgement belonging to one explicit fixed-window run."""
+
+        try:
+            self.protocol.heartbeat("idle", self.capabilities, self.clock().isoformat())
+            claim = self.protocol.claim_x_daily_judgement_for_run(run_id)
+        except Exception as exc:
+            return self._recover(run_id, exc)
+        if claim is None:
+            self.state = WorkerState.IDLE
+            return RunOutcome("no_task", run_id)
+        claimed_run_id = claim.get("run_id")
+        attempt = claim.get("attempt")
+        if not isinstance(claimed_run_id, str) or not claimed_run_id or isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            return self._recover(run_id, RuntimeError("invalid daily judgement claim identity"))
+        run_id = claimed_run_id
+        self.state = WorkerState.CLAIMED
+        try:
+            lease = LeaseState(run_id, attempt, str(claim["lease_expires_at"]))
+            if lease.is_expired(self.clock()):
+                raise LeaseUncertain("daily judgement lease expired before execution")
+            context = self.protocol.get_x_daily_judgement_context(run_id, attempt)
+            self.state = WorkerState.EXECUTING
+            completion = execute(dict(claim), dict(context))
+            self.state = WorkerState.REPORTING
+            acknowledgement = self.protocol.complete_x_daily_judgement(dict(completion))
+            if acknowledgement.get("status") != "succeeded":
+                raise LeaseUncertain("control plane did not acknowledge daily judgement completion")
+            self.state = WorkerState.IDLE
+            return RunOutcome("succeeded", run_id, acknowledgement=acknowledgement)
+        except Exception as exc:
+            self._report_x_daily_judgement_failure(run_id, attempt, exc)
+            return self._recover(run_id, exc)
+
     def stop(self) -> None:
         self.state = WorkerState.STOPPED
 
@@ -166,7 +204,7 @@ class Worker:
     def _not_configured(_claim: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("worker executor is not configured")
 
-    def _execute_claim(self, claim: dict[str, Any]) -> dict[str, Any]:
+    def _execute_claim(self, claim: dict[str, Any], *, x_external_max_attempts: int | None = None) -> dict[str, Any]:
         scope = claim.get("collection_scope")
         if not isinstance(scope, Mapping) or scope.get("mode") not in {"window", "history"}:
             return self.execute(claim)
@@ -181,6 +219,8 @@ class Worker:
         execution_kwargs: dict[str, Any] = {"on_capture_page": self._persist_windowed_capture_page}
         if claim.get("task_type") == "x_sync":
             execution_kwargs["on_post_analysis"] = lambda _post_id: self._renew_x_analysis_lease(task_id, attempt)
+            if x_external_max_attempts is not None:
+                execution_kwargs["retry_max_attempts"] = x_external_max_attempts
         if callable(daily_context):
             execution_kwargs["load_daily_fact_context"] = lambda: daily_context(task_id, attempt)
         if callable(author_resolver):
@@ -280,6 +320,8 @@ class Worker:
             final_acknowledgement = self.protocol.complete_capture_range(dict(completion))
             if final_acknowledgement.get("status") != "succeeded":
                 raise LeaseUncertain("control plane did not acknowledge X window completion")
+            if isinstance(completion.get("no_new_data"), bool):
+                final_acknowledgement = {**final_acknowledgement, "no_new_data": completion["no_new_data"]}
             return final_acknowledgement
 
         acknowledgement = self.protocol.persist(dict(persistence))
@@ -308,7 +350,7 @@ class Worker:
             raise RuntimeExecutionError("persistence_failure", "control plane did not acknowledge window completion", failure_stage="range_completion")
         return final_acknowledgement
 
-    def _report_failure(self, claim: Mapping[str, Any], error: Exception) -> None:
+    def _report_failure(self, claim: Mapping[str, Any], error: Exception, *, x_external_max_attempts: int | None = None) -> None:
         failure_class = str(getattr(error, "failure_class", "unknown"))
         allowed = {
             "timeout", "provider_failure", "empty_response", "invalid_json", "schema_error",
@@ -320,7 +362,7 @@ class Worker:
         failure_stage = getattr(error, "failure_stage", None)
         if failure_stage not in _X_FAILURE_STAGES:
             failure_stage = None
-        retryable = self._is_retryable_x_failure(claim, failure_class)
+        retryable = self._is_retryable_x_failure(claim, failure_class, x_external_max_attempts=x_external_max_attempts)
         payload = {
             "contract_version": "v0",
             "task_id": str(claim["task_id"]),
@@ -355,9 +397,11 @@ class Worker:
             return
 
     @staticmethod
-    def _is_retryable_x_failure(claim: Mapping[str, Any], failure_class: str) -> bool:
+    def _is_retryable_x_failure(claim: Mapping[str, Any], failure_class: str, *, x_external_max_attempts: int | None = None) -> bool:
         if claim.get("task_type") != "x_sync":
             return True
+        if x_external_max_attempts is not None:
+            return False
         attempt = claim.get("attempt")
         if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
             return False

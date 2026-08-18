@@ -1290,8 +1290,16 @@ class XWindowedRuntime:
         on_post_analysis: Callable[[str], None] | None = None,
         load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
         resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
+        retry_max_attempts: int | None = None,
     ) -> dict[str, Any]:
         del load_daily_fact_context, resolve_author_profiles
+        if retry_max_attempts is not None and retry_max_attempts < 1:
+            raise ValueError("retry_max_attempts must be positive")
+        retry_policy = self.retry_policy if retry_max_attempts is None else RetryPolicy(
+            max_attempts=retry_max_attempts,
+            timeout_seconds=self.retry_policy.timeout_seconds,
+            backoff_seconds=self.retry_policy.backoff_seconds,
+        )
         capture_range, source_snapshot = self._validate_claim(claim)
         if capture_range.resume_cursor is not None:
             raise RuntimeExecutionError("opencli_contract", "X Collection does not accept a resumed cursor")
@@ -1302,12 +1310,22 @@ class XWindowedRuntime:
         failure_stage = "collection_fetch"
 
         try:
-            page = self.connector.fetch_page(
-                self.config,
-                None,
-                lower_bound_at=overlap_start,
-                end_at=capture_range.end_at,
-            )
+            page = None
+            fetch_attempts = retry_max_attempts or 1
+            for fetch_attempt in range(fetch_attempts):
+                try:
+                    page = self.connector.fetch_page(
+                        self.config,
+                        None,
+                        lower_bound_at=overlap_start,
+                        end_at=capture_range.end_at,
+                    )
+                    break
+                except Exception:
+                    if fetch_attempt + 1 >= fetch_attempts:
+                        raise
+            if page is None:
+                raise RuntimeExecutionError("opencli_contract", "X collection returned no page")
             failure_stage = "page_validation"
             receipt = self._validate_page(page, overlap_start)
             failure_stage = "page_mapping"
@@ -1367,8 +1385,8 @@ class XWindowedRuntime:
             raise RuntimeExecutionError("persistence_failure", "X bounded execution failed", failure_stage=failure_stage) from exc
 
         messages = sorted(candidate_by_id.values(), key=lambda item: (_required_instant(item.occurred_at, "X post occurred_at"), item.external_message_id))
-        analyses, retries, elapsed_ms = self._post_analyses(claim, messages, on_post_analysis=on_post_analysis)
-        segment, window_retries, window_elapsed = self._window_segment(claim, capture_range, messages, analyses)
+        analyses, retries, elapsed_ms = self._post_analyses(claim, messages, on_post_analysis=on_post_analysis, retry_policy=retry_policy)
+        segment, window_retries, window_elapsed = self._window_segment(claim, capture_range, messages, analyses, retry_policy=retry_policy)
         completion = {
             "contract_version": "v0",
             "task_id": str(claim["task_id"]),
@@ -1481,9 +1499,11 @@ class XWindowedRuntime:
         messages: list[CanonicalMessage],
         *,
         on_post_analysis: Callable[[str], None] | None = None,
+        retry_policy: RetryPolicy | None = None,
     ) -> tuple[list[dict[str, Any]], int, int]:
         analyses: list[dict[str, Any]] = []
         retries = elapsed_ms = 0
+        policy = retry_policy or self.retry_policy
         for message in messages:
             context = self._context_for_prompt(message)
             provider_context = ProviderContext(
@@ -1491,7 +1511,7 @@ class XWindowedRuntime:
                 prompt_text=self._chunk_prompt(message, context), input_message_ids=frozenset({message.external_message_id}),
                 operation="v4_x_post_analysis", visible_context_post_ids=frozenset({context["id"]}) if context is not None else frozenset(),
             )
-            response = self.retry_policy.execute(self.provider, (message,), provider_context)
+            response = policy.execute(self.provider, (message,), provider_context)
             retries += max(0, response.attempt - 1)
             elapsed_ms += response.elapsed_ms
             if response.status != "success" or response.parsed_output is None:
@@ -1519,7 +1539,7 @@ class XWindowedRuntime:
         return analyses, retries, elapsed_ms
 
     def _window_segment(
-        self, claim: Mapping[str, Any], capture_range: WindowedCaptureRange, messages: list[CanonicalMessage], analyses: list[dict[str, Any]],
+        self, claim: Mapping[str, Any], capture_range: WindowedCaptureRange, messages: list[CanonicalMessage], analyses: list[dict[str, Any]], *, retry_policy: RetryPolicy | None = None,
     ) -> tuple[dict[str, Any] | None, int, int]:
         if not analyses:
             return None, 0, 0
@@ -1537,7 +1557,7 @@ class XWindowedRuntime:
             prompt_text=self._window_prompt(claim, capture_range, analyses, natural_date), input_message_ids=frozenset(analysis_ids), operation="v4_x_window",
             allowed_analysis_evidence_post_ids=tuple(sorted((str(analysis["analysis_id"]), tuple(sorted(analysis["evidence_post_ids"]))) for analysis in analyses)),
         )
-        response = self.retry_policy.execute(self.provider, tuple(analyses), provider_context)
+        response = (retry_policy or self.retry_policy).execute(self.provider, tuple(analyses), provider_context)
         if response.status != "success" or response.parsed_output is None:
             raise RuntimeExecutionError(str(response.failure_class or response.error_code or "provider_failure"), "Codex CLI did not produce an X window viewpoint")
         try:
@@ -1635,6 +1655,7 @@ class AuthorizedDiscordRuntimeSet:
         on_post_analysis: Callable[[str], None] | None = None,
         load_daily_fact_context: Callable[[], Mapping[str, Any]] | None = None,
         resolve_author_profiles: Callable[[], Mapping[str, Any]] | None = None,
+        retry_max_attempts: int | None = None,
     ) -> dict[str, Any]:
         execution_kwargs: dict[str, Any] = {
             "on_capture_page": on_capture_page,
@@ -1643,6 +1664,8 @@ class AuthorizedDiscordRuntimeSet:
         }
         if on_post_analysis is not None:
             execution_kwargs["on_post_analysis"] = on_post_analysis
+        if retry_max_attempts is not None:
+            execution_kwargs["retry_max_attempts"] = retry_max_attempts
         return self._runtime_for(claim).execute_windowed(claim, **execution_kwargs)
 
 

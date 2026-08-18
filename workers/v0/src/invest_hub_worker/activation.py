@@ -47,4 +47,4 @@ def activate_one_x_source(protocol: ActivationProtocol, invoker: OpenCLIProfileI
         None,
         source_id,
         verified,
-    )
+)

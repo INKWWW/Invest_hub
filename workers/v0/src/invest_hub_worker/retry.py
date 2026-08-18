@@ -64,4 +64,3 @@ class RetryPolicy:
 
         assert response is not None
         return response
-

@@ -1243,6 +1243,34 @@ export interface Database {
         Args: { p_run_id: string; p_attempt: number; p_worker_id: string; p_failure_class: string };
         Returns: Json;
       };
+      start_x_demo_fixed_window_run: {
+        Args: { p_cutoff_at: string; p_worker_id: string };
+        Returns: Json;
+      };
+      bind_x_demo_fixed_window_task: {
+        Args: { p_run_id: string; p_source_id: string; p_task_id: string; p_worker_id: string };
+        Returns: Json;
+      };
+      fail_x_demo_fixed_window_source: {
+        Args: { p_run_id: string; p_source_id: string; p_reason: string; p_worker_id: string };
+        Returns: Json;
+      };
+      settle_x_demo_fixed_window_run: {
+        Args: { p_run_id: string; p_worker_id: string };
+        Returns: Json;
+      };
+      claim_x_demo_fixed_window_judgement: {
+        Args: { p_run_id: string; p_worker_id: string; p_now: string };
+        Returns: Json | null;
+      };
+      create_x_demo_fixed_window_task_for_run: {
+        Args: { p_run_id: string; p_source_id: string; p_cutoff_at: string; p_worker_id: string; p_account_id: string };
+        Returns: Json;
+      };
+      terminalize_x_demo_fixed_window_judgement: {
+        Args: { p_demo_run_id: string; p_judgement_run_id: string; p_worker_id: string };
+        Returns: Json;
+      };
       regenerate_x_daily_judgement: {
         Args: { p_batch_id: string; p_requested_by: string };
         Returns: Json;
