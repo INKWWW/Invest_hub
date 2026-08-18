@@ -227,6 +227,23 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/x-activations/claim"))
             self.assertTrue(str(transport.calls[2]["url"]).endswith("/api/worker/x-activations/source-x/initialize"))
 
+    def test_fixed_window_creation_uses_the_activated_source_identity_and_cutoff(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"id": "task-x-window", "source_id": "source-x", "idempotent": False, "demo_fixed_window": {"natural_date": "2099-01-01"}}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            task = protocol.create_x_demo_fixed_window_task("source-x", "2099-01-01T16:00:00+08:00", "fixture-account")
+
+            self.assertEqual(task["id"], "task-x-window")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/x-fixed-windows"))
+            self.assertEqual(transport.calls[1]["body"], {
+                "source_id": "source-x", "cutoff_at": "2099-01-01T16:00:00+08:00", "account_id": "fixture-account",
+            })
+
     def test_daily_fact_context_is_read_only_and_scoped_to_the_current_task_attempt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport(

@@ -46,18 +46,37 @@ const days = [{
 }];
 
 describe("XReader", () => {
+  it("skips a newer task-only date by default while keeping its current target status visible", () => {
+    const stateDays: XReaderDate[] = [{
+      naturalDate: "2099-01-03", currentRun: { cutoffAt: "2099-01-03T08:00:00.000Z", status: "failed" }, judgement: { visible: true, batches: [] }, bloggers: [],
+    }, {
+      naturalDate: "2099-01-02", judgement: { visible: true, batches: [] }, bloggers: [{
+        source: { sourceKey: "fixture", displayName: "Fixture" }, status: "succeeded", timedOut: false,
+        segments: [{ occurredFromAt: "2099-01-02T04:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["readable"], uncertainties: [], analyses: [] }],
+      }],
+    }];
+
+    const html = renderToStaticMarkup(<XReader days={stateDays} />);
+
+    expect(html).toContain('<option value="2099-01-02" selected="">2099-01-02</option>');
+    expect(html).toContain("当前应运行窗口失败");
+  });
+
   it("defaults to the latest readable success and separates current run state", () => {
     const stateDays: XReaderDate[] = [{
       naturalDate: "2099-01-03", currentRun: { cutoffAt: "2099-01-03T08:00:00.000Z", status: "not_run" }, judgement: { visible: true, batches: [] }, bloggers: [],
     }, {
-      naturalDate: "2099-01-02", currentRun: { cutoffAt: "2099-01-02T08:00:00.000Z", status: "processing" }, judgement: { visible: true, batches: [] }, bloggers: [],
+      naturalDate: "2099-01-02", currentRun: { cutoffAt: "2099-01-02T08:00:00.000Z", status: "processing" }, judgement: { visible: true, batches: [] }, bloggers: [{
+        source: { sourceKey: "fixture", displayName: "Fixture" }, status: "succeeded", timedOut: false,
+        segments: [{ occurredFromAt: "2099-01-02T04:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["readable"], uncertainties: [], analyses: [] }],
+      }],
     }, {
       naturalDate: "2099-01-01", currentRun: { cutoffAt: "2099-01-01T08:00:00.000Z", status: "failed" }, judgement: { visible: true, batches: [] }, bloggers: [],
     }];
     const html = renderToStaticMarkup(<XReader days={stateDays} />);
     const allDatesHtml = renderToStaticMarkup(<XReader days={stateDays} initialNaturalDate="all" />);
 
-    expect(html).toContain('<option value="2099-01-03" selected="">2099-01-03</option>');
+    expect(html).toContain('<option value="2099-01-02" selected="">2099-01-02</option>');
     expect(allDatesHtml).toContain("当前应运行窗口尚未运行");
     expect(allDatesHtml).toContain("当前应运行窗口处理中");
     expect(allDatesHtml).toContain("当前应运行窗口失败");

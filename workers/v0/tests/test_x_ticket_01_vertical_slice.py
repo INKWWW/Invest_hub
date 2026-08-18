@@ -5,8 +5,8 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from invest_hub_worker.activation import activate_one_x_source
 from invest_hub_worker.canonical import Canonicalizer
+from invest_hub_worker.cli import run_one_x_fixed_window
 from invest_hub_worker.config import LocalWorkerConfig
 from invest_hub_worker.connectors.base import RawPage
 from invest_hub_worker.evidence import LocalEvidenceStore
@@ -80,6 +80,7 @@ class VerticalProtocol:
         self.activation_claimed = False
         self.identity_resolved = False
         self.initialized = False
+        self.task_created = False
         self.claimed = False
         self.raw_messages: list[dict[str, object]] = []
         self.canonical_messages: list[dict[str, object]] = []
@@ -113,8 +114,14 @@ class VerticalProtocol:
     def heartbeat(self, *_args: object) -> dict[str, object]:
         return {"status": "idle"}
 
+    def create_x_demo_fixed_window_task(self, source_id: str, cutoff_at: str, account_id: str) -> dict[str, object]:
+        if not self.initialized or (source_id, cutoff_at, account_id) != ("ticket-01-source", "2026-08-17T16:00:00+08:00", "vertical_fixture"):
+            raise AssertionError("fixed-window task was not created from the activated source identity")
+        self.task_created = True
+        return {"id": "ticket-01-vertical-task", "source_id": source_id, "idempotent": False, "demo_fixed_window": {}}
+
     def claim(self) -> dict[str, object] | None:
-        if not self.initialized or self.claimed:
+        if not self.task_created or self.claimed:
             return None
         self.claimed = True
         return dict(CLAIM)
@@ -145,10 +152,6 @@ class VerticalProtocol:
 class Ticket01VerticalSliceTests(unittest.TestCase):
     def test_offline_activation_to_reader_visible_fixed_window_uses_one_business_chain(self) -> None:
         protocol = VerticalProtocol()
-        activation = activate_one_x_source(protocol, MockOpenCLI())
-        self.assertEqual(activation.status, "initialized")
-        self.assertTrue(protocol.identity_resolved)
-        self.assertTrue(protocol.initialized)
 
         config = LocalWorkerConfig.from_mapping({
             "control_plane_url": "https://control.example.invalid", "source_id": "ticket-01-source", "source_type": "x",
@@ -161,9 +164,13 @@ class Ticket01VerticalSliceTests(unittest.TestCase):
                 canonicalizer=Canonicalizer(),
                 provider=MockProvider(), prompt_template="public synthetic prompt",
             )
-            outcome = Worker(protocol, execute_windowed=runtime.execute_windowed, capabilities=["x_sync"], clock=lambda: datetime(2026, 8, 17, 9, tzinfo=timezone.utc)).run_once()
+            worker = Worker(protocol, execute_windowed=runtime.execute_windowed, capabilities=["x_sync"], clock=lambda: datetime(2026, 8, 17, 9, tzinfo=timezone.utc))
+            outcome = run_one_x_fixed_window(worker, config, "2026-08-17T16:00:00+08:00", MockOpenCLI())
 
         self.assertEqual(outcome.status, "succeeded")
+        self.assertTrue(protocol.identity_resolved)
+        self.assertTrue(protocol.initialized)
+        self.assertTrue(protocol.task_created)
         self.assertEqual(len(protocol.raw_messages), 1)
         self.assertEqual(len(protocol.canonical_messages), 1)
         self.assertEqual(len(protocol.contexts), 1)

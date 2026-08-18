@@ -11,7 +11,7 @@ import XPage from "./page";
 
 const days = [{
   naturalDate: "2026-07-28", judgement: { visible: true, batches: [] },
-  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", segments: [] }],
+  bloggers: [{ source: { sourceKey: "second", displayName: "Second Author" }, status: "succeeded", timedOut: false, segments: [{ occurredFromAt: "2026-07-28T04:00:00.000Z", occurredThroughAt: "2026-07-28T08:00:00.000Z", viewpoints: ["readable"], uncertainties: [], analyses: [] }] }],
 }];
 
 describe("XPage", () => {

@@ -245,6 +245,19 @@ class WorkerProtocol:
             raise ProtocolError("invalid x activation initialization response")
         return dict(activation)
 
+    def create_x_demo_fixed_window_task(self, source_id: str, cutoff_at: str, account_id: str) -> dict[str, Any]:
+        self._require_credential()
+        if not all(isinstance(value, str) and value for value in (source_id, cutoff_at, account_id)):
+            raise ProtocolError("invalid x fixed-window creation request")
+        _, value = self._request(
+            "POST", "api/worker/x-fixed-windows",
+            {"source_id": source_id, "cutoff_at": cutoff_at, "account_id": account_id},
+        )
+        task = self._object(value, "invalid x fixed-window creation response")
+        if not isinstance(task.get("id"), str) or not task["id"] or task.get("source_id") != source_id or not isinstance(task.get("idempotent"), bool) or not isinstance(task.get("demo_fixed_window"), dict):
+            raise ProtocolError("invalid x fixed-window creation response")
+        return task
+
     def mark_x_activation_identity_failed(self, source_id: str, error_code: str) -> dict[str, Any]:
         self._require_credential()
         if not isinstance(source_id, str) or not source_id or error_code not in {'identity_mismatch', 'invalid_x_identity', 'profile_timeout', 'profile_invocation_failed', 'activation_protocol_failure', 'identity_resolution_failed'}:
