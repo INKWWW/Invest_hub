@@ -244,6 +244,21 @@ class WorkerProtocolTests(unittest.TestCase):
                 "source_id": "source-x", "cutoff_at": "2099-01-01T16:00:00+08:00", "account_id": "fixture-account",
             })
 
+    def test_fixed_window_claim_is_bound_to_the_created_task_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport(
+                (201, enrolment_response()),
+                (200, {"contract_version": "v0", "task_id": "task-x-window", "attempt": 1, "task_type": "x_sync", "source_id": "source-x", "parameter_version": "x-standard-v2", "lease_expires_at": "2099-01-01T00:10:00Z", "safe_checkpoint": None, "rule_snapshot": {"version": 0, "target_author_ids": []}, "collection_scope": {"mode": "window"}, "capture_range": {"mode": "window", "trigger": "scheduled", "timezone": "Asia/Shanghai", "start_at": "2099-01-01T00:00:00Z", "end_at": "2099-01-01T08:00:00Z", "scheduled_window_key": "2099-01-01T16:00+08:00", "overlap_start_at": "2099-01-01T00:00:00Z"}, "coverage_snapshot": {"coverage_start_at": "2099-01-01T00:00:00Z", "coverage_through_at": "2099-01-01T00:00:00Z", "last_completed_task_id": None}, "capture_progress": {"resume_cursor": None, "page_count": 0, "range_complete": False}, "author_profile_snapshot": [], "source_snapshot": {"source_type": "x", "account_id": "fixture-account", "display_name": "Fixture", "parameter_version": "x-standard-v2"}}),
+            )
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            claim = protocol.claim_x_demo_fixed_window_task("task-x-window")
+
+            self.assertEqual(claim["task_id"], "task-x-window")
+            self.assertTrue(str(transport.calls[1]["url"]).endswith("/api/worker/x-fixed-windows/task-x-window/claim"))
+            self.assertEqual(transport.calls[1]["body"], {})
+
     def test_daily_fact_context_is_read_only_and_scoped_to_the_current_task_attempt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             transport = FakeTransport(

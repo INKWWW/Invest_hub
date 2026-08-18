@@ -82,6 +82,7 @@ class VerticalProtocol:
         self.initialized = False
         self.task_created = False
         self.claimed = False
+        self.target_task_id: str | None = None
         self.raw_messages: list[dict[str, object]] = []
         self.canonical_messages: list[dict[str, object]] = []
         self.contexts: list[dict[str, object]] = []
@@ -121,9 +122,13 @@ class VerticalProtocol:
         return {"id": "ticket-01-vertical-task", "source_id": source_id, "idempotent": False, "demo_fixed_window": {}}
 
     def claim(self) -> dict[str, object] | None:
-        if not self.task_created or self.claimed:
+        raise AssertionError("generic claim must not be used for the explicit fixed window")
+
+    def claim_x_demo_fixed_window_task(self, task_id: str) -> dict[str, object] | None:
+        if not self.task_created or task_id != "ticket-01-vertical-task" or self.claimed:
             return None
         self.claimed = True
+        self.target_task_id = task_id
         return dict(CLAIM)
 
     def persist(self, payload: dict[str, object]) -> dict[str, object]:

@@ -52,8 +52,11 @@ class FixedWindowWorker:
         self.calls: list[str] = []
 
     def run_once(self) -> RunOutcome:
-        self.calls.append("claim")
-        return RunOutcome("succeeded", "task-fixed")
+        raise AssertionError("generic claim must not be used for an explicit fixed window")
+
+    def run_once_for_task(self, task_id: str) -> RunOutcome:
+        self.calls.append(f"claim:{task_id}")
+        return RunOutcome("succeeded", task_id)
 
 
 class FixedWindowProtocol:
@@ -120,7 +123,7 @@ class WorkerCliTests(unittest.TestCase):
             "heartbeat", "claim_activation", ("resolve", "source-x", "x-standard-v2", "fixture-account"),
             ("initialize", "source-x"), ("create", "source-x", "2099-01-01T16:00:00+08:00", "fixture-account"),
         ])
-        self.assertEqual(worker.calls, ["claim"])
+        self.assertEqual(worker.calls, ["claim:task-fixed"])
 
     def test_run_once_requires_private_runtime_inputs_as_cli_arguments(self) -> None:
         parser = build_parser()

@@ -74,6 +74,21 @@ class Worker:
             claim = self.protocol.claim()
         except Exception as exc:
             return self._recover(None, exc)
+        return self._run_claim(claim)
+
+    def run_once_for_task(self, task_id: str) -> RunOutcome:
+        try:
+            self.protocol.heartbeat("idle", self.capabilities, self.clock().isoformat())
+        except Exception as exc:
+            return self._recover(task_id, exc)
+
+        try:
+            claim = self.protocol.claim_x_demo_fixed_window_task(task_id)
+        except Exception as exc:
+            return self._recover(task_id, exc)
+        return self._run_claim(claim)
+
+    def _run_claim(self, claim: dict[str, Any] | None) -> RunOutcome:
         if claim is None:
             self.state = WorkerState.IDLE
             return RunOutcome("no_task")

@@ -479,9 +479,10 @@ def run_one_x_fixed_window(
     if activation.status != "initialized" or activation.source_id != source.source_id or not activation.account_id:
         return RunOutcome("activation_failed", error=activation.error or "x_activation_not_initialized")
     task = worker.protocol.create_x_demo_fixed_window_task(activation.source_id, cutoff_at, activation.account_id)
-    if task.get("source_id") != activation.source_id:
+    task_id = task.get("id")
+    if task.get("source_id") != activation.source_id or not isinstance(task_id, str) or not task_id:
         raise ProtocolError("fixed-window task source does not match activated source")
-    return worker.run_once()
+    return worker.run_once_for_task(task_id)
 
 
 def _scheduled_sleep_seconds(outcome: object, poll_seconds: int) -> int:

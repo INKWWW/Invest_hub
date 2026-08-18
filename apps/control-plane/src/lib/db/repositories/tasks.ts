@@ -101,6 +101,22 @@ export async function createXDemoFixedWindowTaskForWorker(input: {
   };
 }
 
+export async function claimXDemoFixedWindowTask(taskId: string, workerId: string, now = new Date().toISOString()) {
+  if (![taskId, workerId, now].every((value) => typeof value === "string" && value.length > 0)) {
+    throw new TaskScopeError("invalid_fixed_window_claim_request");
+  }
+  const client = createSupabaseAdminClient() as unknown as {
+    rpc(name: string, args: Record<string, string>): Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+  const { data, error } = await client.rpc("claim_x_demo_fixed_window_task", {
+    p_task_id: taskId, p_worker_id: workerId, p_now: now,
+  });
+  if (error) throw error;
+  if (data === null) return null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_fixed_window_claim");
+  return data as Record<string, unknown>;
+}
+
 export async function scheduleDiscordSyncTasks(workerId: string, windowKey: string): Promise<ScheduledTick> {
   if (!isScheduleWindowKey(windowKey)) throw new TaskScopeError("invalid_schedule_window");
   const { data, error } = await createSupabaseAdminClient().rpc("enqueue_scheduled_discord_tasks", {
