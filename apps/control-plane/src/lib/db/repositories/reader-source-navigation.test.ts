@@ -129,6 +129,24 @@ describe("X reader date projection", () => {
     });
   });
 
+  it("keeps a newer task-only date available for status while preserving the older readable date", async () => {
+    databaseMocks.rows.set("sources", [{ id: "source-a", source_key: "alpha", display_name: "Alpha", enabled: true }]);
+    databaseMocks.rows.set("x_daily_viewpoint_segments", [{ source_id: "source-a", natural_date: "2099-01-01", occurred_from_at: "2099-01-01T04:00:00.000Z", occurred_through_at: "2099-01-01T08:00:00.000Z", window_viewpoints: ["readable"], post_analysis_refs: [], evidence_refs: [] }]);
+    databaseMocks.rows.set("x_collection_batches", []);
+    databaseMocks.rows.set("x_daily_judgement_versions", []);
+    databaseMocks.rows.set("x_collection_batch_sources", []);
+    databaseMocks.rows.set("x_v3_verification_replays", []);
+    databaseMocks.rows.set("task_attempts", []);
+    databaseMocks.rows.set("x_demo_fixed_window_tasks", [{ task_id: "demo-latest", source_id: "source-a", cutoff_at: "2099-01-02T00:00:00.000Z", natural_date: "2099-01-02" }]);
+    databaseMocks.rows.set("sync_tasks", [{ id: "demo-latest", status: "failed" }]);
+
+    const result = await readXDay();
+
+    expect(result.map((day) => day.naturalDate)).toEqual(["2099-01-02", "2099-01-01"]);
+    expect(result[0]?.currentRun).toEqual({ cutoffAt: "2099-01-02T00:00:00.000Z", status: "failed" });
+    expect(result[1]?.bloggers[0]).toMatchObject({ status: "succeeded", segments: [expect.objectContaining({ viewpoints: ["readable"] })] });
+  });
+
   it("retains archived history, builds snapshot placeholders, and projects safe revision history", async () => {
     const result = await readXDay();
     const serialized = JSON.stringify(result);

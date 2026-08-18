@@ -1,10 +1,14 @@
 begin;
 
-select plan(16);
+select plan(18);
 
 select has_function(
   'public', 'claim_next_x_demo_fixed_window_task', array['uuid', 'timestamp with time zone'],
   'Ticket 01 exposes a scoped claim path for its explicit fixed-window task'
+);
+select has_function(
+  'public', 'create_x_demo_fixed_window_task_for_worker', array['uuid', 'timestamp with time zone', 'uuid', 'text'],
+  'Ticket 01 exposes a worker-scoped fixed-window creation path after identity activation'
 );
 select ok(
   has_function_privilege('service_role', 'public.claim_next_x_demo_fixed_window_task(uuid, timestamp with time zone)', 'EXECUTE')
@@ -50,17 +54,29 @@ insert into public.sync_tasks (
 );
 
 create temporary table scoped_task as
-select public.create_x_demo_fixed_window_task(
+select public.create_x_demo_fixed_window_task_for_worker(
   (select (payload->>'id')::uuid from scoped_source),
   '2026-08-17T16:00:00+08:00',
-  '00000000-0000-0000-0000-000000041001'
+  '00000000-0000-0000-0000-000000041002',
+  'scoped_fixture'
 ) as payload;
 create temporary table scoped_task_again as
-select public.create_x_demo_fixed_window_task(
+select public.create_x_demo_fixed_window_task_for_worker(
   (select (payload->>'id')::uuid from scoped_source),
   '2026-08-17T16:00:00+08:00',
-  '00000000-0000-0000-0000-000000041001'
+  '00000000-0000-0000-0000-000000041002',
+  'scoped_fixture'
 ) as payload;
+
+select throws_ok(
+  $$select public.create_x_demo_fixed_window_task_for_worker(
+    (select (payload->>'id')::uuid from scoped_source),
+    '2026-08-17T20:00:00+08:00',
+    '00000000-0000-0000-0000-000000041002',
+    'wrong_fixture'
+  )$$,
+  '22023', 'x_source_identity_mismatch', 'the worker-scoped creator requires the activated source identity'
+);
 
 select is((select payload->>'idempotent' from scoped_task), 'false', 'the first explicit fixed-window request creates one task');
 select is((select payload->>'idempotent' from scoped_task_again), 'true', 'the same source and cutoff are idempotent');

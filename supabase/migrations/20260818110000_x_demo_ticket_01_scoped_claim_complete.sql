@@ -2,6 +2,47 @@
 -- claim before the legacy continuous-waterline queue.  No drain or scheduler
 -- policy is changed here.
 
+create or replace function public.create_x_demo_fixed_window_task_for_worker(
+  p_source_id uuid,
+  p_cutoff_at timestamptz,
+  p_worker_id uuid,
+  p_account_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_source public.sources%rowtype;
+  v_profile public.x_source_profiles%rowtype;
+begin
+  if not exists (
+    select 1 from public.workers
+    where id = p_worker_id and status in ('enrolled', 'online')
+  ) then
+    raise exception 'worker_not_authorized' using errcode = '42501';
+  end if;
+  select * into v_source from public.sources
+  where id = p_source_id and source_type = 'x' and enabled and authorized_worker_id = p_worker_id
+  for update;
+  if not found then raise exception 'worker_not_authorized' using errcode = '42501'; end if;
+  select * into v_profile from public.x_source_profiles
+  where source_id = p_source_id and enabled
+  for update;
+  if not found or v_profile.resolution_status <> 'resolved' or v_profile.account_id is null then
+    raise exception 'x_source_unresolved' using errcode = '22023';
+  end if;
+  if p_account_id is null or v_profile.account_id <> p_account_id then
+    raise exception 'x_source_identity_mismatch' using errcode = '22023';
+  end if;
+  return public.create_x_demo_fixed_window_task(p_source_id, p_cutoff_at, v_source.created_by);
+end;
+$$;
+
+revoke all on function public.create_x_demo_fixed_window_task_for_worker(uuid, timestamptz, uuid, text) from public, anon, authenticated;
+grant execute on function public.create_x_demo_fixed_window_task_for_worker(uuid, timestamptz, uuid, text) to service_role;
+
 create or replace function public.claim_next_x_demo_fixed_window_task(
   p_worker_id uuid,
   p_now timestamptz

@@ -15,6 +15,13 @@ export type ScheduledTask = {
   idempotent: boolean;
 };
 
+export type DemoFixedWindowTask = {
+  id: string;
+  source_id: string;
+  idempotent: boolean;
+  demo_fixed_window: Json;
+};
+
 export type ScheduledTick = {
   window_key: string;
   tasks: ScheduledTask[];
@@ -60,6 +67,38 @@ export async function createDiscordSyncTask(input: {
   if (error) throw error;
   if (!data || typeof data !== "object") throw new Error("invalid_created_task");
   return data as Database["public"]["Tables"]["sync_tasks"]["Row"];
+}
+
+export async function createXDemoFixedWindowTaskForWorker(input: {
+  sourceId: string;
+  cutoffAt: string;
+  workerId: string;
+  accountId: string;
+}): Promise<DemoFixedWindowTask> {
+  if (![input.sourceId, input.cutoffAt, input.workerId, input.accountId].every((value) => typeof value === "string" && value.length > 0)) {
+    throw new TaskScopeError("invalid_fixed_window_request");
+  }
+  const client = createSupabaseAdminClient() as unknown as {
+    rpc(name: string, args: Record<string, string>): Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+  const { data, error } = await client.rpc("create_x_demo_fixed_window_task_for_worker", {
+    p_source_id: input.sourceId,
+    p_cutoff_at: input.cutoffAt,
+    p_worker_id: input.workerId,
+    p_account_id: input.accountId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_created_fixed_window");
+  const value = data as Record<string, unknown>;
+  if (typeof value.id !== "string" || value.source_id !== input.sourceId || typeof value.idempotent !== "boolean" || !value.demo_fixed_window || typeof value.demo_fixed_window !== "object") {
+    throw new TaskScopeError("invalid_created_fixed_window");
+  }
+  return {
+    id: value.id,
+    source_id: value.source_id as string,
+    idempotent: value.idempotent,
+    demo_fixed_window: value.demo_fixed_window as Json,
+  };
 }
 
 export async function scheduleDiscordSyncTasks(workerId: string, windowKey: string): Promise<ScheduledTick> {

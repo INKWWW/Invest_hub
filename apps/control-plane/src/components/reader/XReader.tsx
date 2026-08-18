@@ -23,10 +23,11 @@ function validOrAll(value: string | undefined, values: string[]) {
   return value && values.includes(value) ? value : ALL;
 }
 
-function initialDate(value: string | undefined, values: string[]) {
+function initialDate(value: string | undefined, days: XReaderDate[]) {
+  const values = dates(days);
   if (value === ALL) return ALL;
   if (value && values.includes(value)) return value;
-  return values[0] ?? ALL;
+  return days.find((day) => day.bloggers.some((blogger) => blogger.status === "succeeded" && blogger.segments.length > 0))?.naturalDate ?? ALL;
 }
 
 function currentRunText(status: NonNullable<XReaderDate["currentRun"]>["status"]) {
@@ -154,7 +155,6 @@ function XReaderDateCard({ day, sourceKey }: { day: XReaderDate; sourceKey: stri
   const bloggers = sourceKey === ALL ? day.bloggers : day.bloggers.filter((blogger) => blogger.source.sourceKey === sourceKey);
   return <section className="reader-day-card">
     <header><h2 className="x-reader-date"><span>日期</span>{day.naturalDate}</h2></header>
-    {day.currentRun ? <div className={`reader-status reader-status--${day.currentRun.status}`}><p role="status">截止 {cutoffLabel(day.currentRun.cutoffAt)}：{currentRunText(day.currentRun.status)}</p></div> : null}
     <section className="x-reader-judgement-section"><h2>当日判断总结</h2>{sourceKey === ALL && day.judgement.visible ? <JudgementList batches={day.judgement.batches} /> : <p>跨博主当日判断总结仅在全部博主视图展示。</p>}</section>
     <section className="x-reader-bloggers"><h2>单个博主观点</h2>{bloggers.map((blogger) => <XReaderBloggerCard key={blogger.source.sourceKey} blogger={blogger} />)}</section>
   </section>;
@@ -171,7 +171,8 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
     return dates(days);
   }, [days, initialNaturalDate]);
   const [sourceKey, setSourceKey] = useState(() => validOrAll(initialSourceKey, sourceOptions.map((source) => source.sourceKey)));
-  const [naturalDate, setNaturalDate] = useState(() => initialDate(initialNaturalDate, dateOptions));
+  const [naturalDate, setNaturalDate] = useState(() => initialDate(initialNaturalDate, days));
+  const currentRuns = days.flatMap((day) => day.currentRun ? [{ naturalDate: day.naturalDate, ...day.currentRun }] : []);
   const visibleDays = useMemo(() => days.filter((day) =>
     (naturalDate === ALL || day.naturalDate === naturalDate) && (sourceKey === ALL || day.bloggers.some((blogger) => blogger.source.sourceKey === sourceKey)),
   ), [days, naturalDate, sourceKey]);
@@ -200,6 +201,7 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
       </label>
     </aside>
     <article className="reader-content">
+      {currentRuns.length ? <div className="reader-status reader-current-run-status">{currentRuns.map((run) => <p role="status" key={`${run.naturalDate}:${run.cutoffAt}`}>截止 {cutoffLabel(run.cutoffAt)}：{currentRunText(run.status)}</p>)}</div> : null}
       {visibleDays.length ? <div className="reader-result-list">{visibleDays.map((day) => <XReaderDateCard key={day.naturalDate} day={day} sourceKey={sourceKey} />)}</div> : <p className="summary-empty">没有找到符合当前博主和日期筛选的 X 信息。</p>}
     </article>
   </section>;

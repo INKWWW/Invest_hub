@@ -8,9 +8,23 @@ vi.mock("../supabase-server", () => ({
 }));
 vi.mock("./x-daily-judgements", () => judgementMocks);
 
-import { completeWindowedCaptureRange, scheduleDueSourceTasks } from "./tasks";
+import { completeWindowedCaptureRange, createXDemoFixedWindowTaskForWorker, scheduleDueSourceTasks } from "./tasks";
 
 describe("due source scheduling", () => {
+  it("creates one worker-scoped fixed window with the activated identity", async () => {
+    databaseMocks.rpc.mockResolvedValue({
+      data: { id: "task-fixed", source_id: "source-x", idempotent: false, demo_fixed_window: { natural_date: "2099-01-01" } },
+      error: null,
+    });
+
+    await expect(createXDemoFixedWindowTaskForWorker({
+      sourceId: "source-x", cutoffAt: "2099-01-01T16:00:00+08:00", workerId: "worker-x", accountId: "fixture-account",
+    })).resolves.toMatchObject({ id: "task-fixed", source_id: "source-x", idempotent: false });
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("create_x_demo_fixed_window_task_for_worker", {
+      p_source_id: "source-x", p_cutoff_at: "2099-01-01T16:00:00+08:00", p_worker_id: "worker-x", p_account_id: "fixture-account",
+    });
+  });
+
   it("keeps X scheduling available when the retired Discord scheduler fails", async () => {
     judgementMocks.ensureDueXCollectionBatches.mockResolvedValue({});
     judgementMocks.advanceXManualRecoveryRuns.mockResolvedValue({ runs: [] });
