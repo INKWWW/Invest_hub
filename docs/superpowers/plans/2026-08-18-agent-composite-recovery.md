@@ -1,25 +1,53 @@
-# Agent Composite Recovery Implementation Plan
+# Agent Target-State Composite Recovery Implementation Plan
 
-> **For Codex:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task. Use `superpowers:test-driven-development` for code changes and `superpowers:verification-before-completion` before claiming a gate has passed.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Use `superpowers:test-driven-development` for code changes and `superpowers:verification-before-completion` before claiming a gate has passed.
 
-**Goal:** Produce a clean, reproducible Agent recovery candidate that matches the approved 2026-08-17 Agent UI, restores the approved Agent Worker/API behavior, preserves the currently released invitation, X, and Discord functionality, and stops at a user-testable webpage without changing production.
+**Goal:** Produce a clean, reproducible candidate for the exact user-selected state: the Agent, X, and Discord destinations remain peer navigation; the Agent uses the approved 2026-08-17 fixed-height internally scrollable chat window; and the “大师投研” control completes a real `investment-research` Skill run through the Agent API and local Codex CLI Worker.
 
 **Architecture:** Use commit `9747f75` as the release and migration baseline, explicitly layer the missing answer-preservation/provider-diagnostic fixes from `c4930e3`, `4fad8af`, and `06fa100`, restore the exact frontend artifact from `/private/tmp/invest-hub-agent-deploy.N9J2MC`, and overlay only the non-Agent registration changes from `/private/tmp/invest-hub-invited-registration-ticket-01`. Resolve shared files deliberately and add the smallest DTO compatibility layer required by the frontend. Database history is forward-only.
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, Supabase/Postgres/pgTAP, Python 3.11, Codex CLI Agent Worker, Vercel Preview/Promote.
 
+**Spec:** `.scratch/investment-research-agent-demo/spec.md`, especially the approved Skill invocation and execution contracts; this recovery plan narrows the release target to the user-selected UI and `investment-research` path without changing that Feature Contract.
+
+**Plan Status:** Draft. The 2026-08-18 user request authorizes this document only. No implementation, real Codex call, Preview, deployment, database change, or Worker operation is authorized until the user separately approves this complete plan.
+
 ---
 
-## Authorization and non-negotiable boundaries
+## Global Constraints
 
-The user has authorized Tasks 1-7 only. Those tasks end with an isolated test webpage and acceptance checklist. Tasks 8-9 are documented for continuity but are not authorized until the user explicitly says `符合预期，可以上线`.
+This document separates two future approvals. Approval of the complete plan authorizes Tasks 1-7, ending at an isolated test webpage and acceptance checklist. Tasks 8-9 remain unauthorized until the user explicitly says `符合预期，可以上线` or gives an equally explicit production Release Authorization.
 
 - Start from the committed `codex/agent-composite-recovery` plan branch and work only in the explicit task's assigned isolated worktree. Do not edit, clean, reset, stage, or deploy from the dirty main checkout or another feature worktree.
 - Do not push, merge, tag, promote a Vercel deployment, move the stable alias, apply or reverse a remote migration, change production Supabase Auth, install/restart a production Worker, create production test identities, or write production data during Tasks 1-7.
-- Do not add Agent-Reach, Jina Reader, Exa, Codex native Web Search, or any other web-search path. The relevant experiments were Spikes, not an approved production integration.
+- Do not add or wire Agent-Reach, Jina Reader, Exa, Codex native Web Search, or another search adapter as part of this recovery. The bounded Skill run may use only capabilities already present in the frozen Skill/current CLI environment, but Web Search is neither a recovery deliverable nor evidence of a new integration.
 - Do not delete or reverse any production migration. Treat `20260817090000_invited_user_registration_consistency.sql` and the already-applied RPC/Auth configuration as forward-compatible state to preserve.
 - Never expose prompts, credentials, cookies, raw Provider stdout/stderr, private paths, test identities, full invite codes, or production data in logs or handoffs.
 - A generic `vercel rollback` is not an acceptable formal recovery. The immediately preceding deployment `ca907bb` had already begun the UI regression. An emergency rollback must target a specifically identified immutable deployment and still would not roll back Supabase or the standalone Worker.
+- The restored “大师投研” path means `skill_id=investment-research` using the approved frozen Skill bundle and current Codex CLI Worker boundary. It does not add Agent-Reach, Jina Reader, Exa, or a new Web Search integration, and the test is not allowed to claim those Spikes as production capability.
+- A scripted Provider proves deterministic contracts; it does not prove the target state. The test-page gate requires one separately authorized bounded real Codex CLI `investment-research` run using synthetic or public test input.
+
+## Recovery target contract
+
+The recovery unit is a behavior bundle, not a historical repository SHA. No single clean commit contains all required behavior because the final 1200px frontend existed only in a temporary deployment source, the Skill runtime and timeout fixes were developed on separate commits, and invitation registration was later deployed from a dirty older base.
+
+| User-visible contract | Exact acceptance evidence |
+| --- | --- |
+| Peer destinations | `/agent`, `/x`, and `/discord` each render the same `ReaderSourceNavigation`; the visible labels are `投资研究 Agent`, `X 信息`, and `Discord 信息-WIP`; the three controls share one flex row at the approved desktop viewport |
+| Chat geometry | `.agent-workbench` has `height: 1200px`, `min-height: 0`, `overflow: hidden`, and rows `auto minmax(0, 1fr)`; `.agent-message-list` has `min-height: 0` and `overflow-y: auto` |
+| Composer behavior | Sidebar and composer remain fixed while only the message list scrolls; the send copy is `点击发送（回车仅换行）`; `研究额度` and `发送纯文本消息` are absent |
+| Master research selection | Clicking `大师投研` makes the current message visibly explicit, submits `invocation_mode=explicit` and `skill_id=investment-research`, and clears the composer selection after successful submission |
+| Master research execution | Control Plane persists the run, the Worker claims the same `skill_id`, validates frozen upstream commit `d64751635308d1920bcdae234e6dd957fd79e736`, loads the full `investment-research/SKILL.md`, invokes Codex CLI, and persists the final assistant Markdown |
+| Refresh continuity | Reloading `/agent` preserves the user message, assistant Markdown, Thread title, terminal run status, and the message's `skill_id`; it does not restore a hidden composer selection |
+| Non-Agent preservation | Invitation registration/login, `/x`, and `/discord` retain their current contracts and migrations; restoring Agent files cannot replace their routes, CSS, data types, or tests with an older baseline |
+
+## Recovery decision
+
+Do not use a one-step production rollback as the planned fix. Promoting the old 15:17 UI artifact could restore appearance quickly if Vercel still retains it, but it would not select the matching Worker, would not undo Supabase state, and would discard later invitation code. Build a clean composite candidate, test it in isolation, and later Promote that same immutable artifact only after visual acceptance.
+
+## Workflow authority
+
+This is an incident-recovery plan, not a new Agent feature or a replacement Feature Contract. The approved Matt artifacts under `.scratch/investment-research-agent-demo/` remain the source for product and Skill semantics. If the user approves this recovery plan, this document becomes the single execution source only for reconstructing, verifying, and releasing the selected previously approved state; the historical six-ticket graph must not run in parallel as a second implementation controller.
 
 ## Frozen sources and acceptance truth
 
@@ -36,6 +64,11 @@ Frontend artifact hashes must equal:
 - `apps/control-plane/src/app/globals.css`: `d198d3af3433d0a593ac0519d4045adb9ffe444b21dd2b1ed78d4d89ac4b5bc1`
 - `apps/control-plane/src/components/agent/ResearchAgentShell.tsx`: `3bf90f8fbe2a620f76ab1743d0687cf3936715a228aeacad901bd53322f914b8`
 - `apps/control-plane/src/components/agent/ResearchAgentShell.test.tsx`: `086bbf5f94cef3ddec4adeee37c5671dd00ebc51bd85f6bc20ac27bc0d4f9836`
+- `apps/control-plane/src/components/agent/SafeMarkdown.tsx`: `7ece4fc54192a64e206523e6df6ae03e1f45172a4e29dd11d3c4d0bf2dc065db`
+- `apps/control-plane/src/lib/agent-demo/markdown.ts`: `eaf10f4cbc21d9de57556aef4f9c5d3c5a8ce0c025c43df5414b0f0f74f9dcc6`
+- `apps/control-plane/src/lib/agent-demo/markdown.test.ts`: `8ebc15c4bb949c5eebb11ed6c79b6479684d3ce9dfce34df3bb82a2d4beb9f79`
+- `apps/control-plane/src/components/reader/ReaderSourceNavigation.tsx`: `362d8751e494f951f19d1af533aeaa5e2296dad05f0486e49398e2cd12f1351f`
+- `apps/control-plane/src/components/reader/reader-source-navigation.test.tsx`: `eb08f3c578c69f7dc02e388beda3ea8f44a48dd4ad7a2ed096f0d8fdc5191ac4`
 
 The screenshot is a static visual contract, not a requirement to fake runtime state. Account name, thread titles, messages, selected Skill, and input text may differ. `Agent 暂时不可用` must appear only when the Worker is actually unavailable; it must not be hard-coded into the healthy candidate.
 
@@ -62,6 +95,20 @@ Expected: the task started from the plan commit on `codex/agent-composite-recove
 - [ ] **Step 2: Verify all frozen sources before copying anything**
 
 Run exact existence and SHA-256 checks for the frontend artifact, `git cat-file -e` for all four commits, and `git status --short` in the registration source. Record the registration source as dirty and inventory every file; never treat it as a reproducible commit.
+
+```bash
+test -f /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/app/globals.css
+test -f /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/components/agent/ResearchAgentShell.tsx
+test -f /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/components/agent/SafeMarkdown.tsx
+shasum -a 256 /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/app/globals.css /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/components/agent/ResearchAgentShell.tsx /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/components/agent/ResearchAgentShell.test.tsx /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/components/agent/SafeMarkdown.tsx /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/lib/agent-demo/markdown.ts /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/lib/agent-demo/markdown.test.ts /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/components/reader/ReaderSourceNavigation.tsx /private/tmp/invest-hub-agent-deploy.N9J2MC/apps/control-plane/src/components/reader/reader-source-navigation.test.tsx
+git cat-file -e 9747f75^{commit}
+git cat-file -e c4930e3^{commit}
+git cat-file -e 4fad8af^{commit}
+git cat-file -e 06fa100^{commit}
+git -C /private/tmp/invest-hub-invited-registration-ticket-01 status --short
+```
+
+Expected: all eight hashes equal the frozen values in this plan; all four commits resolve; the registration source reports only the files enumerated in Task 5.
 
 - [ ] **Step 3: Capture read-only production rollback facts**
 
@@ -138,16 +185,45 @@ git commit -m "fix(agent): restore timeout answer preservation"
 **Files:**
 - Modify: `apps/control-plane/src/app/globals.css`
 - Modify: `apps/control-plane/src/app/globals.test.ts`
+- Verify: `apps/control-plane/src/app/agent/page.tsx`
+- Verify: `apps/control-plane/src/app/x/page.tsx`
+- Verify: `apps/control-plane/src/app/discord/page.tsx`
 - Modify: `apps/control-plane/src/components/agent/ResearchAgentShell.tsx`
 - Modify: `apps/control-plane/src/components/agent/ResearchAgentShell.test.tsx`
-- Verify/Modify if required by the frozen artifact: `apps/control-plane/src/components/agent/SafeMarkdown.tsx`
+- Verify: `apps/control-plane/src/components/reader/ReaderSourceNavigation.tsx`
+- Modify: `apps/control-plane/src/components/reader/reader-source-navigation.test.tsx`
+- Modify: `apps/control-plane/src/components/agent/SafeMarkdown.tsx`
+- Modify: `apps/control-plane/src/lib/agent-demo/markdown.ts`
+- Modify: `apps/control-plane/src/lib/agent-demo/markdown.test.ts`
+
+**Interfaces:**
+- Consumes: `ReaderSourceNavigation({ active }: { active: "agent" | "discord" | "x" })`; frozen API message field `skill_id`; frozen frontend artifact hashes listed above.
+- Produces: peer links `/agent`, `/x`, `/discord`; `.agent-workbench` and `.agent-message-list` geometry contracts; explicit Skill submission `{ content, request_id, invocation_mode: "explicit", skill_id: "investment-research" }`.
 
 - [ ] **Step 1: Strengthen failing UI contract tests before replacement**
 
-Tests must assert the 1200px desktop height, mobile viewport cap, `minmax(0, 1fr)`, internal message scrolling, absence of visible `研究额度` and `发送纯文本消息`, presence of the four Skill controls, selected `/Skill` token, run-status rendering, and `点击发送（回车仅换行）`.
+Tests must assert the 1200px desktop height, mobile viewport cap, `minmax(0, 1fr)`, internal message scrolling, absence of visible `研究额度` and `发送纯文本消息`, presence of the four Skill controls, selected `/Skill` token, run-status rendering, and `点击发送（回车仅换行）`. Extend the navigation test with these exact assertions:
+
+```tsx
+const agent = renderToStaticMarkup(<ReaderSourceNavigation active="agent" />);
+expect(agent).toContain('href="/agent" aria-current="page"');
+expect(agent).toContain('href="/x"');
+expect(agent).toContain('href="/discord"');
+expect(agent).toContain("投资研究 Agent");
+expect(agent).toContain("X 信息");
+expect(agent).toContain("Discord 信息-WIP");
+```
+
+Extend the CSS contract test with literal selector/declaration assertions for:
+
+```css
+.reader-source-links { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.agent-workbench { grid-template-rows: auto minmax(0, 1fr); height: 1200px; min-height: 0; overflow: hidden; }
+.agent-message-list { min-height: 0; overflow-y: auto; }
+```
 
 ```bash
-cd apps/control-plane && ./node_modules/.bin/vitest run src/app/globals.test.ts src/components/agent/ResearchAgentShell.test.tsx
+cd apps/control-plane && ./node_modules/.bin/vitest run src/app/globals.test.ts src/lib/agent-demo/markdown.test.ts src/components/reader/reader-source-navigation.test.tsx src/components/agent/ResearchAgentShell.test.tsx
 ```
 
 Expected: at least the new 1200px/static contract assertions fail before restoration.
@@ -163,32 +239,59 @@ Run the same Vitest command. Expected: pass.
 - [ ] **Step 4: Commit the frontend restoration**
 
 ```bash
-git add apps/control-plane/src/app/globals.css apps/control-plane/src/app/globals.test.ts apps/control-plane/src/components/agent/ResearchAgentShell.tsx apps/control-plane/src/components/agent/ResearchAgentShell.test.tsx apps/control-plane/src/components/agent/SafeMarkdown.tsx
+git add apps/control-plane/src/app/globals.css apps/control-plane/src/app/globals.test.ts apps/control-plane/src/components/agent/ResearchAgentShell.tsx apps/control-plane/src/components/agent/ResearchAgentShell.test.tsx apps/control-plane/src/components/agent/SafeMarkdown.tsx apps/control-plane/src/lib/agent-demo/markdown.ts apps/control-plane/src/lib/agent-demo/markdown.test.ts apps/control-plane/src/components/reader/ReaderSourceNavigation.tsx apps/control-plane/src/components/reader/reader-source-navigation.test.tsx
 git commit -m "fix(agent): restore approved research workspace ui"
 ```
 
-### Task 4: Add only the frontend/backend compatibility contract
+### Task 4: Restore the real Master Research route and compatibility contract
 
 **Files:**
+- Verify: `apps/control-plane/src/lib/agent-demo/skill-routing.ts`
+- Modify: `apps/control-plane/src/lib/agent-demo/skill-routing.test.ts`
 - Modify: `apps/control-plane/src/lib/db/repositories/research-threads.ts`
+- Verify: `apps/control-plane/src/app/api/agent/threads/[threadId]/messages/route.ts`
+- Modify: `apps/control-plane/src/app/api/agent/threads/[threadId]/messages/route.test.ts`
 - Modify: `apps/control-plane/src/app/api/agent/threads/[threadId]/route.ts`
 - Modify: `apps/control-plane/src/app/api/agent/threads/[threadId]/route.test.ts`
-- Modify or create focused repository test beside `research-threads.ts`
+- Create: `apps/control-plane/src/lib/db/repositories/research-threads.test.ts`
 - Verify: `apps/control-plane/src/lib/db/repositories/agent-demo-runs.ts`
 - Verify: `apps/control-plane/src/app/api/agent/runs/[runId]/route.ts`
+- Verify: `apps/control-plane/src/app/api/worker/agent-demo/claim/route.ts`
+- Verify: `workers/v0/src/invest_hub_worker/skill_runtime.py`
+- Modify: `workers/v0/tests/test_skill_runtime.py`
+- Verify: `skills/upstream/d64751635308d1920bcdae234e6dd957fd79e736/provenance.json`
+- Verify: `skills/upstream/d64751635308d1920bcdae234e6dd957fd79e736/investment-research/SKILL.md`
+
+**Interfaces:**
+- Consumes: button mapping `大师投研 -> investment-research -> /investment-research`; message POST fields `invocation_mode` and `skill_id`; frozen Skill provenance commit `d64751635308d1920bcdae234e6dd957fd79e736`.
+- Produces: one persisted `agent_demo_run` with `invocation_mode="explicit"` and `skill_id="investment-research"`; Worker claim containing the same `skill_id`; Thread detail user message with `skill_id`; final assistant Markdown with no local path or raw diagnostics.
 
 - [ ] **Step 1: Add failing DTO/repository tests**
 
-Prove that thread detail returns `skill_id` on the associated user message and preserves message order/title behavior. Prove the run detail continues to expose `skill_id`, `created_at`, `started_at`, and `completed_at`.
+Prove that the button/command mapping returns exactly `investment-research`, the message endpoint persists explicit invocation without substituting another Skill, the Worker claim returns the same `skill_id`, and thread detail returns `skill_id` on the associated user message while preserving message order/title behavior. Prove the run detail continues to expose `skill_id`, `created_at`, `started_at`, and `completed_at`.
+
+The focused routing assertion must include:
+
+```ts
+expect(SKILL_DEFINITIONS).toContainEqual({
+  buttonLabel: "大师投研",
+  id: "investment-research",
+  command: "/investment-research",
+});
+```
+
+The Worker test must build a claim with `skill_id: "investment-research"`, instantiate `SkillRuntime` against the frozen bundle, and assert the generated Codex prompt contains both the full frozen Skill instruction and the user's public synthetic question.
 
 - [ ] **Step 2: Implement the minimal mapping**
 
-Add `skillId` to `ResearchMessage`, query `agent_demo_runs` by `user_message_id`, map Skill metadata to the corresponding user message, and serialize it as `skill_id`. Do not change Worker execution, admission, quota, task claiming, or Provider behavior.
+Add `skillId` to `ResearchMessage`, query `agent_demo_runs` by `user_message_id`, map Skill metadata to the corresponding user message, and serialize it as `skill_id`. Retain the fixed Skill allowlist and provenance/hash validation in `SkillRuntime`; do not replace the full Skill with a name or summary. Do not change Worker admission, quota, RLS, task claiming, or Provider selection semantics.
 
 - [ ] **Step 3: Run focused API, repository, and component tests**
 
 ```bash
-cd apps/control-plane && ./node_modules/.bin/vitest run 'src/app/api/agent/threads/[threadId]/route.test.ts' src/components/agent/ResearchAgentShell.test.tsx
+cd apps/control-plane && ./node_modules/.bin/vitest run src/lib/agent-demo/skill-routing.test.ts 'src/app/api/agent/threads/[threadId]/messages/route.test.ts' 'src/app/api/agent/threads/[threadId]/route.test.ts' src/components/agent/ResearchAgentShell.test.tsx
+PYTHONPATH=workers/v0/src .venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_skill_runtime.py' -v
+PYTHONPATH=workers/v0/src .venv/bin/python -m unittest discover -s workers/v0/tests -p 'test_agent_demo.py' -v
 ```
 
 Expected: pass.
@@ -196,9 +299,9 @@ Expected: pass.
 - [ ] **Step 4: Commit the compatibility layer**
 
 ```bash
-git add apps/control-plane/src/lib/db/repositories/research-threads.ts 'apps/control-plane/src/app/api/agent/threads/[threadId]/route.ts' 'apps/control-plane/src/app/api/agent/threads/[threadId]/route.test.ts'
+git add apps/control-plane/src/lib/agent-demo/skill-routing.ts apps/control-plane/src/lib/agent-demo/skill-routing.test.ts apps/control-plane/src/lib/db/repositories/research-threads.ts 'apps/control-plane/src/app/api/agent/threads/[threadId]/messages/route.ts' 'apps/control-plane/src/app/api/agent/threads/[threadId]/messages/route.test.ts' 'apps/control-plane/src/app/api/agent/threads/[threadId]/route.ts' 'apps/control-plane/src/app/api/agent/threads/[threadId]/route.test.ts' apps/control-plane/src/app/api/worker/agent-demo/claim/route.ts workers/v0/src/invest_hub_worker/skill_runtime.py workers/v0/tests/test_skill_runtime.py
 git add apps/control-plane/src/lib/db/repositories/*research*test*
-git commit -m "fix(agent): restore thread skill metadata contract"
+git commit -m "fix(agent): restore master research invocation contract"
 ```
 
 ### Task 5: Preserve the released invitation and non-Agent functionality
@@ -220,7 +323,9 @@ git commit -m "fix(agent): restore thread skill metadata contract"
 - Modify: `supabase/config.toml`
 - Create: `supabase/migrations/20260817090000_invited_user_registration_consistency.sql`
 - Create: `supabase/tests/040_invited_user_registration_consistency.sql`
-- Modify only for existing type-test compatibility: the three registration-source reader/admin test files listed in the source manifest
+- Modify: `apps/control-plane/src/components/admin/source-author-profiles-form.test.tsx`
+- Modify: `apps/control-plane/src/components/reader/x-reader-client.test.tsx`
+- Modify: `apps/control-plane/src/components/reader/x-reader.test.tsx`
 
 - [ ] **Step 1: Inventory and classify the dirty registration diff**
 
@@ -288,6 +393,10 @@ Confirm the registration RPC is not executable by `anon`/`authenticated`, Agent 
 - Create: `docs/handoffs/2026-08-18-agent-composite-recovery-preview.md`
 - Verify: all changed files
 
+**Interfaces:**
+- Consumes: clean candidate commit; local Supabase; synthetic Test Identity; frozen Skill bundle; local Codex CLI authentication; isolated Control Plane and Agent Worker processes.
+- Produces: one user-testable `/agent` URL, one desktop screenshot at the approved viewport, one persisted real `investment-research` run, and a sanitized acceptance matrix that contains identifiers/statuses but no private prompt or raw Provider output.
+
 - [ ] **Step 1: Run the complete local gate from the clean candidate**
 
 ```bash
@@ -308,21 +417,40 @@ Expected: every command passes; only intentional committed files exist; no secre
 
 Use local Supabase, the candidate Control Plane, the candidate Agent Worker, synthetic invites, and disposable local identities. Do not point a public Preview at production Supabase. If a safe isolated public Preview cannot be created, deliver a localhost test URL and keep the services running for user acceptance.
 
-- [ ] **Step 3: Run functional and visual browser verification**
+- [ ] **Step 3: Prove the selected Master Research path with one bounded real case**
+
+Use a public, non-sensitive question such as `请用大师投研框架分析一家公开上市公司的长期竞争优势，明确区分事实、判断和待核实项。` Click the visible `大师投研` control rather than calling the Worker directly. Record only sanitized evidence proving this sequence:
+
+```text
+browser selected 大师投研
+  -> POST message invocation_mode=explicit, skill_id=investment-research
+  -> Supabase run queued/running
+  -> Worker claim skill_id=investment-research
+  -> frozen Skill commit/hash validation passed
+  -> Codex CLI completed
+  -> assistant Markdown persisted
+  -> run succeeded
+  -> browser refresh returned the same message, skill_id, title, status, and answer
+```
+
+If Codex login, network access, frozen Skill validation, Worker claim, or persistence fails, stop. Do not replace the real case with scripted output and do not broaden the test to Agent-Reach/Jina/Web Search.
+
+- [ ] **Step 4: Run functional and visual browser verification**
 
 At the screenshot viewport (approximately 1204x1280), capture a candidate screenshot and compare:
 
 - header/navigation, typography, colors, borders, two-column geometry, sidebar controls, four Skill buttons, tokenized composer, and send button match the approved baseline;
 - `.agent-workbench` is 1200px on desktop and messages scroll internally;
 - `研究额度` and `发送纯文本消息` are absent;
+- all three peer controls are on the same desktop navigation row and reach `/agent`, `/x`, and `/discord` without 404/500;
 - healthy Worker state does not show `Agent 暂时不可用`;
 - deliberately stopped isolated Worker does show the unavailable state, then recovery clears it;
-- intelligent chat and one Skill chat complete; refresh preserves messages, title, Skill metadata, and run status;
+- intelligent chat and the real `大师投研` Skill chat complete; refresh preserves messages, title, Skill metadata, and run status;
 - a timeout after answer creation preserves the answer;
 - invitation login/registration, X Reader, and Discord routes still render and their focused tests remain green;
 - mobile height uses `min(1200px, calc(100dvh - 9rem))` without making this the previously deferred full 375px release gate.
 
-- [ ] **Step 4: Write the preview handoff and stop**
+- [ ] **Step 5: Write the preview handoff and stop**
 
 The handoff must include candidate commit SHA, local/Preview URL, process start/stop commands, test-data scope, screenshot path, command results, known limitations, and exact production actions that were not performed. Commit it, then stop and wait for the user's visual acceptance.
 
