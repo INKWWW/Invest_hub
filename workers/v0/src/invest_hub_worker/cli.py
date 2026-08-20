@@ -25,6 +25,16 @@ from .x_identity import IdentityResolutionError, OpenCLIProfileInvoker, resolve_
 
 
 _SCHEDULED_FAILURE_BACKOFF_SECONDS = 300
+_SAFE_SEQUENTIAL_START_ERROR_CODES = frozenset({
+    "x_demo_fixed_window_run_failed",
+    "worker_not_authorized",
+    "invalid_x_demo_fixed_window_run_request",
+    "invalid_x_demo_fixed_window_run",
+    "invalid_x_demo_cutoff",
+    "x_demo_fixed_window_batch_not_available",
+    "x_demo_fixed_window_snapshot_changed",
+    "x_demo_sources_not_ready",
+})
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -191,7 +201,16 @@ def main(argv: list[str] | None = None) -> int:
                 judgement_runtime.execute if judgement_runtime is not None and hasattr(judgement_runtime, "execute") else None,
             )
         except (IdentityResolutionError, ProtocolError, RuntimeExecutionError, ValueError) as exc:
-            print(json.dumps({"status": "failed", "error": type(exc).__name__}, sort_keys=True))
+            failure = {"status": "failed", "error": type(exc).__name__}
+            if (
+                isinstance(exc, ProtocolError)
+                and isinstance(exc.status, int)
+                and not isinstance(exc.status, bool)
+                and 100 <= exc.status <= 599
+                and str(exc) in _SAFE_SEQUENTIAL_START_ERROR_CODES
+            ):
+                failure.update({"http_status": exc.status, "error_code": str(exc)})
+            print(json.dumps(failure, sort_keys=True))
             return 1
         print(json.dumps({
             "status": outcome.status, "run_id": outcome.run_id, "cutoff_at": outcome.cutoff_at,

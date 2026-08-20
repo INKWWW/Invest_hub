@@ -8,6 +8,7 @@ import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from invest_hub_worker.cli import (
@@ -108,6 +109,65 @@ class JudgementDispatchFailingWorker(ScheduledWorker):
 
 
 class WorkerCliTests(unittest.TestCase):
+    def test_sequential_cli_preserves_safe_protocol_status_and_error_code(self) -> None:
+        config = LocalWorkerConfigSet.from_mapping({
+            "control_plane_url": "https://control.example.invalid",
+            "sources": [{
+                "source_id": "x-source", "source_type": "x", "source_url": "https://x.com/fixture_handle",
+                "profile_ref": "/private/profile", "opencli_contract_version": "v2", "parameter_version": "x-standard-v2",
+            }],
+        })
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"V2_REAL_X_ACK": "authorized"}, clear=False):
+            with patch("invest_hub_worker.cli.LocalWorkerConfigSet.load", return_value=config), \
+                 patch("invest_hub_worker.cli.WorkerProtocol", return_value=SimpleNamespace(credential=object())), \
+                 patch("invest_hub_worker.cli.build_authorized_runtime_set", return_value=SimpleNamespace(execute=lambda *_args: None, execute_windowed=lambda *_args: None)), \
+                 patch("invest_hub_worker.cli.build_authorized_x_daily_judgement_runtime", return_value=None), \
+                 patch("invest_hub_worker.cli.Worker", return_value=object()), \
+                 patch("invest_hub_worker.cli.run_sequential_x_fixed_window", side_effect=ProtocolError("x_demo_fixed_window_run_failed", status=503)), \
+                 contextlib.redirect_stdout(output):
+                code = main([
+                    "run-x-fixed-window-sequential", "--config", "/private/config.toml", "--credential", "/private/credential.json",
+                    "--opencli-contract", "/private/contract.json", "--prompt-path", "/private/prompt.md",
+                    "--evidence-dir", str(Path(directory) / "evidence"), "--cutoff", "2026-08-20T20:00:00+08:00",
+                    "--opencli-executable", "/private/opencli",
+                ])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(output.getvalue()), {
+            "status": "failed", "error": "ProtocolError", "http_status": 503,
+            "error_code": "x_demo_fixed_window_run_failed",
+        })
+
+    def test_sequential_cli_does_not_emit_private_protocol_error_details(self) -> None:
+        config = LocalWorkerConfigSet.from_mapping({
+            "control_plane_url": "https://control.example.invalid",
+            "sources": [{
+                "source_id": "x-source", "source_type": "x", "source_url": "https://x.com/fixture_handle",
+                "profile_ref": "/private/profile", "opencli_contract_version": "v2", "parameter_version": "x-standard-v2",
+            }],
+        })
+        output = io.StringIO()
+        private_detail = "secret_token"
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"V2_REAL_X_ACK": "authorized"}, clear=False):
+            with patch("invest_hub_worker.cli.LocalWorkerConfigSet.load", return_value=config), \
+                 patch("invest_hub_worker.cli.WorkerProtocol", return_value=SimpleNamespace(credential=object())), \
+                 patch("invest_hub_worker.cli.build_authorized_runtime_set", return_value=SimpleNamespace(execute=lambda *_args: None, execute_windowed=lambda *_args: None)), \
+                 patch("invest_hub_worker.cli.build_authorized_x_daily_judgement_runtime", return_value=None), \
+                 patch("invest_hub_worker.cli.Worker", return_value=object()), \
+                 patch("invest_hub_worker.cli.run_sequential_x_fixed_window", side_effect=ProtocolError(private_detail, status=503)), \
+                 contextlib.redirect_stdout(output):
+                code = main([
+                    "run-x-fixed-window-sequential", "--config", "/private/config.toml", "--credential", "/private/credential.json",
+                    "--opencli-contract", "/private/contract.json", "--prompt-path", "/private/prompt.md",
+                    "--evidence-dir", str(Path(directory) / "evidence"), "--cutoff", "2026-08-20T20:00:00+08:00",
+                    "--opencli-executable", "/private/opencli",
+                ])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(output.getvalue()), {"status": "failed", "error": "ProtocolError"})
+        self.assertNotIn(private_detail, output.getvalue())
+
     def test_agent_demo_parser_requires_one_run_and_isolated_inputs(self) -> None:
         parser = build_parser()
         args = parser.parse_args([
