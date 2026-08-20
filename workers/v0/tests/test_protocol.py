@@ -66,6 +66,22 @@ def valid_v4_context() -> dict[str, object]:
     }
 
 
+def valid_v5_completion() -> dict[str, object]:
+    return {
+        "run_id": "judgement-run-1", "attempt": 1,
+        "schema_version": "v5-x-cross-blogger", "provider": "codex_cli",
+        "model_reported": None, "prompt_version": "v5-x-cross-blogger-1",
+        "ai_synthesis": {"cross_blogger_integrations": [], "ai_assessments": []},
+        "security_industry_theses": [{
+            "thesis_id": "security-01", "headline": "当前产业判断仍需观察。",
+            "synthesis": "该判断来自输入窗口。", "scenario_branches": [], "attributed_actions": [],
+            "supporting_source_ids": ["source-a"], "dissenting_source_ids": [],
+            "analysis_ids": ["post-a@2"], "evidence_post_ids": ["post-a"], "uncertainties": [],
+        }],
+        "market_structure_theses": [], "strategy_mindset_theses": [], "uncertainties": [],
+    }
+
+
 class WorkerProtocolTests(unittest.TestCase):
     def test_enrol_persists_secret_but_never_the_raw_code(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -461,6 +477,49 @@ class WorkerProtocolTests(unittest.TestCase):
             self.assertEqual(transport.calls[2]["body"], {"attempt": 1})
             self.assertTrue(str(transport.calls[3]["url"]).endswith("/api/worker/x-daily-judgements/judgement-run-1/complete"))
             self.assertTrue(str(transport.calls[4]["url"]).endswith("/api/worker/x-daily-judgements/judgement-run-1/failure"))
+
+    def test_x_daily_judgement_protocol_accepts_v5_context_and_completion(self) -> None:
+        context = valid_v4_context()
+        context["prompt_version"] = "v5-x-cross-blogger-1"
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()), (200, context), (200, {"status": "succeeded"}))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            self.assertEqual(protocol.get_x_daily_judgement_context("judgement-run-1", 1)["prompt_version"], "v5-x-cross-blogger-1")
+            self.assertEqual(protocol.complete_x_daily_judgement(valid_v5_completion())["status"], "succeeded")
+
+    def test_x_daily_judgement_protocol_rejects_v5_none_action_before_transport(self) -> None:
+        completion = valid_v5_completion()
+        completion["security_industry_theses"][0]["attributed_actions"] = [{
+            "source_id": "source-a", "action_intent": "none", "action_scope_status": "not_applicable",
+            "action_scope": "", "conditions": [], "analysis_ids": ["post-a@2"],
+            "evidence_post_ids": ["post-a"], "uncertainties": [],
+        }]
+        with tempfile.TemporaryDirectory() as directory:
+            transport = FakeTransport((201, enrolment_response()))
+            protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+            protocol.enrol("one-time-enrolment-code")
+
+            with self.assertRaisesRegex(ProtocolError, "invalid x daily judgement completion"):
+                protocol.complete_x_daily_judgement(completion)
+
+            self.assertEqual(len(transport.calls), 1)
+
+    def test_x_daily_judgement_protocol_rejects_v5_unsafe_natural_text_before_transport(self) -> None:
+        for invalid_value in (None, 7, "\x00control", "/private/evidence", "x" * 301):
+            with self.subTest(invalid_value=repr(invalid_value)):
+                completion = valid_v5_completion()
+                completion["security_industry_theses"][0]["headline"] = invalid_value
+                with tempfile.TemporaryDirectory() as directory:
+                    transport = FakeTransport((201, enrolment_response()))
+                    protocol = WorkerProtocol("https://control.example.invalid", Path(directory) / "credentials.json", transport=transport)
+                    protocol.enrol("one-time-enrolment-code")
+
+                    with self.assertRaisesRegex(ProtocolError, "invalid x daily judgement completion"):
+                        protocol.complete_x_daily_judgement(completion)
+
+                    self.assertEqual(len(transport.calls), 1)
 
     def test_x_daily_judgement_completion_rejects_unsafe_item_before_transport(self) -> None:
         completion = valid_v4_completion()

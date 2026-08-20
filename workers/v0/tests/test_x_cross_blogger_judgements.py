@@ -112,6 +112,21 @@ def runtime_v3_output() -> dict[str, object]:
     return output
 
 
+def runtime_v5_output() -> dict[str, object]:
+    return {
+        "schema_version": "v5-x-cross-blogger",
+        "ai_synthesis": {"cross_blogger_integrations": [], "ai_assessments": []},
+        "security_industry_theses": [{
+            "thesis_id": "security-01", "headline": "人工智能基础设施需求仍需观察。",
+            "synthesis": "该判断来自当前窗口的直接观点。", "scenario_branches": [],
+            "attributed_actions": [], "supporting_source_ids": ["source-a"],
+            "dissenting_source_ids": [], "analysis_ids": ["post-a@2"],
+            "evidence_post_ids": ["post-a"], "uncertainties": [],
+        }],
+        "market_structure_theses": [], "strategy_mindset_theses": [], "uncertainties": [],
+    }
+
+
 class XCrossBloggerJudgementV3SchemaTests(unittest.TestCase):
     def parse(self, output: dict[str, object]) -> dict[str, object]:
         parser = getattr(structured, "parse_v3_x_cross_blogger_output", None)
@@ -162,6 +177,52 @@ class XCrossBloggerJudgementV3SchemaTests(unittest.TestCase):
 
 
 class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
+    def parse_v5(self, output: dict[str, object], input_sources: list[dict[str, object]] | None = None) -> dict[str, object]:
+        parser = getattr(structured, "parse_v5_x_cross_blogger_output", None)
+        self.assertIsNotNone(parser, "v5 cross-blogger parser must be public")
+        return parser(  # type: ignore[misc,no-any-return]
+            json.dumps(output, ensure_ascii=False),
+            allowed_source_ids={"source-a"},
+            allowed_analysis_ids={"post-a@2"},
+            allowed_post_ids={"post-a"},
+            analysis_source_ids={"post-a@2": "source-a"},
+            analysis_evidence_post_ids={"post-a@2": {"post-a"}},
+            frozen_source_ids={"source-a"},
+            input_sources=input_sources or [{"content": "公开输入"}],
+        )
+
+    def test_v5_rejects_none_action_and_not_applicable_scope(self) -> None:
+        invalid = runtime_v5_output()
+        invalid["security_industry_theses"][0]["attributed_actions"] = [{
+            "source_id": "source-a", "action_intent": "none", "action_scope_status": "not_applicable",
+            "action_scope": "", "conditions": [], "analysis_ids": ["post-a@2"],
+            "evidence_post_ids": ["post-a"], "uncertainties": [],
+        }]
+        with self.assertRaisesRegex(structured.SchemaError, "action"):
+            self.parse_v5(invalid)
+
+    def test_v5_rejects_non_string_and_unsafe_natural_text(self) -> None:
+        invalid_values: tuple[object, ...] = (None, 7, "\x00control", "/private/evidence", "C:\\private\\evidence", "file:///private/evidence", "local_path: /private/evidence", "x" * 301)
+        for invalid_value in invalid_values:
+            with self.subTest(invalid_value=repr(invalid_value)):
+                invalid = runtime_v5_output()
+                invalid["security_industry_theses"][0]["headline"] = invalid_value
+                with self.assertRaisesRegex(structured.SchemaError, "natural text"):
+                    self.parse_v5(invalid)
+
+    def test_v5_rejects_thesis_token_outside_input_but_accepts_input_token(self) -> None:
+        accepted = runtime_v5_output()
+        accepted["security_industry_theses"][0]["headline"] = "NVDA 需求判断"
+        self.assertEqual(
+            self.parse_v5(accepted, [{"content": "输入事实包含 NVDA"}])["security_industry_theses"][0]["headline"],
+            "NVDA 需求判断",
+        )
+
+        rejected = runtime_v5_output()
+        rejected["security_industry_theses"][0]["headline"] = "AAPL 需求判断"
+        with self.assertRaisesRegex(structured.SchemaError, "out-of-context market token"):
+            self.parse_v5(rejected, [{"content": "输入事实包含 NVDA"}])
+
     def parse(self, output: dict[str, object]) -> dict[str, object]:
         parser = getattr(structured, "parse_v2_x_cross_blogger_output", None)
         self.assertIsNotNone(parser, "cross-blogger parser must be public")
@@ -388,6 +449,50 @@ class XCrossBloggerJudgementSchemaTests(unittest.TestCase):
         self.assertEqual(result["model_reported"], "gpt-fixture")
         self.assertNotIn("raw_ref", result)
         self.assertEqual(provider.context.operation, "v4_x_cross_blogger")
+
+    def test_runtime_sends_v5_context_to_provider_and_returns_v5_completion(self) -> None:
+        class V5Provider:
+            def __init__(self) -> None:
+                self.context: ProviderContext | None = None
+
+            def complete(self, input_chunk: tuple[object, ...], context: ProviderContext) -> ProviderResponse:
+                self.context = context
+                self.assertEqual(input_chunk[0]["source_id"], "source-a")
+                return ProviderResponse(
+                    status="success", provider="codex_cli", model_reported="gpt-fixture",
+                    prompt_version=context.prompt_version, elapsed_ms=1, attempt=context.attempt,
+                    raw_ref=None, parsed_output_ref=None, parsed_output=runtime_v5_output(),
+                )
+
+            def assertEqual(self, left: object, right: object) -> None:
+                if left != right:
+                    raise AssertionError(f"expected {right!r}, got {left!r}")
+
+        context_payload = {
+            "run_id": "judgement-run-v5", "batch_id": "batch-v5", "attempt": 1,
+            "prompt_version": "v3-x-cross-blogger-1",
+            "sources": [{"source_id": "source-a", "display_name": "A", "window_segments": [{
+                "id": "segment-a", "occurred_from_at": "2099-01-01T00:00:00Z",
+                "occurred_through_at": "2099-01-01T08:00:00Z", "viewpoints": [], "uncertainties": [],
+                "analyses": [{"post_id": "post-a@1", "blogger_viewpoint": "观点", "arguments": [],
+                    "quoted_post_viewpoint": None, "uncertainties": [], "evidence_post_ids": ["post-a"]}],
+            }]}],
+            "excluded_sources": [],
+        }
+        context_payload = v3_context(context_payload)
+        context_payload["run_id"] = "judgement-run-v5"
+        context_payload["batch_id"] = "batch-v5"
+        context_payload["prompt_version"] = "v5-x-cross-blogger-1"
+        provider = V5Provider()
+        result = runtime.XDailyJudgementRuntime(provider=provider, prompt_template="private").execute(
+            {"run_id": "judgement-run-v5", "attempt": 1, "lease_expires_at": "2099-01-01T00:10:00Z",
+             "batch": {"id": "batch-v5", "natural_date": "2099-01-01", "cutoff_at": "2099-01-01T08:00:00Z", "coverage_status": "complete"}},
+            context_payload,
+        )
+        self.assertEqual(provider.context.operation, "v5_x_cross_blogger")
+        self.assertEqual(result["schema_version"], "v5-x-cross-blogger")
+        self.assertEqual(result["prompt_version"], "v5-x-cross-blogger-1")
+        self.assertIn("ai_synthesis", result)
 
     def test_runtime_rejects_no_new_context_without_calling_provider(self) -> None:
         class NoNewProvider:

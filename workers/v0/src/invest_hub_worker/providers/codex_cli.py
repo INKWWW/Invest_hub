@@ -24,6 +24,7 @@ from ..structured import (
     parse_v4_x_cross_blogger_output,
     parse_v4_x_post_analysis_output,
     parse_v4_x_window_output,
+    parse_v5_x_cross_blogger_output,
     validate_structured_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -309,6 +310,18 @@ class CodexCLIProvider:
                 allowed_post_ids=set(context.allowed_post_ids),
                 analysis_source_ids=dict(context.allowed_analysis_source_ids),
                 analysis_evidence_post_ids={analysis_id: set(post_ids) for analysis_id, post_ids in context.allowed_analysis_evidence_post_ids},
+            )
+        if context.operation == "v5_x_cross_blogger":
+            return parse_v5_x_cross_blogger_output(
+                raw_text,
+                allowed_source_ids=set(context.allowed_source_ids),
+                allowed_analysis_ids=set(context.allowed_analysis_ids),
+                allowed_post_ids=set(context.allowed_post_ids),
+                analysis_source_ids=dict(context.allowed_analysis_source_ids),
+                analysis_evidence_post_ids={analysis_id: set(post_ids) for analysis_id, post_ids in context.allowed_analysis_evidence_post_ids},
+                frozen_source_ids=set(context.frozen_source_ids),
+                opaque_context_ids={kind: set(ids) for kind, ids in context.opaque_context_ids},
+                input_sources=input_chunk,
             )
 
         parsed = parse_v1_1_daily_output(raw_text)

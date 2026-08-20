@@ -15,6 +15,27 @@ from .contracts import ContractError, load_contract
 from .errors import AlreadyEnrolled, ProtocolError, RemoteConflict
 from .heartbeat import build_heartbeat
 
+from .structured import (
+    V3_X_ACTION_INTENTS,
+    V4_X_ACTION_SCOPE_STATUSES,
+    V5_X_ACTION_FIELDS,
+    V5_X_AI_SYNTHESIS_FIELDS,
+    V5_X_ASSESSMENT_FIELDS,
+    V5_X_COMMON_POINT_FIELDS,
+    V5_X_CONFLICT_FIELDS,
+    V5_X_CROSS_BLOGGER_FIELDS,
+    V5_X_ID_PATTERNS,
+    V5_X_INTEGRATION_FIELDS,
+    V5_X_POSITION_FIELDS,
+    V5_X_SCENARIO_FIELDS,
+    V5_X_THESIS_FIELDS,
+    V5_X_ACTION_INTENTS,
+    V5_X_ACTION_SCOPE_STATUSES,
+    V5_X_TEXT_LIMITS,
+    _UNSPECIFIED_SCOPE_WORDING,
+    _is_safe_v5_text,
+)
+
 
 Transport = Callable[[str, str, object | None, dict[str, str], float], tuple[int, object | None]]
 
@@ -588,7 +609,7 @@ def _parse_x_daily_judgement_claim(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_x_daily_judgement_context(value: dict[str, Any], run_id: str, attempt: int) -> dict[str, Any]:
-    if set(value) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or value.get("run_id") != run_id or not _non_empty_string(value.get("batch_id")) or value.get("attempt") != attempt or value.get("prompt_version") != "v4-x-cross-blogger-1":
+    if set(value) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or value.get("run_id") != run_id or not _non_empty_string(value.get("batch_id")) or value.get("attempt") != attempt or value.get("prompt_version") not in {"v4-x-cross-blogger-1", "v5-x-cross-blogger-1"}:
         raise ProtocolError("invalid x daily judgement context")
     sources = value.get("sources")
     excluded = value.get("excluded_sources")
@@ -622,6 +643,17 @@ def _parse_x_daily_judgement_context(value: dict[str, Any], run_id: str, attempt
 
 
 def _validate_x_daily_judgement_completion(value: dict[str, Any]) -> None:
+    pair = (value.get("schema_version"), value.get("prompt_version"))
+    if pair == ("v5-x-cross-blogger", "v5-x-cross-blogger-1"):
+        _validate_v5_x_daily_judgement_completion(value)
+        return
+    if pair != ("v4-x-cross-blogger", "v4-x-cross-blogger-1"):
+        raise ProtocolError("invalid x daily judgement completion")
+
+    _validate_v4_x_daily_judgement_completion(value)
+
+
+def _validate_v4_x_daily_judgement_completion(value: dict[str, Any]) -> None:
     required = {
         "run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version",
         "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties",
@@ -650,6 +682,152 @@ def _validate_x_daily_judgement_completion(value: dict[str, Any]) -> None:
         if not item["analysis_ids"] or not item["evidence_post_ids"]:
             raise ProtocolError("invalid x daily judgement completion")
 
+
+def _validate_v5_x_daily_judgement_completion(value: dict[str, Any]) -> None:
+    if set(value) != (V5_X_CROSS_BLOGGER_FIELDS | {"run_id", "attempt", "provider", "model_reported", "prompt_version"}) or value.get("schema_version") != "v5-x-cross-blogger" or value.get("provider") != "codex_cli" or value.get("prompt_version") != "v5-x-cross-blogger-1":
+        raise ProtocolError("invalid x daily judgement completion")
+    _validate_x_daily_judgement_identity(value.get("run_id"), value.get("attempt"), "completion")
+    if not _safe_model_reported(value.get("model_reported")) or not _safe_v5_text_array(value.get("uncertainties"), V5_X_TEXT_LIMITS["top_uncertainties"]):
+        raise ProtocolError("invalid x daily judgement completion")
+    categories = ("security_industry_theses", "market_structure_theses", "strategy_mindset_theses")
+    if not all(isinstance(value.get(category), list) for category in categories) or not isinstance(value.get("ai_synthesis"), dict):
+        raise ProtocolError("invalid x daily judgement completion")
+
+    seen_thesis_ids: set[str] = set()
+    thesis_sources: dict[str, set[str]] = {}
+    thesis_analysis_ids: dict[str, set[str]] = {}
+
+    for group_name in categories:
+        pattern = V5_X_ID_PATTERNS[group_name]
+        items = value[group_name]
+        assert isinstance(items, list)
+        for index, item in enumerate(items, start=1):
+            if not isinstance(item, dict) or set(item) != V5_X_THESIS_FIELDS:
+                raise ProtocolError("invalid x daily judgement completion")
+            thesis_id = item.get("thesis_id")
+            if not isinstance(thesis_id, str):
+                raise ProtocolError("invalid x daily judgement completion")
+            match = pattern.fullmatch(thesis_id)
+            if not match or int(match.group(1)) != index or thesis_id in seen_thesis_ids:
+                raise ProtocolError("invalid x daily judgement completion")
+            seen_thesis_ids.add(thesis_id)
+            if not _is_safe_v5_text(item.get("headline"), V5_X_TEXT_LIMITS["thesis_headline"]) or not _is_safe_v5_text(item.get("synthesis"), V5_X_TEXT_LIMITS["thesis_synthesis"]) or not _safe_v5_text_array(item.get("uncertainties"), V5_X_TEXT_LIMITS["thesis_uncertainties"]):
+                raise ProtocolError("invalid x daily judgement completion")
+            supporting_source_ids = _unique_non_empty_string_array(item.get("supporting_source_ids"))
+            dissenting_source_ids = _unique_string_array(item.get("dissenting_source_ids"))
+            if not supporting_source_ids or set(supporting_source_ids) & set(dissenting_source_ids):
+                raise ProtocolError("invalid x daily judgement completion")
+            analysis_ids = _unique_non_empty_string_array(item.get("analysis_ids"))
+            evidence_post_ids = _unique_non_empty_string_array(item.get("evidence_post_ids"))
+            if not analysis_ids or not evidence_post_ids:
+                raise ProtocolError("invalid x daily judgement completion")
+            thesis_sources[thesis_id] = set(supporting_source_ids) | set(dissenting_source_ids)
+            thesis_analysis_ids[thesis_id] = set(analysis_ids)
+
+            scenario_branches = item.get("scenario_branches")
+            attributed_actions = item.get("attributed_actions")
+            if not isinstance(scenario_branches, list) or not isinstance(attributed_actions, list):
+                raise ProtocolError("invalid x daily judgement completion")
+            for scenario in scenario_branches:
+                if not isinstance(scenario, dict) or set(scenario) != V5_X_SCENARIO_FIELDS:
+                    raise ProtocolError("invalid x daily judgement completion")
+                if not _is_safe_v5_text(scenario.get("condition"), V5_X_TEXT_LIMITS["scenario_condition"]) or not _is_safe_v5_text(scenario.get("outcome"), V5_X_TEXT_LIMITS["scenario_outcome"]) or not _safe_v5_text_array(scenario.get("uncertainties"), V5_X_TEXT_LIMITS["scenario_uncertainties"]):
+                    raise ProtocolError("invalid x daily judgement completion")
+                source_ids = _unique_non_empty_string_array(scenario.get("source_ids"))
+                scenario_analysis_ids = _unique_non_empty_string_array(scenario.get("analysis_ids"))
+                scenario_evidence_post_ids = _unique_non_empty_string_array(scenario.get("evidence_post_ids"))
+                if not source_ids or not scenario_analysis_ids or not scenario_evidence_post_ids or not _string_array(scenario.get("uncertainties")):
+                    raise ProtocolError("invalid x daily judgement completion")
+                if not set(source_ids) <= thesis_sources[thesis_id] or not set(scenario_analysis_ids) <= thesis_analysis_ids[thesis_id]:
+                    raise ProtocolError("invalid x daily judgement completion")
+            for action in attributed_actions:
+                if not isinstance(action, dict) or set(action) != V5_X_ACTION_FIELDS:
+                    raise ProtocolError("invalid x daily judgement completion")
+                if action.get("source_id") not in thesis_sources[thesis_id]:
+                    raise ProtocolError("invalid x daily judgement completion")
+                _validate_v5_action_scope(action)
+                action_analysis_ids = _unique_non_empty_string_array(action.get("analysis_ids"))
+                action_evidence_post_ids = _unique_non_empty_string_array(action.get("evidence_post_ids"))
+                if not action_analysis_ids or not action_evidence_post_ids or not _safe_v5_text_array(action.get("conditions"), V5_X_TEXT_LIMITS["action_conditions"]) or not _safe_v5_text_array(action.get("uncertainties"), V5_X_TEXT_LIMITS["action_uncertainties"]):
+                    raise ProtocolError("invalid x daily judgement completion")
+                if not set(action_analysis_ids) <= thesis_analysis_ids[thesis_id]:
+                    raise ProtocolError("invalid x daily judgement completion")
+
+    ai_synthesis = value["ai_synthesis"]
+    assert isinstance(ai_synthesis, dict)
+    if set(ai_synthesis) != V5_X_AI_SYNTHESIS_FIELDS or not isinstance(ai_synthesis.get("cross_blogger_integrations"), list) or not isinstance(ai_synthesis.get("ai_assessments"), list):
+        raise ProtocolError("invalid x daily judgement completion")
+
+    for index, integration in enumerate(ai_synthesis["cross_blogger_integrations"], start=1):
+        if not isinstance(integration, dict) or set(integration) != V5_X_INTEGRATION_FIELDS:
+            raise ProtocolError("invalid x daily judgement completion")
+        integration_id = integration.get("integration_id")
+        if not isinstance(integration_id, str):
+            raise ProtocolError("invalid x daily judgement completion")
+        match = V5_X_ID_PATTERNS["cross_blogger_integrations"].fullmatch(integration_id)
+        if not match or int(match.group(1)) != index:
+            raise ProtocolError("invalid x daily judgement completion")
+        if not _is_safe_v5_text(integration.get("headline"), V5_X_TEXT_LIMITS["integration_headline"]) or not _is_safe_v5_text(integration.get("synthesis"), V5_X_TEXT_LIMITS["integration_synthesis"]) or not _safe_v5_text_array(integration.get("uncertainties"), V5_X_TEXT_LIMITS["integration_uncertainties"]):
+            raise ProtocolError("invalid x daily judgement completion")
+        related_thesis_ids = _unique_non_empty_string_array(integration.get("related_thesis_ids"))
+        if not related_thesis_ids or not set(related_thesis_ids) <= seen_thesis_ids:
+            raise ProtocolError("invalid x daily judgement completion")
+        common_points = integration.get("common_points")
+        conflict_points = integration.get("conflict_points")
+        if not isinstance(common_points, list) or not isinstance(conflict_points, list) or (not common_points and not conflict_points):
+            raise ProtocolError("invalid x daily judgement completion")
+        child_related: list[str] = []
+        for common_point in common_points:
+            if not isinstance(common_point, dict) or set(common_point) != V5_X_COMMON_POINT_FIELDS or not _is_safe_v5_text(common_point.get("statement"), V5_X_TEXT_LIMITS["common_statement"]):
+                raise ProtocolError("invalid x daily judgement completion")
+            source_ids = _unique_non_empty_string_array(common_point.get("source_ids"))
+            point_related = _unique_non_empty_string_array(common_point.get("related_thesis_ids"))
+            if len(source_ids) < 2 or not point_related or not set(point_related) <= set(related_thesis_ids):
+                raise ProtocolError("invalid x daily judgement completion")
+            allowed_sources = set().union(*(thesis_sources[thesis_id] for thesis_id in point_related))
+            if not set(source_ids) <= allowed_sources:
+                raise ProtocolError("invalid x daily judgement completion")
+            child_related.extend(point_related)
+        for conflict_point in conflict_points:
+            if not isinstance(conflict_point, dict) or set(conflict_point) != V5_X_CONFLICT_FIELDS or not _is_safe_v5_text(conflict_point.get("issue"), V5_X_TEXT_LIMITS["conflict_issue"]):
+                raise ProtocolError("invalid x daily judgement completion")
+            positions = conflict_point.get("positions")
+            if not isinstance(positions, list) or len(positions) < 2:
+                raise ProtocolError("invalid x daily judgement completion")
+            union_sources: set[str] = set()
+            for position in positions:
+                if not isinstance(position, dict) or set(position) != V5_X_POSITION_FIELDS or not _is_safe_v5_text(position.get("position"), V5_X_TEXT_LIMITS["conflict_position"]):
+                    raise ProtocolError("invalid x daily judgement completion")
+                source_ids = _unique_non_empty_string_array(position.get("source_ids"))
+                point_related = _unique_non_empty_string_array(position.get("related_thesis_ids"))
+                if not source_ids or not point_related or not set(point_related) <= set(related_thesis_ids):
+                    raise ProtocolError("invalid x daily judgement completion")
+                allowed_sources = set().union(*(thesis_sources[thesis_id] for thesis_id in point_related))
+                if not set(source_ids) <= allowed_sources:
+                    raise ProtocolError("invalid x daily judgement completion")
+                union_sources.update(source_ids)
+                child_related.extend(point_related)
+            if len(union_sources) < 2:
+                raise ProtocolError("invalid x daily judgement completion")
+        if list(dict.fromkeys(child_related)) != related_thesis_ids:
+            raise ProtocolError("invalid x daily judgement completion")
+
+    for index, assessment in enumerate(ai_synthesis["ai_assessments"], start=1):
+        if not isinstance(assessment, dict) or set(assessment) != V5_X_ASSESSMENT_FIELDS:
+            raise ProtocolError("invalid x daily judgement completion")
+        assessment_id = assessment.get("assessment_id")
+        if not isinstance(assessment_id, str):
+            raise ProtocolError("invalid x daily judgement completion")
+        match = V5_X_ID_PATTERNS["ai_assessments"].fullmatch(assessment_id)
+        if not match or int(match.group(1)) != index:
+            raise ProtocolError("invalid x daily judgement completion")
+        if not _is_safe_v5_text(assessment.get("headline"), V5_X_TEXT_LIMITS["assessment_headline"]) or not _is_safe_v5_text(assessment.get("judgement"), V5_X_TEXT_LIMITS["assessment_judgement"]) or not _is_safe_v5_text(assessment.get("importance_reason"), V5_X_TEXT_LIMITS["assessment_importance_reason"]) or not _is_safe_v5_text(assessment.get("reasoning"), V5_X_TEXT_LIMITS["assessment_reasoning"]):
+            raise ProtocolError("invalid x daily judgement completion")
+        if not all(_safe_v5_text_array(assessment.get(field), V5_X_TEXT_LIMITS["assessment_arrays"]) and len(set(assessment[field])) == len(assessment[field]) for field in ("key_assumptions", "risks", "watch_variables", "uncertainties")):
+            raise ProtocolError("invalid x daily judgement completion")
+        related_thesis_ids = _unique_non_empty_string_array(assessment.get("related_thesis_ids"))
+        if not related_thesis_ids or not set(related_thesis_ids) <= seen_thesis_ids:
+            raise ProtocolError("invalid x daily judgement completion")
 
 def _validate_x_v3_verification_identity(replay_id: object, attempt: object, label: str) -> None:
     if not isinstance(replay_id, str) or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", replay_id, re.IGNORECASE) or isinstance(attempt, bool) or attempt != 1:
@@ -705,6 +883,36 @@ def _validate_x_v3_verification_replay_completion(value: dict[str, Any]) -> None
     daily_keys = {"schema_version", "prompt_version", "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties"}
     if set(daily) != daily_keys or daily.get("schema_version") != "v3-x-cross-blogger" or daily.get("prompt_version") != "v3-x-cross-blogger-1" or not all(isinstance(daily.get(category), list) for category in ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")) or not _string_array(daily.get("uncertainties")):
         raise ProtocolError("invalid x v3 verification replay completion")
+
+
+def _unique_string_array(value: object) -> list[str]:
+    if not isinstance(value, list) or any(not _non_empty_string(item) for item in value) or len(set(value)) != len(value):
+        raise ProtocolError("invalid x daily judgement completion")
+    return list(value)
+
+
+def _unique_non_empty_string_array(value: object) -> list[str]:
+    values = _unique_string_array(value)
+    if not values:
+        raise ProtocolError("invalid x daily judgement completion")
+    return values
+
+
+def _safe_v5_text_array(value: object, max_length: int) -> bool:
+    return isinstance(value, list) and all(_is_safe_v5_text(item, max_length) for item in value)
+
+
+def _validate_v5_action_scope(value: dict[str, Any]) -> None:
+    action_intent = value.get("action_intent")
+    action_scope_status = value.get("action_scope_status")
+    action_scope = value.get("action_scope")
+    if action_intent not in V5_X_ACTION_INTENTS or action_scope_status not in V5_X_ACTION_SCOPE_STATUSES or not isinstance(action_scope, str):
+        raise ProtocolError("invalid x daily judgement completion")
+    if action_scope_status == "specified":
+        if not _is_safe_v5_text(action_scope, V5_X_TEXT_LIMITS["action_scope"]) or _UNSPECIFIED_SCOPE_WORDING.search(action_scope):
+            raise ProtocolError("invalid x daily judgement completion")
+    elif action_scope != "":
+        raise ProtocolError("invalid x daily judgement completion")
 
 
 def _safe_model_reported(value: object) -> bool:

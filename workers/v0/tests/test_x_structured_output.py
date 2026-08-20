@@ -134,6 +134,39 @@ class XStructuredOutputTests(unittest.TestCase):
         with self.assertRaisesRegex(SchemaError, "coverage"):
             parser(json.dumps(invalid), {"post-1@2"}, evidence)
 
+    def test_v4_window_projects_item_evidence_from_the_analysis_catalog(self) -> None:
+        parser = getattr(structured, "parse_v4_x_window_output", None)
+        self.assertIsNotNone(parser, "v4 window parser is required")
+        evidence = {"post-1@2": {"post-1", "quote-1"}}
+
+        for item_evidence in ([], ["post-1", "quote-1", "model-invented"]):
+            with self.subTest(item_evidence=item_evidence):
+                output = self.v4_window()
+                output["evidence_post_ids"] = ["post-1", "quote-1"]
+                output["security_industry_viewpoints"][0]["evidence_post_ids"] = item_evidence
+                parsed = parser(json.dumps(output), {"post-1@2"}, evidence)
+                self.assertEqual(
+                    parsed["security_industry_viewpoints"][0]["evidence_post_ids"],
+                    ["post-1", "quote-1"],
+                )
+
+        invalid_analysis = self.v4_window()
+        invalid_analysis["evidence_post_ids"] = ["post-1", "quote-1"]
+        invalid_analysis["security_industry_viewpoints"][0]["analysis_ids"] = ["unknown@2"]
+        with self.assertRaisesRegex(SchemaError, "analysis"):
+            parser(json.dumps(invalid_analysis), {"post-1@2"}, evidence)
+
+        duplicate_analysis = self.v4_window()
+        duplicate_analysis["evidence_post_ids"] = ["post-1", "quote-1"]
+        duplicate_analysis["security_industry_viewpoints"][0]["analysis_ids"] = ["post-1@2", "post-1@2"]
+        with self.assertRaisesRegex(SchemaError, "analysis"):
+            parser(json.dumps(duplicate_analysis), {"post-1@2"}, evidence)
+
+        missing_catalog = self.v4_window()
+        missing_catalog["evidence_post_ids"] = ["post-1", "quote-1"]
+        with self.assertRaisesRegex(SchemaError, "analysis evidence catalog"):
+            parser(json.dumps(missing_catalog), {"post-1@2"}, {})
+
     def test_chunk_keeps_quote_viewpoint_separate_and_confines_evidence_to_one_post(self) -> None:
         output = parse_v2_x_chunk_output(json.dumps({
             "schema_version": "v2-x-chunk",

@@ -44,6 +44,19 @@ class XPromptContractTests(unittest.TestCase):
         self.assertIn("操作倾向为", daily)
         self.assertIn("不得原样复制", daily)
 
+    def test_v5_cross_blogger_prompt_publishes_the_production_contract(self) -> None:
+        daily = (PROMPT_ROOT / "v5_x_cross_blogger.md").read_text(encoding="utf-8")
+        for phrase in (
+            '"schema_version": "v5-x-cross-blogger"', "complete thesis",
+            "scenario_branches", "attributed_actions", "cross_blogger_integrations",
+            "ai_assessments", "不获取外部信息", "不构成交易建议", "单博主",
+            "至少两位独立博主", "覆盖限制", "只输出一个合法 JSON 对象",
+        ):
+            self.assertIn(phrase, daily)
+        self.assertNotIn('"none"', daily)
+        self.assertNotIn("not_applicable", daily)
+        self.assertIn("未明确标的", daily)
+
     def test_chunk_prompt_names_every_required_analysis_field(self) -> None:
         prompt = (PROMPT_ROOT / "v2_x_chunk.md").read_text(encoding="utf-8")
 

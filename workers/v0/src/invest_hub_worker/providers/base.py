@@ -32,6 +32,8 @@ class ProviderContext:
     allowed_post_ids: frozenset[str] = frozenset()
     allowed_analysis_source_ids: tuple[tuple[str, str], ...] = ()
     allowed_analysis_evidence_post_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    frozen_source_ids: frozenset[str] = frozenset()
+    opaque_context_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.chunk_id.strip():
@@ -42,7 +44,7 @@ class ProviderContext:
             raise ValueError("attempt must be positive")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        if self.operation not in {"legacy_topics", "v1_1_chunk", "v1_1_daily", "v2_x_chunk", "v2_x_window", "v2_x_cross_blogger", "v3_x_post_analysis", "v3_x_window", "v3_x_cross_blogger", "v4_x_post_analysis", "v4_x_window", "v4_x_cross_blogger"}:
+        if self.operation not in {"legacy_topics", "v1_1_chunk", "v1_1_daily", "v2_x_chunk", "v2_x_window", "v2_x_cross_blogger", "v3_x_post_analysis", "v3_x_window", "v3_x_cross_blogger", "v4_x_post_analysis", "v4_x_window", "v4_x_cross_blogger", "v5_x_cross_blogger"}:
             raise ValueError("operation must be an approved structuring operation")
         message_ids: set[str] = set()
         for identity in self.input_message_authors:
@@ -58,6 +60,18 @@ class ProviderContext:
             if profile[0] in author_ids:
                 raise ValueError("configured_author_profiles must not repeat an author ID")
             author_ids.add(profile[0])
+        if any(not isinstance(source_id, str) or not source_id.strip() for source_id in self.frozen_source_ids):
+            raise ValueError("frozen_source_ids must contain non-empty source IDs")
+        seen_context_kinds: set[str] = set()
+        for value in self.opaque_context_ids:
+            if not isinstance(value, tuple) or len(value) != 2:
+                raise ValueError("opaque_context_ids must contain context kind and IDs")
+            kind, ids = value
+            if kind not in {"batch", "run", "segment"} or kind in seen_context_kinds:
+                raise ValueError("opaque_context_ids must use unique approved context kinds")
+            seen_context_kinds.add(kind)
+            if not isinstance(ids, tuple) or not ids or any(not isinstance(opaque_id, str) or not opaque_id.strip() for opaque_id in ids) or len(set(ids)) != len(ids):
+                raise ValueError("opaque_context_ids must contain unique non-empty IDs")
         if self.operation == "v1_1_daily" and (not self.expected_natural_date or not self.expected_as_of):
             raise ValueError("v1_1_daily requires expected natural date and as_of")
 

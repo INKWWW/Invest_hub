@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
@@ -76,9 +77,102 @@ V4_X_WINDOW_ITEM_FIELDS = V3_X_WINDOW_ITEM_FIELDS | frozenset({"action_scope_sta
 V4_X_CROSS_BLOGGER_FIELDS = V3_X_CROSS_BLOGGER_FIELDS
 V4_X_CROSS_BLOGGER_ITEM_FIELDS = V3_X_CROSS_BLOGGER_ITEM_FIELDS | frozenset({"action_scope_status"})
 V4_X_ACTION_SCOPE_STATUSES = frozenset({"specified", "unspecified", "not_applicable"})
+V5_X_CROSS_BLOGGER_FIELDS = frozenset({
+    "schema_version", "ai_synthesis", "security_industry_theses",
+    "market_structure_theses", "strategy_mindset_theses", "uncertainties",
+})
+V5_X_AI_SYNTHESIS_FIELDS = frozenset({"cross_blogger_integrations", "ai_assessments"})
+V5_X_THESIS_FIELDS = frozenset({
+    "thesis_id", "headline", "synthesis", "scenario_branches", "attributed_actions",
+    "supporting_source_ids", "dissenting_source_ids", "analysis_ids",
+    "evidence_post_ids", "uncertainties",
+})
+V5_X_SCENARIO_FIELDS = frozenset({
+    "condition", "outcome", "source_ids", "analysis_ids", "evidence_post_ids", "uncertainties",
+})
+V5_X_ACTION_FIELDS = frozenset({
+    "source_id", "action_intent", "action_scope_status", "action_scope",
+    "conditions", "analysis_ids", "evidence_post_ids", "uncertainties",
+})
+V5_X_ACTION_INTENTS = frozenset({"build_position", "buy", "add", "hold", "reduce", "sell", "watch", "avoid"})
+V5_X_ACTION_SCOPE_STATUSES = frozenset({"specified", "unspecified"})
+V5_X_TEXT_LIMITS = {
+    "top_uncertainties": 500,
+    "thesis_headline": 300,
+    "thesis_synthesis": 2000,
+    "thesis_uncertainties": 500,
+    "scenario_condition": 500,
+    "scenario_outcome": 1000,
+    "scenario_uncertainties": 500,
+    "action_scope": 300,
+    "action_conditions": 500,
+    "action_uncertainties": 500,
+    "integration_headline": 300,
+    "integration_synthesis": 2000,
+    "integration_uncertainties": 500,
+    "common_statement": 1000,
+    "conflict_issue": 1000,
+    "conflict_position": 1000,
+    "assessment_headline": 300,
+    "assessment_judgement": 2000,
+    "assessment_importance_reason": 1000,
+    "assessment_reasoning": 2000,
+    "assessment_arrays": 500,
+}
+V5_X_INTEGRATION_FIELDS = frozenset({
+    "integration_id", "headline", "synthesis", "common_points",
+    "conflict_points", "related_thesis_ids", "uncertainties",
+})
+V5_X_COMMON_POINT_FIELDS = frozenset({"statement", "source_ids", "related_thesis_ids"})
+V5_X_CONFLICT_FIELDS = frozenset({"issue", "positions"})
+V5_X_POSITION_FIELDS = frozenset({"position", "source_ids", "related_thesis_ids"})
+V5_X_ASSESSMENT_FIELDS = frozenset({
+    "assessment_id", "headline", "judgement", "importance_reason", "reasoning",
+    "key_assumptions", "risks", "watch_variables", "related_thesis_ids", "uncertainties",
+})
+V5_X_ID_PATTERNS = {
+    "security_industry_theses": re.compile(r"^security-(\d{2})$"),
+    "market_structure_theses": re.compile(r"^market-(\d{2})$"),
+    "strategy_mindset_theses": re.compile(r"^strategy-(\d{2})$"),
+    "cross_blogger_integrations": re.compile(r"^integration-(\d{2})$"),
+    "ai_assessments": re.compile(r"^assessment-(\d{2})$"),
+}
 _IMPERATIVE_INVESTMENT_RECOMMENDATION = re.compile(r"(?:系统\s*)?(?:建议|应当|应该|必须|请|立即).{0,24}(?:买入|卖出|加仓|减仓|建仓|清仓|抄底|追涨)")
 _STRONG_CONSENSUS_WORDING = re.compile(r"(?:共识|一致认为|共同认为|市场(?:已经|已)?确认)")
 _UNSPECIFIED_SCOPE_WORDING = re.compile(r"(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知).{0,24}(?:标的|对象|资产|范围)|(?:标的|对象|资产|范围).{0,24}(?:(?:未|不|无法)(?:明确|说明|提供|确认)|未知)")
+_INPUT_MARKET_TOKEN = re.compile(r"(?:\b[A-Z]{2,5}\b|\b\d+(?:\.\d+)?%?\b|(?:USD|HKD|CNY|RMB|JPY|EUR|GBP|AUD|CAD|SGD|TWD|NTD|KRW|CHF|MXN|INR|SEK|NOK|DKK)\s?\d+(?:\.\d+)?|[$¥￥€]-?\d+(?:\.\d+)?(?:%|[KMBT]|万|亿)?|-?\d+(?:\.\d+)?%)")
+_V5_PRIVATE_PREFIX = re.compile(r"^(?:local_evidence(_path)?|local_path|raw_x_content|raw_content|cookie|browser[_ -]?profile)[\s:=/\\]", re.IGNORECASE)
+
+
+def _is_safe_v5_text(value: object, max_length: int) -> bool:
+    if not isinstance(value, str) or not 1 <= len(value) <= max_length:
+        return False
+    if any(unicodedata.category(character) == "Cc" for character in value):
+        return False
+    stripped = value.lstrip()
+    return not (
+        stripped.startswith("/")
+        or bool(re.match(r"^[A-Za-z]:[\\/]", stripped))
+        or stripped.lower().startswith("file:")
+        or bool(_V5_PRIVATE_PREFIX.match(stripped))
+    )
+
+
+def _validate_analysis_evidence_catalog(
+    allowed_analysis_ids: set[str],
+    analysis_evidence_post_ids: Mapping[str, set[str]],
+) -> None:
+    if (
+        not isinstance(analysis_evidence_post_ids, Mapping)
+        or set(analysis_evidence_post_ids) != allowed_analysis_ids
+        or any(
+            not isinstance(evidence_ids, set)
+            or not evidence_ids
+            or any(not _non_empty_string(post_id) for post_id in evidence_ids)
+            for evidence_ids in analysis_evidence_post_ids.values()
+        )
+    ):
+        raise SchemaError("analysis", "analysis evidence catalog is incomplete")
 
 
 def _validate_v4_action_scope(value: Mapping[str, Any]) -> str:
@@ -98,6 +192,20 @@ def _validate_v4_action_scope(value: Mapping[str, Any]) -> str:
             raise SchemaError("action scope", "unspecified action scope must be empty")
     else:
         raise SchemaError("action scope", "non-none action must have specified or unspecified scope status")
+    return str(action_scope_status)
+
+
+def _validate_v5_action_scope(value: Mapping[str, Any]) -> str:
+    action_intent = value.get("action_intent")
+    action_scope_status = value.get("action_scope_status")
+    action_scope = value.get("action_scope")
+    if action_intent not in V5_X_ACTION_INTENTS or action_scope_status not in V5_X_ACTION_SCOPE_STATUSES or not isinstance(action_scope, str):
+        raise SchemaError("action", "V5 action intent or scope status is invalid")
+    if action_scope_status == "specified":
+        if not _is_safe_v5_text(action_scope, V5_X_TEXT_LIMITS["action_scope"]) or _UNSPECIFIED_SCOPE_WORDING.search(action_scope):
+            raise SchemaError("action", "specified action scope must be an explicit safe object")
+    elif action_scope != "":
+        raise SchemaError("action", "unspecified action scope must be empty")
     return str(action_scope_status)
 
 
@@ -180,11 +288,21 @@ def parse_v4_x_window_output(
     analysis_evidence_post_ids: Mapping[str, set[str]],
 ) -> dict[str, Any]:
     groups = ("security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints")
+    _validate_analysis_evidence_catalog(allowed_analysis_ids, analysis_evidence_post_ids)
     normalized, statuses = _v4_payload_for_v3_validation(
         text, root_fields=V4_X_WINDOW_FIELDS, item_fields=V4_X_WINDOW_ITEM_FIELDS,
         v4_schema_version="v4-x-window", v3_schema_version="v3-x-window", item_groups=groups,
         error_code="invalid_v4_x_window",
     )
+    projected = _json_object(normalized)
+    for group in groups:
+        for item in projected[group]:
+            analysis_ids = item.get("analysis_ids")
+            if isinstance(analysis_ids, list) and set(analysis_ids) <= allowed_analysis_ids:
+                item["evidence_post_ids"] = sorted(
+                    set().union(*(analysis_evidence_post_ids[analysis_id] for analysis_id in analysis_ids))
+                )
+    normalized = json.dumps(projected, ensure_ascii=False)
     return _restore_v4_action_scope_status(
         parse_v3_x_window_output(normalized, allowed_analysis_ids, analysis_evidence_post_ids),
         schema_version="v4-x-window", item_groups=groups, statuses=statuses,
@@ -206,6 +324,420 @@ def parse_v4_x_cross_blogger_output(
         schema_version="v4-x-cross-blogger", item_groups=groups, statuses=statuses,
     )
 
+def parse_v5_x_cross_blogger_output(
+    text: str,
+    *,
+    allowed_source_ids: set[str],
+    allowed_analysis_ids: set[str],
+    allowed_post_ids: set[str],
+    analysis_source_ids: Mapping[str, str],
+    analysis_evidence_post_ids: Mapping[str, set[str]],
+    frozen_source_ids: set[str] | None = None,
+    opaque_context_ids: Mapping[str, set[str]] | None = None,
+    input_sources: Sequence[Mapping[str, Any]],
+) -> dict[str, object]:
+    payload = _json_object(text)
+    _require_exact_fields(payload, V5_X_CROSS_BLOGGER_FIELDS, "invalid_v5_x_cross_blogger")
+    if payload.get("schema_version") != "v5-x-cross-blogger":
+        raise SchemaError("invalid_v5_x_cross_blogger", "schema_version must be v5-x-cross-blogger")
+    categories = ("security_industry_theses", "market_structure_theses", "strategy_mindset_theses")
+    if not all(isinstance(payload.get(category), list) for category in categories):
+        raise SchemaError("invalid_v5_x_cross_blogger", "theses must be arrays")
+    if not _string_list(payload.get("uncertainties")):
+        raise SchemaError("invalid_v5_x_cross_blogger", "uncertainties must be a string array")
+    if not isinstance(payload.get("ai_synthesis"), Mapping):
+        raise SchemaError("invalid_v5_x_cross_blogger", "ai_synthesis must be an object")
+    opaque_source_ids = frozen_source_ids if frozen_source_ids is not None else allowed_source_ids
+    if not allowed_source_ids <= opaque_source_ids or not all(_non_empty_string(source_id) for source_id in opaque_source_ids):
+        raise SchemaError("source", "frozen source catalog is invalid")
+    _validate_analysis_evidence_catalog(allowed_analysis_ids, analysis_evidence_post_ids)
+    for analysis_id in allowed_analysis_ids:
+        source_id = analysis_source_ids.get(analysis_id)
+        evidence_ids = analysis_evidence_post_ids.get(analysis_id)
+        if source_id not in allowed_source_ids or not isinstance(evidence_ids, set) or not evidence_ids or not evidence_ids <= allowed_post_ids:
+            raise SchemaError("analysis", "analysis ownership catalog is invalid")
+    context_catalog = opaque_context_ids or {}
+    if not set(context_catalog) <= {"batch", "run", "segment"} or any(
+        not isinstance(opaque_ids, set) or not all(_non_empty_string(opaque_id) for opaque_id in opaque_ids)
+        for opaque_ids in context_catalog.values()
+    ):
+        raise SchemaError("context", "opaque context catalog is invalid")
+    opaque_catalogs = (
+        ("batch", context_catalog.get("batch", set())),
+        ("run", context_catalog.get("run", set())),
+        ("segment", context_catalog.get("segment", set())),
+        ("analysis", allowed_analysis_ids),
+        ("source", opaque_source_ids),
+        ("evidence", allowed_post_ids),
+    )
+    for opaque_kind, opaque_ids in opaque_catalogs:
+        _reject_opaque_ids(payload["uncertainties"], opaque_ids, opaque_kind)
+    input_market_tokens = _extract_market_tokens(input_sources)
+
+    seen_ids: set[str] = set()
+    thesis_by_id: dict[str, dict[str, Any]] = {}
+    thesis_sources: dict[str, set[str]] = {}
+
+    def reject_free_text(
+        values: Sequence[object],
+        *,
+        code: str,
+        allow_consensus: bool,
+        max_length: int,
+        check_market_tokens: bool = False,
+    ) -> None:
+        for value in values:
+            if not _is_safe_v5_text(value, max_length):
+                raise SchemaError(code, "natural text is invalid")
+            assert isinstance(value, str)
+            if _IMPERATIVE_INVESTMENT_RECOMMENDATION.search(value):
+                raise SchemaError("recommendation", "imperative system investment recommendation is not allowed")
+            if _STRONG_CONSENSUS_WORDING.search(value) and not allow_consensus:
+                raise SchemaError("consensus", "strong consensus wording is not supported by the cited sources")
+            for opaque_kind, opaque_ids in opaque_catalogs:
+                _reject_opaque_ids([value], opaque_ids, opaque_kind)
+            if check_market_tokens:
+                candidate_tokens = _extract_market_tokens(value)
+                if not candidate_tokens <= input_market_tokens:
+                    raise SchemaError("assessment", "assessment introduces an out-of-context market token")
+
+    reject_free_text(
+        payload["uncertainties"],
+        code="uncertainty",
+        allow_consensus=True,
+        max_length=V5_X_TEXT_LIMITS["top_uncertainties"],
+    )
+
+    def validate_string_array(values: object, *, code: str) -> list[str]:
+        if not _string_list(values) or len(set(values)) != len(values):
+            raise SchemaError(code, "text arrays must contain unique strings")
+        return list(values)
+
+    def validate_source_ids(values: object, *, code: str, allow_empty: bool) -> list[str]:
+        if not _string_list(values) or len(set(values)) != len(values):
+            raise SchemaError(code, "source IDs must be unique string arrays")
+        source_ids = list(values)
+        if (not allow_empty and not source_ids) or not set(source_ids) <= allowed_source_ids:
+            raise SchemaError("source", "unknown source")
+        return source_ids
+
+    def validate_analysis_ids(values: object, *, code: str, parent_analysis_ids: set[str] | None = None) -> list[str]:
+        if not _non_empty_string_list(values) or len(set(values)) != len(values):
+            raise SchemaError("analysis", "analysis IDs must be unique and non-empty")
+        analysis_ids = list(values)
+        if not set(analysis_ids) <= allowed_analysis_ids:
+            raise SchemaError("analysis", "unknown analysis")
+        if parent_analysis_ids is not None and not set(analysis_ids) <= parent_analysis_ids:
+            raise SchemaError(code, "nested analyses must stay within the parent thesis")
+        return analysis_ids
+
+    def validate_evidence_ids(values: object, *, expected: set[str], code: str, allow_empty: bool = False) -> list[str]:
+        if (allow_empty and values == []):
+            return []
+        if not _non_empty_string_list(values) or len(set(values)) != len(values):
+            raise SchemaError("evidence", "evidence must be a unique non-empty string array")
+        evidence_ids = list(values)
+        if not set(evidence_ids) <= allowed_post_ids:
+            raise SchemaError("evidence", "unknown evidence post")
+        if set(evidence_ids) != expected:
+            raise SchemaError(code, "evidence does not match analyses")
+        return evidence_ids
+
+    def validate_related_thesis_ids(values: object, *, code: str) -> list[str]:
+        if not _non_empty_string_list(values) or len(set(values)) != len(values):
+            raise SchemaError(code, "related thesis IDs must be unique and non-empty")
+        thesis_ids = list(values)
+        if not set(thesis_ids) <= set(thesis_by_id):
+            raise SchemaError("thesis", "unknown related thesis")
+        return thesis_ids
+
+    def validate_thesis_group(group_name: str) -> list[dict[str, Any]]:
+        values = payload[group_name]
+        assert isinstance(values, list)
+        pattern = V5_X_ID_PATTERNS[group_name]
+        normalized: list[dict[str, Any]] = []
+        for index, value in enumerate(values, start=1):
+            if not isinstance(value, Mapping):
+                raise SchemaError("thesis", f"{group_name} thesis must be an object")
+            _require_exact_fields(value, V5_X_THESIS_FIELDS, "thesis")
+            match = pattern.fullmatch(str(value.get("thesis_id")))
+            if not match or int(match.group(1)) != index:
+                raise SchemaError("thesis", "thesis IDs must be consecutive and category-scoped")
+            thesis_id = str(value["thesis_id"])
+            if thesis_id in seen_ids:
+                raise SchemaError("thesis", "thesis IDs must be globally unique")
+            seen_ids.add(thesis_id)
+            headline = value["headline"]
+            synthesis = value["synthesis"]
+            supporting = validate_source_ids(value["supporting_source_ids"], code="thesis", allow_empty=False)
+            dissenting = validate_source_ids(value["dissenting_source_ids"], code="thesis", allow_empty=True)
+            if set(supporting) & set(dissenting):
+                raise SchemaError("source", "source cannot be both supporting and dissenting")
+            analysis_ids = validate_analysis_ids(value["analysis_ids"], code="thesis")
+            analysis_sources = {analysis_source_ids[analysis_id] for analysis_id in analysis_ids}
+            thesis_source_union = set(supporting) | set(dissenting)
+            if analysis_sources != thesis_source_union:
+                raise SchemaError("source", "analysis/source ownership mismatch")
+            evidence_expected = set().union(*(analysis_evidence_post_ids[analysis_id] for analysis_id in analysis_ids))
+            evidence_ids = validate_evidence_ids(value["evidence_post_ids"], expected=evidence_expected, code="evidence")
+            uncertainties = validate_string_array(value["uncertainties"], code="thesis")
+            for opaque_kind, opaque_ids in opaque_catalogs:
+                _reject_opaque_ids(uncertainties, opaque_ids, opaque_kind)
+            allow_consensus = len(supporting) >= 2 and not dissenting
+            reject_free_text([headline], code="thesis", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["thesis_headline"], check_market_tokens=True)
+            reject_free_text([synthesis], code="thesis", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["thesis_synthesis"], check_market_tokens=True)
+            reject_free_text(uncertainties, code="thesis", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["thesis_uncertainties"], check_market_tokens=True)
+
+            scenarios = value["scenario_branches"]
+            if not isinstance(scenarios, list):
+                raise SchemaError("scenario", "scenario branches must be an array")
+            normalized_scenarios: list[dict[str, Any]] = []
+            for scenario in scenarios:
+                if not isinstance(scenario, Mapping):
+                    raise SchemaError("scenario", "scenario branch must be an object")
+                _require_exact_fields(scenario, V5_X_SCENARIO_FIELDS, "scenario")
+                source_ids = validate_source_ids(scenario["source_ids"], code="scenario", allow_empty=False)
+                if not set(source_ids) <= thesis_source_union:
+                    raise SchemaError("scenario", "scenario source_ids must stay within the parent thesis")
+                nested_analysis_ids = validate_analysis_ids(scenario["analysis_ids"], code="scenario", parent_analysis_ids=set(analysis_ids))
+                nested_analysis_sources = {analysis_source_ids[analysis_id] for analysis_id in nested_analysis_ids}
+                if nested_analysis_sources != set(source_ids):
+                    raise SchemaError("scenario", "scenario analysis/source ownership mismatch")
+                nested_expected = set().union(*(analysis_evidence_post_ids[analysis_id] for analysis_id in nested_analysis_ids))
+                nested_evidence_ids = validate_evidence_ids(scenario["evidence_post_ids"], expected=nested_expected, code="scenario")
+                nested_uncertainties = validate_string_array(scenario["uncertainties"], code="scenario")
+                for opaque_kind, opaque_ids in opaque_catalogs:
+                    _reject_opaque_ids(nested_uncertainties, opaque_ids, opaque_kind)
+                reject_free_text([scenario["condition"]], code="scenario", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["scenario_condition"], check_market_tokens=True)
+                reject_free_text([scenario["outcome"]], code="scenario", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["scenario_outcome"], check_market_tokens=True)
+                reject_free_text(nested_uncertainties, code="scenario", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["scenario_uncertainties"], check_market_tokens=True)
+                normalized_scenarios.append({
+                    "condition": scenario["condition"],
+                    "outcome": scenario["outcome"],
+                    "source_ids": source_ids,
+                    "analysis_ids": nested_analysis_ids,
+                    "evidence_post_ids": nested_evidence_ids,
+                    "uncertainties": nested_uncertainties,
+                })
+
+            actions = value["attributed_actions"]
+            if not isinstance(actions, list):
+                raise SchemaError("action", "attributed actions must be an array")
+            normalized_actions: list[dict[str, Any]] = []
+            for action in actions:
+                if not isinstance(action, Mapping):
+                    raise SchemaError("action", "attributed action must be an object")
+                _require_exact_fields(action, V5_X_ACTION_FIELDS, "action")
+                action_source_id = action.get("source_id")
+                if action_source_id not in thesis_source_union:
+                    raise SchemaError("action", "action source must belong to the parent thesis")
+                _validate_v5_action_scope(action)
+                action_analysis_ids = validate_analysis_ids(action["analysis_ids"], code="action", parent_analysis_ids=set(analysis_ids))
+                if {analysis_source_ids[analysis_id] for analysis_id in action_analysis_ids} != {action_source_id}:
+                    raise SchemaError("action", "attributed action must cite one blogger")
+                action_expected = set().union(*(analysis_evidence_post_ids[analysis_id] for analysis_id in action_analysis_ids))
+                action_evidence_ids = validate_evidence_ids(action["evidence_post_ids"], expected=action_expected, code="action")
+                action_uncertainties = validate_string_array(action["uncertainties"], code="action")
+                if not _string_list(action["conditions"]):
+                    raise SchemaError("action", "conditions must be a string array")
+                action_conditions = list(action["conditions"])
+                for opaque_kind, opaque_ids in opaque_catalogs:
+                    _reject_opaque_ids(action_conditions, opaque_ids, opaque_kind)
+                    _reject_opaque_ids(action_uncertainties, opaque_ids, opaque_kind)
+                if action["action_scope_status"] == "specified":
+                    reject_free_text([action["action_scope"]], code="action", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["action_scope"], check_market_tokens=True)
+                reject_free_text(action_conditions, code="action", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["action_conditions"], check_market_tokens=True)
+                reject_free_text(action_uncertainties, code="action", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["action_uncertainties"], check_market_tokens=True)
+                normalized_actions.append({
+                    "source_id": action_source_id,
+                    "action_intent": action["action_intent"],
+                    "action_scope_status": action["action_scope_status"],
+                    "action_scope": action["action_scope"],
+                    "conditions": action_conditions,
+                    "analysis_ids": action_analysis_ids,
+                    "evidence_post_ids": action_evidence_ids,
+                    "uncertainties": action_uncertainties,
+                })
+
+            normalized_item = {
+                "thesis_id": thesis_id,
+                "headline": headline,
+                "synthesis": synthesis,
+                "scenario_branches": normalized_scenarios,
+                "attributed_actions": normalized_actions,
+                "supporting_source_ids": supporting,
+                "dissenting_source_ids": dissenting,
+                "analysis_ids": analysis_ids,
+                "evidence_post_ids": evidence_ids,
+                "uncertainties": uncertainties,
+            }
+            thesis_by_id[thesis_id] = normalized_item
+            thesis_sources[thesis_id] = analysis_sources
+            normalized.append(normalized_item)
+        return normalized
+
+    normalized_categories = {
+        "security_industry_theses": validate_thesis_group("security_industry_theses"),
+        "market_structure_theses": validate_thesis_group("market_structure_theses"),
+        "strategy_mindset_theses": validate_thesis_group("strategy_mindset_theses"),
+    }
+
+    ai_synthesis = payload["ai_synthesis"]
+    assert isinstance(ai_synthesis, Mapping)
+    _require_exact_fields(ai_synthesis, V5_X_AI_SYNTHESIS_FIELDS, "integration")
+    integrations = ai_synthesis.get("cross_blogger_integrations")
+    assessments = ai_synthesis.get("ai_assessments")
+    if not isinstance(integrations, list) or not isinstance(assessments, list):
+        raise SchemaError("integration", "AI synthesis arrays are invalid")
+
+    normalized_integrations: list[dict[str, Any]] = []
+    integration_pattern = V5_X_ID_PATTERNS["cross_blogger_integrations"]
+    for index, value in enumerate(integrations, start=1):
+        if not isinstance(value, Mapping):
+            raise SchemaError("integration", "integration must be an object")
+        _require_exact_fields(value, V5_X_INTEGRATION_FIELDS, "integration")
+        match = integration_pattern.fullmatch(str(value.get("integration_id")))
+        if not match or int(match.group(1)) != index:
+            raise SchemaError("integration", "integration IDs must be consecutive")
+        integration_id = str(value["integration_id"])
+        if integration_id in seen_ids:
+            raise SchemaError("integration", "integration IDs must be globally unique")
+        seen_ids.add(integration_id)
+        related_thesis_ids = validate_related_thesis_ids(value["related_thesis_ids"], code="integration")
+        integration_supporting = set().union(*(set(thesis_by_id[thesis_id]["supporting_source_ids"]) for thesis_id in related_thesis_ids))
+        integration_dissenting = set().union(*(set(thesis_by_id[thesis_id]["dissenting_source_ids"]) for thesis_id in related_thesis_ids))
+        allow_consensus = len(integration_supporting) >= 2 and not integration_dissenting
+        reject_free_text([value["headline"]], code="integration", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["integration_headline"], check_market_tokens=True)
+        reject_free_text([value["synthesis"]], code="integration", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["integration_synthesis"], check_market_tokens=True)
+        integration_uncertainties = validate_string_array(value["uncertainties"], code="integration")
+        for opaque_kind, opaque_ids in opaque_catalogs:
+            _reject_opaque_ids(integration_uncertainties, opaque_ids, opaque_kind)
+        reject_free_text(integration_uncertainties, code="integration", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["integration_uncertainties"], check_market_tokens=True)
+
+        common_points = value["common_points"]
+        conflict_points = value["conflict_points"]
+        if not isinstance(common_points, list) or not isinstance(conflict_points, list) or (not common_points and not conflict_points):
+            raise SchemaError("integration", "integration must contain common points or conflict points")
+        normalized_common_points: list[dict[str, Any]] = []
+        normalized_conflict_points: list[dict[str, Any]] = []
+        child_related_union: list[str] = []
+
+        for common_point in common_points:
+            if not isinstance(common_point, Mapping):
+                raise SchemaError("integration", "common point must be an object")
+            _require_exact_fields(common_point, V5_X_COMMON_POINT_FIELDS, "integration")
+            source_ids = validate_source_ids(common_point["source_ids"], code="integration", allow_empty=False)
+            if len(source_ids) < 2:
+                raise SchemaError("integration", "common point requires at least two sources")
+            thesis_ids = validate_related_thesis_ids(common_point["related_thesis_ids"], code="integration")
+            allowed_child_sources = set().union(*(thesis_sources[thesis_id] for thesis_id in thesis_ids))
+            if not set(source_ids) <= allowed_child_sources:
+                raise SchemaError("integration", "child source must belong to child related theses")
+            child_related_union.extend(thesis_ids)
+            reject_free_text([common_point["statement"]], code="integration", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["common_statement"], check_market_tokens=True)
+            normalized_common_points.append({
+                "statement": common_point["statement"],
+                "source_ids": source_ids,
+                "related_thesis_ids": thesis_ids,
+            })
+
+        for conflict_point in conflict_points:
+            if not isinstance(conflict_point, Mapping):
+                raise SchemaError("conflict", "conflict point must be an object")
+            _require_exact_fields(conflict_point, V5_X_CONFLICT_FIELDS, "conflict")
+            positions = conflict_point["positions"]
+            if not isinstance(positions, list) or len(positions) < 2:
+                raise SchemaError("conflict", "conflict must contain at least two positions")
+            position_union_sources: set[str] = set()
+            normalized_positions: list[dict[str, Any]] = []
+            for position in positions:
+                if not isinstance(position, Mapping):
+                    raise SchemaError("conflict", "position must be an object")
+                _require_exact_fields(position, V5_X_POSITION_FIELDS, "conflict")
+                source_ids = validate_source_ids(position["source_ids"], code="conflict", allow_empty=False)
+                thesis_ids = validate_related_thesis_ids(position["related_thesis_ids"], code="conflict")
+                allowed_child_sources = set().union(*(thesis_sources[thesis_id] for thesis_id in thesis_ids))
+                if not set(source_ids) <= allowed_child_sources:
+                    raise SchemaError("integration", "child source must belong to child related theses")
+                child_related_union.extend(thesis_ids)
+                position_union_sources.update(source_ids)
+                reject_free_text([position["position"]], code="conflict", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["conflict_position"], check_market_tokens=True)
+                normalized_positions.append({
+                    "position": position["position"],
+                    "source_ids": source_ids,
+                    "related_thesis_ids": thesis_ids,
+                })
+            if len(position_union_sources) < 2:
+                raise SchemaError("conflict", "conflict must span at least two bloggers")
+            reject_free_text([conflict_point["issue"]], code="conflict", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["conflict_issue"], check_market_tokens=True)
+            normalized_conflict_points.append({
+                "issue": conflict_point["issue"],
+                "positions": normalized_positions,
+            })
+
+        if list(dict.fromkeys(child_related_union)) != related_thesis_ids:
+            raise SchemaError("integration", "integration top-level related_thesis_ids must match child union")
+        normalized_integrations.append({
+            "integration_id": integration_id,
+            "headline": value["headline"],
+            "synthesis": value["synthesis"],
+            "common_points": normalized_common_points,
+            "conflict_points": normalized_conflict_points,
+            "related_thesis_ids": related_thesis_ids,
+            "uncertainties": integration_uncertainties,
+        })
+
+    normalized_assessments: list[dict[str, Any]] = []
+    assessment_pattern = V5_X_ID_PATTERNS["ai_assessments"]
+    for index, value in enumerate(assessments, start=1):
+        if not isinstance(value, Mapping):
+            raise SchemaError("assessment", "assessment must be an object")
+        _require_exact_fields(value, V5_X_ASSESSMENT_FIELDS, "assessment")
+        match = assessment_pattern.fullmatch(str(value.get("assessment_id")))
+        if not match or int(match.group(1)) != index:
+            raise SchemaError("assessment", "assessment IDs must be consecutive")
+        assessment_id = str(value["assessment_id"])
+        if assessment_id in seen_ids:
+            raise SchemaError("assessment", "assessment IDs must be globally unique")
+        seen_ids.add(assessment_id)
+        related_thesis_ids = validate_related_thesis_ids(value["related_thesis_ids"], code="assessment")
+        supporting_union = set().union(*(set(thesis_by_id[thesis_id]["supporting_source_ids"]) for thesis_id in related_thesis_ids))
+        dissenting_union = set().union(*(set(thesis_by_id[thesis_id]["dissenting_source_ids"]) for thesis_id in related_thesis_ids))
+        allow_consensus = len(supporting_union) >= 2 and not dissenting_union
+        reject_free_text([value["headline"]], code="assessment", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["assessment_headline"], check_market_tokens=True)
+        reject_free_text([value["judgement"]], code="assessment", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["assessment_judgement"], check_market_tokens=True)
+        reject_free_text([value["importance_reason"]], code="assessment", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["assessment_importance_reason"], check_market_tokens=True)
+        reject_free_text([value["reasoning"]], code="assessment", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["assessment_reasoning"], check_market_tokens=True)
+        key_assumptions = validate_string_array(value["key_assumptions"], code="assessment")
+        risks = validate_string_array(value["risks"], code="assessment")
+        watch_variables = validate_string_array(value["watch_variables"], code="assessment")
+        uncertainties = validate_string_array(value["uncertainties"], code="assessment")
+        for text_values in (key_assumptions, risks, watch_variables, uncertainties):
+            for opaque_kind, opaque_ids in opaque_catalogs:
+                _reject_opaque_ids(text_values, opaque_ids, opaque_kind)
+            reject_free_text(text_values, code="assessment", allow_consensus=allow_consensus, max_length=V5_X_TEXT_LIMITS["assessment_arrays"], check_market_tokens=True)
+        normalized_assessments.append({
+            "assessment_id": assessment_id,
+            "headline": value["headline"],
+            "judgement": value["judgement"],
+            "importance_reason": value["importance_reason"],
+            "reasoning": value["reasoning"],
+            "key_assumptions": key_assumptions,
+            "risks": risks,
+            "watch_variables": watch_variables,
+            "related_thesis_ids": related_thesis_ids,
+            "uncertainties": uncertainties,
+        })
+
+    return {
+        "schema_version": "v5-x-cross-blogger",
+        "ai_synthesis": {
+            "cross_blogger_integrations": normalized_integrations,
+            "ai_assessments": normalized_assessments,
+        },
+        **normalized_categories,
+        "uncertainties": list(payload["uncertainties"]),
+    }
 
 def parse_v3_x_post_analysis_output(
     text: str,
@@ -620,6 +1152,27 @@ def _reject_opaque_ids(values: object, opaque_ids: set[str], opaque_kind: str) -
         canonical_value = value.casefold()
         if any(opaque_id in canonical_value for opaque_id in canonical_opaque_ids):
             raise SchemaError(opaque_kind, f"opaque {opaque_kind} ID is not allowed in natural language")
+
+
+def _extract_market_tokens(value: object) -> set[str]:
+    return {match.group(0).upper() for text in _iter_strings(value) for match in _INPUT_MARKET_TOKEN.finditer(text)}
+
+
+def _iter_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Mapping):
+        strings: list[str] = []
+        for nested in value.values():
+            strings.extend(_iter_strings(nested))
+        return strings
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        strings: list[str] = []
+        for nested in value:
+            strings.extend(_iter_strings(nested))
+        return strings
+    return []
+
 
 
 def parse_structured_output(text: str) -> dict[str, Any]:

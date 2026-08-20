@@ -27,6 +27,7 @@ from .structured import (
     parse_v4_x_cross_blogger_output,
     parse_v4_x_post_analysis_output,
     parse_v4_x_window_output,
+    parse_v5_x_cross_blogger_output,
     parse_v2_x_window_output,
     validate_v1_1_chunk_output,
     validate_v1_1_daily_output,
@@ -49,7 +50,8 @@ class XDailyJudgementRuntime:
             raise ValueError("prompt_template must be non-empty")
         self.provider = provider
         self.prompt_template = prompt_template
-        self.public_template = _read_public_prompt("v4_x_cross_blogger.md")
+        self.public_template = _read_public_prompt("v5_x_cross_blogger.md")
+        self.v4_public_template = _read_public_prompt("v4_x_cross_blogger.md")
         self.v3_public_template = _read_public_prompt("v3_x_cross_blogger.md")
 
     def execute(self, claim: dict[str, object], context: dict[str, object]) -> dict[str, object]:
@@ -77,21 +79,37 @@ class XDailyJudgementRuntime:
             raise RuntimeExecutionError("schema_error", "daily judgement context is invalid") from exc
         if not allowed_source_ids:
             raise RuntimeExecutionError("schema_error", "daily judgement context has no included source")
-        is_v3_replay = context.get("prompt_version") == "v3-x-cross-blogger-1"
+        version_contracts = {
+            "v3-x-cross-blogger-1": ("v3_x_cross_blogger", "v3-x-cross-blogger", self.v3_public_template),
+            "v4-x-cross-blogger-1": ("v4_x_cross_blogger", "v4-x-cross-blogger", self.v4_public_template),
+            "v5-x-cross-blogger-1": ("v5_x_cross_blogger", "v5-x-cross-blogger", self.public_template),
+        }
+        prompt_version = context.get("prompt_version")
+        if prompt_version not in version_contracts:
+            raise RuntimeExecutionError("schema_error", "daily judgement context is invalid")
+        operation, schema_version, public_template = version_contracts[prompt_version]
+        is_v3_replay = prompt_version == "v3-x-cross-blogger-1"
+        is_v5 = prompt_version == "v5-x-cross-blogger-1"
         provider_context = ProviderContext(
             chunk_id=run_id,
-            prompt_version="v3-x-cross-blogger-1" if is_v3_replay else "v4-x-cross-blogger-1",
+            prompt_version=str(prompt_version),
             prompt_text=(
-                f"{self.v3_public_template if is_v3_replay else self.public_template}\n\n本地私有补充说明：\n{self.prompt_template}"
+                f"{public_template}\n\n本地私有补充说明：\n{self.prompt_template}"
                 f"\n\n已验证的跨博主上下文（仅本地 Codex CLI 可见）：\n{json.dumps(context, ensure_ascii=False)}"
             ),
             attempt=attempt,
-            operation="v3_x_cross_blogger" if is_v3_replay else "v4_x_cross_blogger",
+            operation=operation,
             allowed_source_ids=frozenset(allowed_source_ids),
             allowed_analysis_ids=frozenset(allowed_analysis_ids),
             allowed_post_ids=frozenset(allowed_post_ids),
             allowed_analysis_source_ids=tuple(sorted(analysis_source_ids.items())),
             allowed_analysis_evidence_post_ids=tuple(sorted((analysis_id, tuple(sorted(post_ids))) for analysis_id, post_ids in analysis_evidence_post_ids.items())),
+            frozen_source_ids=frozenset(frozen_source_ids),
+            opaque_context_ids=(
+                ("batch", (batch_id,)),
+                ("run", (run_id,)),
+                ("segment", tuple(sorted(segment_ids))),
+            ),
         )
         response = self.provider.complete(tuple(context["sources"]), provider_context)
         if response.status != "success" or response.parsed_output is None:
@@ -102,37 +120,69 @@ class XDailyJudgementRuntime:
         if not _safe_model_reported(response.model_reported):
             raise RuntimeExecutionError("schema_error", "model telemetry is unsafe")
         try:
-            parsed = (parse_v3_x_cross_blogger_output if is_v3_replay else parse_v4_x_cross_blogger_output)(
-                json.dumps(response.parsed_output, ensure_ascii=False),
-                allowed_source_ids=allowed_source_ids,
-                allowed_analysis_ids=allowed_analysis_ids,
-                allowed_post_ids=allowed_post_ids,
-                analysis_source_ids=analysis_source_ids,
-                analysis_evidence_post_ids=analysis_evidence_post_ids,
-                frozen_source_ids=frozen_source_ids,
-                opaque_context_ids={"batch": {batch_id}, "run": {run_id}, "segment": segment_ids},
-            )
+            if prompt_version == "v3-x-cross-blogger-1":
+                parsed = parse_v3_x_cross_blogger_output(
+                    json.dumps(response.parsed_output, ensure_ascii=False),
+                    allowed_source_ids=allowed_source_ids, allowed_analysis_ids=allowed_analysis_ids,
+                    allowed_post_ids=allowed_post_ids, analysis_source_ids=analysis_source_ids,
+                    analysis_evidence_post_ids=analysis_evidence_post_ids, frozen_source_ids=frozen_source_ids,
+                    opaque_context_ids={"batch": {batch_id}, "run": {run_id}, "segment": segment_ids},
+                )
+            elif prompt_version == "v4-x-cross-blogger-1":
+                parsed = parse_v4_x_cross_blogger_output(
+                    json.dumps(response.parsed_output, ensure_ascii=False),
+                    allowed_source_ids=allowed_source_ids, allowed_analysis_ids=allowed_analysis_ids,
+                    allowed_post_ids=allowed_post_ids, analysis_source_ids=analysis_source_ids,
+                    analysis_evidence_post_ids=analysis_evidence_post_ids, frozen_source_ids=frozen_source_ids,
+                    opaque_context_ids={"batch": {batch_id}, "run": {run_id}, "segment": segment_ids},
+                )
+            else:
+                parsed = parse_v5_x_cross_blogger_output(
+                    json.dumps(response.parsed_output, ensure_ascii=False),
+                    allowed_source_ids=allowed_source_ids, allowed_analysis_ids=allowed_analysis_ids,
+                    allowed_post_ids=allowed_post_ids, analysis_source_ids=analysis_source_ids,
+                    analysis_evidence_post_ids=analysis_evidence_post_ids, frozen_source_ids=frozen_source_ids,
+                    opaque_context_ids={"batch": {batch_id}, "run": {run_id}, "segment": segment_ids},
+                    input_sources=context["sources"],
+                )
         except SchemaError as exc:
             raise RuntimeExecutionError("schema_error", "cross-blogger judgement failed evidence validation") from exc
-        return {
+        requires_coverage_limitation = is_v5 and (
+            batch.get("coverage_status") == "partial" or bool(context.get("excluded_sources"))
+        )
+        if requires_coverage_limitation and not parsed["uncertainties"]:
+            raise RuntimeExecutionError("schema_error", "v5 cross-blogger coverage limitation is required")
+        result = {
             "run_id": run_id,
             "attempt": attempt,
-            "schema_version": "v3-x-cross-blogger" if is_v3_replay else "v4-x-cross-blogger",
+            "schema_version": schema_version,
             "provider": "codex_cli",
             "model_reported": response.model_reported,
-            "prompt_version": "v3-x-cross-blogger-1" if is_v3_replay else "v4-x-cross-blogger-1",
+            "prompt_version": str(prompt_version),
+        }
+        if is_v5:
+            result.update({
+                "ai_synthesis": parsed["ai_synthesis"],
+                "security_industry_theses": parsed["security_industry_theses"],
+                "market_structure_theses": parsed["market_structure_theses"],
+                "strategy_mindset_theses": parsed["strategy_mindset_theses"],
+                "uncertainties": parsed["uncertainties"],
+            })
+            return result
+        result.update({
             "security_industry_viewpoints": parsed["security_industry_viewpoints"],
             "market_structure_viewpoints": parsed["market_structure_viewpoints"],
             "strategy_mindset_viewpoints": parsed["strategy_mindset_viewpoints"],
             "uncertainties": parsed["uncertainties"],
-        }
+        })
+        return result
 
     @staticmethod
     def _validate_context(
         context: Mapping[str, object], run_id: str, batch_id: str, attempt: int
     ) -> tuple[set[str], set[str], set[str], dict[str, str], dict[str, set[str]], set[str], set[str]]:
         is_v3_replay = context.get("prompt_version") == "v3-x-cross-blogger-1"
-        if set(context) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") not in {"v3-x-cross-blogger-1", "v4-x-cross-blogger-1"}:
+        if set(context) != {"run_id", "batch_id", "attempt", "prompt_version", "sources", "excluded_sources"} or context.get("run_id") != run_id or context.get("attempt") != attempt or context.get("prompt_version") not in {"v3-x-cross-blogger-1", "v4-x-cross-blogger-1", "v5-x-cross-blogger-1"}:
             raise ValueError("context identity is invalid")
         if context.get("batch_id") != batch_id:
             raise ValueError("context batch identity is invalid")
