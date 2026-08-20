@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import type { XReaderDate } from "../../lib/db/repositories/reader";
 import { XReader } from "./XReader";
-import type { XReaderDate } from "../../lib/db/repositories/reader";
 
 const v5Day = {
   naturalDate: "2099-01-06",
