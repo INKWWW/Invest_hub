@@ -76,6 +76,45 @@ describe("X daily judgement repository", () => {
     expect(result.sources[0]?.window_segments[0]?.analyses[0]?.evidence_post_ids).toEqual(["post-1"]);
   });
 
+  it("accepts the production v5 prompt carried by the existing v4 upstream context shape", async () => {
+    databaseMocks.rpc.mockResolvedValue({
+      data: {
+        run_id: claim.run_id,
+        batch_id: claim.batch.id,
+        attempt: 1,
+        prompt_version: "v5-x-cross-blogger-1",
+        sources: [{
+          source_id: "33333333-3333-4333-8333-333333333333",
+          display_name: "Fixture researcher",
+          window_segments: [{
+            id: "44444444-4444-4444-8444-444444444444",
+            schema_version: "v4-x-window",
+            prompt_version: "v4-x-window-1",
+            occurred_from_at: "2099-01-01T00:00:00.000Z",
+            occurred_through_at: "2099-01-01T00:01:00.000Z",
+            segment_output: { schema_version: "v4-x-window", analysis_ids: ["post-1@2"], evidence_post_ids: ["post-1"] },
+            analyses: [{
+              analysis_id: "post-1@2",
+              schema_version: "v4-x-post-analysis",
+              prompt_version: "v4-x-post-analysis-1",
+              analysis_output: { post_id: "post-1", evidence_post_ids: ["post-1"] },
+              evidence_post_ids: ["post-1"],
+            }],
+          }],
+        }],
+        excluded_sources: [],
+      },
+      error: null,
+    });
+
+    await expect(getXDailyJudgementContext(claim.run_id, 1, "worker-1")).resolves.toMatchObject({
+      run_id: claim.run_id,
+      batch_id: claim.batch.id,
+      attempt: 1,
+      prompt_version: "v5-x-cross-blogger-1",
+    });
+  });
+
   it("sends only a validated versioned completion to the atomic RPC", async () => {
     databaseMocks.rpc.mockResolvedValue({ data: { run_id: claim.run_id, attempt: 1, status: "succeeded" }, error: null });
     const completion = {
@@ -111,6 +150,42 @@ describe("X daily judgement repository", () => {
         }],
         market_structure_viewpoints: [],
         strategy_mindset_viewpoints: [],
+        uncertainties: [],
+      },
+    });
+  });
+
+  it("sends the approved v5 completion envelope to the same database authority", async () => {
+    databaseMocks.rpc.mockResolvedValue({ data: { run_id: claim.run_id, attempt: 1, status: "succeeded" }, error: null });
+    const completion = {
+      run_id: claim.run_id,
+      attempt: 1,
+      schema_version: "v5-x-cross-blogger" as const,
+      provider: "codex_cli" as const,
+      model_reported: null,
+      prompt_version: "v5-x-cross-blogger-1" as const,
+      ai_synthesis: { cross_blogger_integrations: [], ai_assessments: [] },
+      security_industry_theses: [],
+      market_structure_theses: [],
+      strategy_mindset_theses: [],
+      uncertainties: [],
+    };
+
+    await completeXDailyJudgement(completion, "worker-1");
+
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("complete_x_daily_judgement", {
+      p_run_id: claim.run_id,
+      p_attempt: 1,
+      p_worker_id: "worker-1",
+      p_payload: {
+        schema_version: "v5-x-cross-blogger",
+        provider: "codex_cli",
+        model_reported: null,
+        prompt_version: "v5-x-cross-blogger-1",
+        ai_synthesis: { cross_blogger_integrations: [], ai_assessments: [] },
+        security_industry_theses: [],
+        market_structure_theses: [],
+        strategy_mindset_theses: [],
         uncertainties: [],
       },
     });

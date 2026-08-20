@@ -25,7 +25,7 @@ export type XDailyJudgementContext = {
   run_id: string;
   batch_id: string;
   attempt: number;
-  prompt_version: "v4-x-cross-blogger-1";
+  prompt_version: "v4-x-cross-blogger-1" | "v5-x-cross-blogger-1";
   sources: Array<{
     source_id: string;
     display_name: string;
@@ -55,18 +55,33 @@ export type XDailyJudgementItem = {
   uncertainties: string[];
 };
 
-export type XDailyJudgementCompletion = {
+type XDailyJudgementCompletionMetadata = {
   run_id: string;
   attempt: number;
-  schema_version: "v4-x-cross-blogger";
   provider: "codex_cli";
   model_reported: string | null;
+};
+
+type XDailyJudgementV4Completion = XDailyJudgementCompletionMetadata & {
+  schema_version: "v4-x-cross-blogger";
   prompt_version: "v4-x-cross-blogger-1";
   security_industry_viewpoints: XDailyJudgementItem[];
   market_structure_viewpoints: XDailyJudgementItem[];
   strategy_mindset_viewpoints: XDailyJudgementItem[];
   uncertainties: string[];
 };
+
+type XDailyJudgementV5Completion = XDailyJudgementCompletionMetadata & {
+  schema_version: "v5-x-cross-blogger";
+  prompt_version: "v5-x-cross-blogger-1";
+  ai_synthesis: Record<string, unknown>;
+  security_industry_theses: unknown[];
+  market_structure_theses: unknown[];
+  strategy_mindset_theses: unknown[];
+  uncertainties: string[];
+};
+
+export type XDailyJudgementCompletion = XDailyJudgementV4Completion | XDailyJudgementV5Completion;
 
 export type XDailyJudgementFailureClass =
   | "timeout"
@@ -142,7 +157,7 @@ function parseAnalysis(value: unknown): XDailyJudgementAnalysis | null {
 function parseContext(value: unknown): XDailyJudgementContext | null {
   if (!isObject(value) || typeof value.run_id !== "string" || typeof value.batch_id !== "string"
     || typeof value.attempt !== "number" || !Number.isInteger(value.attempt)
-    || value.attempt < 1 || value.prompt_version !== "v4-x-cross-blogger-1"
+    || value.attempt < 1 || (value.prompt_version !== "v4-x-cross-blogger-1" && value.prompt_version !== "v5-x-cross-blogger-1")
     || !Array.isArray(value.sources) || !Array.isArray(value.excluded_sources)) return null;
   const sources = value.sources.map((source) => {
     if (!isObject(source) || typeof source.source_id !== "string" || typeof source.display_name !== "string"

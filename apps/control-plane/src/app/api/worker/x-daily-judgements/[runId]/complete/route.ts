@@ -9,11 +9,19 @@ import {
   type XDailyJudgementItem,
 } from "../../../../../../lib/db/repositories/x-daily-judgements";
 
-const completionKeys = [
+const v4CompletionKeys = [
   "run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version",
   "security_industry_viewpoints", "market_structure_viewpoints", "strategy_mindset_viewpoints", "uncertainties",
 ].sort();
+const v5CompletionKeys = [
+  "run_id", "attempt", "schema_version", "provider", "model_reported", "prompt_version",
+  "ai_synthesis", "security_industry_theses", "market_structure_theses", "strategy_mindset_theses", "uncertainties",
+].sort();
 const strongConsensusWording = /共识|一致认为|共同认为|市场(?:已经|已)?确认/u;
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 function isStringArray(value: unknown, max = 500): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.length > 0 && item.length <= max);
@@ -21,6 +29,10 @@ function isStringArray(value: unknown, max = 500): value is string[] {
 
 function isUnique(values: string[]) {
   return new Set(values).size === values.length;
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+  return Object.keys(value).sort().join(",") === keys.join(",");
 }
 
 function sameSet(left: Set<string>, right: Set<string>) {
@@ -62,19 +74,32 @@ function isJudgementItem(value: unknown): value is XDailyJudgementItem {
 function isCompletion(value: unknown): value is XDailyJudgementCompletion {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const completion = value as Record<string, unknown>;
-  return Object.keys(completion).sort().join(",") === completionKeys.join(",")
-    && typeof completion.run_id === "string" && typeof completion.attempt === "number"
+  const validMetadata = typeof completion.run_id === "string" && typeof completion.attempt === "number"
     && Number.isInteger(completion.attempt) && completion.attempt > 0
-    && completion.schema_version === "v4-x-cross-blogger" && completion.provider === "codex_cli"
-    && isSafeModelReported(completion.model_reported)
-    && completion.prompt_version === "v4-x-cross-blogger-1"
-    && Array.isArray(completion.security_industry_viewpoints) && completion.security_industry_viewpoints.every(isJudgementItem)
-    && Array.isArray(completion.market_structure_viewpoints) && completion.market_structure_viewpoints.every(isJudgementItem)
-    && Array.isArray(completion.strategy_mindset_viewpoints) && completion.strategy_mindset_viewpoints.every(isJudgementItem)
+    && completion.provider === "codex_cli" && isSafeModelReported(completion.model_reported);
+  if (!validMetadata) return false;
+  if (hasExactKeys(completion, v4CompletionKeys)) {
+    return completion.schema_version === "v4-x-cross-blogger"
+      && completion.prompt_version === "v4-x-cross-blogger-1"
+      && Array.isArray(completion.security_industry_viewpoints) && completion.security_industry_viewpoints.every(isJudgementItem)
+      && Array.isArray(completion.market_structure_viewpoints) && completion.market_structure_viewpoints.every(isJudgementItem)
+      && Array.isArray(completion.strategy_mindset_viewpoints) && completion.strategy_mindset_viewpoints.every(isJudgementItem)
+      && isStringArray(completion.uncertainties);
+  }
+  return hasExactKeys(completion, v5CompletionKeys)
+    && completion.schema_version === "v5-x-cross-blogger"
+    && completion.prompt_version === "v5-x-cross-blogger-1"
+    && isObject(completion.ai_synthesis)
+    && Array.isArray(completion.security_industry_theses)
+    && Array.isArray(completion.market_structure_theses)
+    && Array.isArray(completion.strategy_mindset_theses)
     && isStringArray(completion.uncertainties);
 }
 
-function referencesFrozenContext(completion: XDailyJudgementCompletion, judgementContext: XDailyJudgementContext): boolean {
+function referencesFrozenContext(
+  completion: Extract<XDailyJudgementCompletion, { schema_version: "v4-x-cross-blogger" }>,
+  judgementContext: XDailyJudgementContext,
+): boolean {
   if (completion.run_id !== judgementContext.run_id || completion.attempt !== judgementContext.attempt) return false;
   if (judgementContext.sources.length === 0) return false;
   const sourceIds = new Set(judgementContext.sources.map((source) => source.source_id));
@@ -152,7 +177,10 @@ export async function POST(request: Request, context: { params: Promise<{ runId:
     if (code === "PT409" || code === "40001") return NextResponse.json({ error: "lease_mismatch" }, { status: 409 });
     return NextResponse.json({ error: "x_daily_judgement_context_failed" }, { status: 503 });
   }
-  if (!referencesFrozenContext(completion, judgementContext)) {
+  if (judgementContext.prompt_version !== completion.prompt_version) {
+    return NextResponse.json({ error: "invalid_x_daily_judgement_completion" }, { status: 422 });
+  }
+  if (completion.schema_version === "v4-x-cross-blogger" && !referencesFrozenContext(completion, judgementContext)) {
     return NextResponse.json({ error: "invalid_x_daily_judgement_completion" }, { status: 422 });
   }
   try {
