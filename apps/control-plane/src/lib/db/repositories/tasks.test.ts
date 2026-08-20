@@ -8,9 +8,34 @@ vi.mock("../supabase-server", () => ({
 }));
 vi.mock("./x-daily-judgements", () => judgementMocks);
 
-import { completeWindowedCaptureRange, scheduleDueSourceTasks } from "./tasks";
+import { claimXDemoFixedWindowTask, completeWindowedCaptureRange, createXDemoFixedWindowTaskForWorker, scheduleDueSourceTasks, terminalizeXDemoFixedWindowJudgement } from "./tasks";
 
 describe("due source scheduling", () => {
+  it("terminalizes only the exact Ticket 02R judgement identity", async () => {
+    databaseMocks.rpc.mockResolvedValue({ data: { status: "failed", demo_run_id: "demo-1", judgement_run_id: "judgement-1", idempotent: false }, error: null });
+
+    await expect(terminalizeXDemoFixedWindowJudgement({
+      demoRunId: "demo-1", judgementRunId: "judgement-1", workerId: "worker-x",
+    })).resolves.toEqual({ status: "failed", demo_run_id: "demo-1", judgement_run_id: "judgement-1", idempotent: false });
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("terminalize_x_demo_fixed_window_judgement", {
+      p_demo_run_id: "demo-1", p_judgement_run_id: "judgement-1", p_worker_id: "worker-x",
+    });
+  });
+
+  it("creates one worker-scoped fixed window with the activated identity", async () => {
+    databaseMocks.rpc.mockResolvedValue({
+      data: { id: "task-fixed", source_id: "source-x", idempotent: false, demo_fixed_window: { natural_date: "2099-01-01" } },
+      error: null,
+    });
+
+    await expect(createXDemoFixedWindowTaskForWorker({
+      sourceId: "source-x", cutoffAt: "2099-01-01T16:00:00+08:00", workerId: "worker-x", accountId: "fixture-account",
+    })).resolves.toMatchObject({ id: "task-fixed", source_id: "source-x", idempotent: false });
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("create_x_demo_fixed_window_task_for_worker", {
+      p_source_id: "source-x", p_cutoff_at: "2099-01-01T16:00:00+08:00", p_worker_id: "worker-x", p_account_id: "fixture-account",
+    });
+  });
+
   it("keeps X scheduling available when the retired Discord scheduler fails", async () => {
     judgementMocks.ensureDueXCollectionBatches.mockResolvedValue({});
     judgementMocks.advanceXManualRecoveryRuns.mockResolvedValue({ runs: [] });
@@ -30,6 +55,15 @@ describe("due source scheduling", () => {
     });
     expect(judgementMocks.ensureDueXCollectionBatches).toHaveBeenCalledWith("worker-1", new Date("2026-07-25T12:00:00Z"));
     expect(judgementMocks.advanceXManualRecoveryRuns).toHaveBeenCalledWith("worker-1", new Date("2026-07-25T12:00:00Z"));
+  });
+
+  it("claims only the target fixed-window task through the worker seam", async () => {
+    databaseMocks.rpc.mockResolvedValue({ data: { task_id: "task-fixed", attempt: 1 }, error: null });
+
+    await expect(claimXDemoFixedWindowTask("task-fixed", "worker-x", "2099-01-01T00:00:00Z")).resolves.toMatchObject({ task_id: "task-fixed" });
+    expect(databaseMocks.rpc).toHaveBeenCalledWith("claim_x_demo_fixed_window_task", {
+      p_task_id: "task-fixed", p_worker_id: "worker-x", p_now: "2099-01-01T00:00:00Z",
+    });
   });
 
   it("surfaces a safe judgement dispatch failure without discarding scheduled source work", async () => {

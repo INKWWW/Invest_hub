@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from invest_hub_worker.scheduler import due_windows, due_x_windows, is_x_schedule_window_key
+from invest_hub_worker.scheduler import due_windows, due_x_windows, fixed_x_window, is_x_schedule_window_key
 
 
 class SchedulerTests(unittest.TestCase):
@@ -41,6 +41,32 @@ class SchedulerTests(unittest.TestCase):
         ))
         self.assertTrue(is_x_schedule_window_key("2026-07-23T12:00+08:00"))
         self.assertFalse(is_x_schedule_window_key("2026-07-23T20:50+08:00"))
+
+    def test_fixed_x_window_uses_the_unique_previous_shanghai_cutoff(self) -> None:
+        self.assertEqual(
+            fixed_x_window("2026-08-18T00:00+08:00"),
+            {
+                "start_at": "2026-08-17T12:00:00+00:00",
+                "end_at": "2026-08-17T16:00:00+00:00",
+                "scheduled_window_key": "2026-08-18T00:00+08:00",
+                "natural_date": "2026-08-17",
+            },
+        )
+
+    def test_fixed_x_window_accepts_only_exact_five_cutoffs(self) -> None:
+        expected = {
+            "2026-08-18T00:00+08:00": ("2026-08-17T12:00:00+00:00", "2026-08-17T16:00:00+00:00"),
+            "2026-08-18T08:00+08:00": ("2026-08-17T16:00:00+00:00", "2026-08-18T00:00:00+00:00"),
+            "2026-08-18T12:00+08:00": ("2026-08-18T00:00:00+00:00", "2026-08-18T04:00:00+00:00"),
+            "2026-08-18T16:00+08:00": ("2026-08-18T04:00:00+00:00", "2026-08-18T08:00:00+00:00"),
+            "2026-08-18T20:00+08:00": ("2026-08-18T08:00:00+00:00", "2026-08-18T12:00:00+00:00"),
+        }
+        for cutoff, (start_at, end_at) in expected.items():
+            with self.subTest(cutoff=cutoff):
+                result = fixed_x_window(cutoff)
+                self.assertEqual((result["start_at"], result["end_at"]), (start_at, end_at))
+        with self.assertRaisesRegex(ValueError, "approved Shanghai X boundary"):
+            fixed_x_window("2026-08-18T16:00:01+08:00")
 
 
 if __name__ == "__main__":

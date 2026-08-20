@@ -19,7 +19,8 @@ from .runtime import (
     build_authorized_x_daily_judgement_runtime,
     build_authorized_x_v3_verification_replay_runtime,
 )
-from .worker import Worker
+from .sequential import run_sequential_x_fixed_window
+from .worker import RunOutcome, Worker
 from .x_identity import IdentityResolutionError, OpenCLIProfileInvoker, resolve_configured_x_identity
 
 
@@ -48,6 +49,25 @@ def build_parser() -> argparse.ArgumentParser:
     run_scheduled.add_argument("--worker-name", default="v1-authorized-worker")
     run_scheduled.add_argument("--once", action="store_true", help="perform one scheduling and task-processing iteration")
     run_scheduled.add_argument("--poll-seconds", type=int, default=60)
+    fixed_window = subparsers.add_parser("run-x-fixed-window", help="activate one X source, create one explicit fixed window, and process one task")
+    fixed_window.add_argument("--config", required=True)
+    fixed_window.add_argument("--credential", required=True)
+    fixed_window.add_argument("--opencli-contract", required=True)
+    fixed_window.add_argument("--prompt-path", required=True)
+    fixed_window.add_argument("--evidence-dir", required=True)
+    fixed_window.add_argument("--cutoff", required=True)
+    fixed_window.add_argument("--enrolment-code-file")
+    fixed_window.add_argument("--opencli-executable", required=True)
+    fixed_window.add_argument("--worker-name", default="ticket-01-fixed-window-worker")
+    sequential_window = subparsers.add_parser("run-x-fixed-window-sequential", help="freeze and sequentially drain all configured X sources for one cutoff")
+    sequential_window.add_argument("--config", required=True)
+    sequential_window.add_argument("--credential", required=True)
+    sequential_window.add_argument("--opencli-contract", required=True)
+    sequential_window.add_argument("--prompt-path", required=True)
+    sequential_window.add_argument("--evidence-dir", required=True)
+    sequential_window.add_argument("--cutoff", required=True)
+    sequential_window.add_argument("--opencli-executable", required=True)
+    sequential_window.add_argument("--worker-name", default="ticket-02r-sequential-worker")
     verification_replay = subparsers.add_parser("run-x-v3-verification", help="run one server-frozen X v3 verification replay")
     verification_replay.add_argument("--config", required=True)
     verification_replay.add_argument("--credential", required=True)
@@ -149,6 +169,36 @@ def main(argv: list[str] | None = None) -> int:
         outcome = worker.run_once()
         print(json.dumps({"status": outcome.status, "task_id": outcome.task_id, "error": outcome.error}, sort_keys=True))
         return 0 if outcome.status in {"succeeded", "no_task"} else 1
+    if args.command == "run-x-fixed-window":
+        if len(config.sources) != 1 or config.sources[0].source_type != "x":
+            print(json.dumps({"status": "refused", "reason": "ticket_01_requires_one_x_source"}))
+            return 2
+        try:
+            activation_invoker = OpenCLIProfileInvoker(_require_controlled_x_opencli_executable(args.opencli_executable))
+            outcome = run_one_x_fixed_window(worker, config.sources[0], args.cutoff, activation_invoker)
+        except (IdentityResolutionError, ProtocolError, RuntimeExecutionError, ValueError) as exc:
+            print(json.dumps({"status": "failed", "error": type(exc).__name__}, sort_keys=True))
+            return 1
+        print(json.dumps({"status": outcome.status, "task_id": outcome.task_id, "error": outcome.error}, sort_keys=True))
+        return 0 if outcome.status == "succeeded" else 1
+    if args.command == "run-x-fixed-window-sequential":
+        if not any(source.source_type == "x" for source in config.sources):
+            print(json.dumps({"status": "refused", "reason": "ticket_02r_requires_x_only_sources"}))
+            return 2
+        try:
+            outcome = run_sequential_x_fixed_window(
+                worker, config, args.cutoff,
+                judgement_runtime.execute if judgement_runtime is not None and hasattr(judgement_runtime, "execute") else None,
+            )
+        except (IdentityResolutionError, ProtocolError, RuntimeExecutionError, ValueError) as exc:
+            print(json.dumps({"status": "failed", "error": type(exc).__name__}, sort_keys=True))
+            return 1
+        print(json.dumps({
+            "status": outcome.status, "run_id": outcome.run_id, "cutoff_at": outcome.cutoff_at,
+            "judgement_id": outcome.judgement_id, "error": outcome.error,
+            "source_statuses": [{"source_id": item.source_id, "status": item.status, "task_id": item.task_id, "error": item.error} for item in outcome.sources],
+        }, sort_keys=True))
+        return 0 if outcome.status in {"complete", "partial", "no_new"} else 1
     activation_invoker = OpenCLIProfileInvoker(_require_controlled_x_opencli_executable(args.opencli_executable)) if has_x else None
     return _run_scheduled(worker, once=args.once, poll_seconds=args.poll_seconds, activation_invoker=activation_invoker, judgement_runtime=judgement_runtime)
 
@@ -468,6 +518,27 @@ def _run_scheduled(
         if once:
             return 0 if outcome.status in {"succeeded", "no_task"} else 1
         time.sleep(_scheduled_sleep_seconds(outcome, poll_seconds))
+
+
+def run_one_x_fixed_window(
+    worker: Worker,
+    source: LocalWorkerConfig,
+    cutoff_at: str,
+    activation_invoker: OpenCLIProfileInvoker,
+) -> RunOutcome:
+    """Run the Ticket 01 single-source activation/create/claim vertical slice."""
+
+    if source.source_type != "x":
+        raise ValueError("ticket_01_requires_x_source")
+    worker.protocol.heartbeat("idle", worker.capabilities, datetime.now(timezone.utc).isoformat())
+    activation = activate_one_x_source(worker.protocol, activation_invoker)
+    if activation.status != "initialized" or activation.source_id != source.source_id or not activation.account_id:
+        return RunOutcome("activation_failed", error=activation.error or "x_activation_not_initialized")
+    task = worker.protocol.create_x_demo_fixed_window_task(activation.source_id, cutoff_at, activation.account_id)
+    task_id = task.get("id")
+    if task.get("source_id") != activation.source_id or not isinstance(task_id, str) or not task_id:
+        raise ProtocolError("fixed-window task source does not match activated source")
+    return worker.run_once_for_task(task_id)
 
 
 def _scheduled_sleep_seconds(outcome: object, poll_seconds: int) -> int:

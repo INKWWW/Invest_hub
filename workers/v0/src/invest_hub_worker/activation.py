@@ -18,6 +18,8 @@ class ActivationOutcome:
     status: str
     task_id: str | None = None
     error: str | None = None
+    source_id: str | None = None
+    account_id: str | None = None
 
 
 def activate_one_x_source(protocol: ActivationProtocol, invoker: OpenCLIProfileInvoker) -> ActivationOutcome:
@@ -39,4 +41,10 @@ def activate_one_x_source(protocol: ActivationProtocol, invoker: OpenCLIProfileI
         protocol.mark_x_activation_identity_failed(source_id, code if code in allowed else 'activation_protocol_failure')
         return ActivationOutcome('identity_failed', error=code if code in allowed else 'activation_protocol_failure')
     task_id = initialized.get("task_id")
-    return ActivationOutcome("initialized", task_id if isinstance(task_id, str) and task_id else None)
+    return ActivationOutcome(
+        "initialized",
+        task_id if isinstance(task_id, str) and task_id else None,
+        None,
+        source_id,
+        verified,
+)

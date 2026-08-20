@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { XReaderDate } from "../../lib/db/repositories/reader";
 import { XReader } from "./XReader";
 
 const v5Day = {
@@ -199,6 +200,42 @@ const days = [{
 }];
 
 describe("XReader", () => {
+  it("skips a newer task-only date by default while keeping its current target status visible", () => {
+    const stateDays: XReaderDate[] = [{
+      naturalDate: "2099-01-03", currentRun: { cutoffAt: "2099-01-03T08:00:00.000Z", status: "failed" }, judgement: { visible: true, batches: [] }, bloggers: [],
+    }, {
+      naturalDate: "2099-01-02", judgement: { visible: true, batches: [] }, bloggers: [{
+        source: { sourceKey: "fixture", displayName: "Fixture" }, status: "succeeded", timedOut: false,
+        segments: [{ occurredFromAt: "2099-01-02T04:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["readable"], uncertainties: [], analyses: [] }],
+      }],
+    }];
+
+    const html = renderToStaticMarkup(<XReader days={stateDays} />);
+
+    expect(html).toContain('<option value="2099-01-02" selected="">2099-01-02</option>');
+    expect(html).toContain("当前应运行窗口失败");
+  });
+
+  it("defaults to the latest readable success and separates current run state", () => {
+    const stateDays: XReaderDate[] = [{
+      naturalDate: "2099-01-03", currentRun: { cutoffAt: "2099-01-03T08:00:00.000Z", status: "not_run" }, judgement: { visible: true, batches: [] }, bloggers: [],
+    }, {
+      naturalDate: "2099-01-02", currentRun: { cutoffAt: "2099-01-02T08:00:00.000Z", status: "processing" }, judgement: { visible: true, batches: [] }, bloggers: [{
+        source: { sourceKey: "fixture", displayName: "Fixture" }, status: "succeeded", timedOut: false,
+        segments: [{ occurredFromAt: "2099-01-02T04:00:00.000Z", occurredThroughAt: "2099-01-02T08:00:00.000Z", viewpoints: ["readable"], uncertainties: [], analyses: [] }],
+      }],
+    }, {
+      naturalDate: "2099-01-01", currentRun: { cutoffAt: "2099-01-01T08:00:00.000Z", status: "failed" }, judgement: { visible: true, batches: [] }, bloggers: [],
+    }];
+    const html = renderToStaticMarkup(<XReader days={stateDays} />);
+    const allDatesHtml = renderToStaticMarkup(<XReader days={stateDays} initialNaturalDate="all" />);
+
+    expect(html).toContain('<option value="2099-01-02" selected="">2099-01-02</option>');
+    expect(allDatesHtml).toContain("当前应运行窗口尚未运行");
+    expect(allDatesHtml).toContain("当前应运行窗口处理中");
+    expect(allDatesHtml).toContain("当前应运行窗口失败");
+  });
+
   it("renders each date as judgement first then stable one-column blogger sections", () => {
     const html = renderToStaticMarkup(<XReader days={days} initialNaturalDate="2099-01-02" />);
 
@@ -217,8 +254,8 @@ describe("XReader", () => {
     expect(html).toContain("下方主题仅列出直接支持或反对该主题的博主。");
     expect(html).toContain("投资策略与心态");
     expect(html).toContain("操作表述：观望（高波动市场）");
-    expect(html).not.toContain("个股与产业观点");
-    expect(html).not.toContain("市场结构观点");
+    expect(html).toContain("个股与产业观点");
+    expect(html).toContain("市场结构观点");
     expect(html).toContain('class="x-reader-viewpoint-group x-reader-viewpoint-group--security"');
     expect(html).toContain('class="x-reader-viewpoint-group x-reader-viewpoint-group--market"');
     expect(html).toContain('class="x-reader-viewpoint-group x-reader-viewpoint-group--strategy"');
@@ -229,7 +266,7 @@ describe("XReader", () => {
     expect(html).toContain("买入（测试标的）");
     expect(html).toContain("条件");
     expect(html).toContain("等待趋势确认");
-    expect(html).toContain('<details class="x-analysis" open="">');
+    expect(html).toContain('<details class="x-analysis">');
     expect(html).toContain('href="https://x.example/posts/analysis-1"');
     expect(html).toContain(">08-08 03:05 · 引用帖</a></summary>");
     expect(html).toContain('href="https://x.example/posts/analysis-legacy"');
@@ -246,9 +283,9 @@ describe("XReader", () => {
     const bloggerStart = html.indexOf('<section class="x-reader-blogger">');
     const nextBloggerStart = html.indexOf('<section class="x-reader-blogger">', bloggerStart + 1);
     const firstBloggerHtml = html.slice(bloggerStart, nextBloggerStart === -1 ? undefined : nextBloggerStart);
-    expect(firstBloggerHtml).not.toContain("个股与产业观点");
-    expect(firstBloggerHtml).not.toContain("市场结构观点");
-    expect(firstBloggerHtml).not.toContain("投资策略与心态");
+    expect(firstBloggerHtml).toContain("个股与产业观点");
+    expect(firstBloggerHtml).toContain("市场结构观点");
+    expect(firstBloggerHtml).toContain("投资策略与心态");
     expect(html.indexOf("最新博主观点")).toBeLessThan(html.indexOf("较早博主观点"));
     expect(html.indexOf('<header class="x-reader-author-strip"><p>博主</p><h3 class="x-reader-author">Second Author</h3></header>')).toBeLessThan(html.indexOf('<header class="x-reader-author-strip"><p>博主</p><h3 class="x-reader-author">Third Author</h3></header>'));
     expect(html.indexOf("第三位最新观点")).toBeLessThan(html.indexOf("第三位较早观点"));

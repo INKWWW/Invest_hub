@@ -194,6 +194,17 @@ export async function claimNextXDailyJudgement(workerId: string, now = new Date(
   return claim;
 }
 
+export async function claimXDemoFixedWindowJudgement(runId: string, workerId: string, now = new Date().toISOString()): Promise<XDailyJudgementClaim | null> {
+  const { data, error } = await createSupabaseAdminClient().rpc("claim_x_demo_fixed_window_judgement", {
+    p_run_id: runId, p_worker_id: workerId, p_now: now,
+  });
+  if (error) throw error;
+  if (data === null) return null;
+  const claim = parseClaim(data);
+  if (!claim) throw new Error("invalid_x_daily_judgement_claim");
+  return claim;
+}
+
 export async function ensureDueXCollectionBatches(workerId: string, now = new Date()) {
   const { data, error } = await createSupabaseAdminClient().rpc("ensure_due_x_collection_batches", {
     p_worker_id: workerId,

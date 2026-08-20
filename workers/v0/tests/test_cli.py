@@ -16,11 +16,12 @@ from invest_hub_worker.cli import (
     _require_controlled_x_opencli_executable,
     _prepare_identity_evidence_dir,
     _run_scheduled,
+    run_one_x_fixed_window,
     _scheduled_sleep_seconds,
     build_parser,
     main,
 )
-from invest_hub_worker.config import LocalWorkerConfigSet
+from invest_hub_worker.config import LocalWorkerConfig, LocalWorkerConfigSet
 from invest_hub_worker.errors import ProtocolError
 from invest_hub_worker.worker import RunOutcome
 
@@ -42,6 +43,51 @@ class ScheduledWorker:
     def run_x_daily_judgement_once(self, _runtime: object) -> RunOutcome:
         self.judgement_calls += 1
         return RunOutcome("succeeded", "judgement-run-1")
+
+
+class FixedWindowWorker:
+    def __init__(self) -> None:
+        self.protocol = FixedWindowProtocol()
+        self.capabilities = ["x_sync"]
+        self.calls: list[str] = []
+
+    def run_once(self) -> RunOutcome:
+        raise AssertionError("generic claim must not be used for an explicit fixed window")
+
+    def run_once_for_task(self, task_id: str) -> RunOutcome:
+        self.calls.append(f"claim:{task_id}")
+        return RunOutcome("succeeded", task_id)
+
+
+class FixedWindowProtocol:
+    def __init__(self) -> None:
+        self.events: list[object] = []
+
+    def heartbeat(self, *_args: object) -> dict[str, object]:
+        self.events.append("heartbeat")
+        return {"status": "idle"}
+
+    def claim_x_activation(self) -> dict[str, object]:
+        self.events.append("claim_activation")
+        return {"source_id": "source-x", "requested_handle": "fixture", "parameter_version": "x-standard-v2", "initial_end_at": "2099-01-01T08:00:00Z", "idempotent": False}
+
+    def resolve_x_source_identity(self, source_id: str, parameter_version: str, account_id: str) -> dict[str, object]:
+        self.events.append(("resolve", source_id, parameter_version, account_id))
+        return {"resolution_status": "resolved", "parameter_version": parameter_version, "idempotent": False}
+
+    def initialize_x_activation(self, source_id: str) -> dict[str, object]:
+        self.events.append(("initialize", source_id))
+        return {"task_id": None, "source_id": source_id, "initial_end_at": "2099-01-01T08:00:00Z", "idempotent": False}
+
+    def create_x_demo_fixed_window_task(self, source_id: str, cutoff_at: str, account_id: str) -> dict[str, object]:
+        self.events.append(("create", source_id, cutoff_at, account_id))
+        return {"id": "task-fixed", "source_id": source_id, "idempotent": False, "demo_fixed_window": {}}
+
+
+class FixedWindowInvoker:
+    def resolve(self, handle: str) -> str:
+        self.handle = handle
+        return "fixture-account"
 
 
 class ScheduleFailingWorker(ScheduledWorker):
@@ -89,6 +135,23 @@ class WorkerCliTests(unittest.TestCase):
         self.assertEqual(args.poll_seconds, 5)
         self.assertFalse(args.once)
         self.assertEqual(args.timeout_seconds, 360.0)
+
+    def test_fixed_window_orchestration_activates_creates_then_runs_one_claim(self) -> None:
+        worker = FixedWindowWorker()
+        source = LocalWorkerConfig.from_mapping({
+            "control_plane_url": "https://control.example.invalid", "source_id": "source-x", "source_type": "x",
+            "source_url": "https://x.com/fixture", "profile_ref": "/synthetic/profile", "opencli_contract_version": "v2",
+            "parameter_version": "x-standard-v2",
+        })
+
+        outcome = run_one_x_fixed_window(worker, source, "2099-01-01T16:00:00+08:00", FixedWindowInvoker())
+
+        self.assertEqual(outcome.status, "succeeded")
+        self.assertEqual(worker.protocol.events, [
+            "heartbeat", "claim_activation", ("resolve", "source-x", "x-standard-v2", "fixture-account"),
+            ("initialize", "source-x"), ("create", "source-x", "2099-01-01T16:00:00+08:00", "fixture-account"),
+        ])
+        self.assertEqual(worker.calls, ["claim:task-fixed"])
 
     def test_run_once_requires_private_runtime_inputs_as_cli_arguments(self) -> None:
         parser = build_parser()

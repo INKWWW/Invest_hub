@@ -15,6 +15,21 @@ export type ScheduledTask = {
   idempotent: boolean;
 };
 
+export type DemoFixedWindowTask = {
+  id: string;
+  source_id: string;
+  idempotent: boolean;
+  demo_fixed_window: Json;
+};
+
+export type DemoFixedWindowRun = {
+  run_id: string;
+  status: string;
+  idempotent: boolean;
+  cutoff_at: string;
+  sources: Array<Record<string, unknown>>;
+};
+
 export type ScheduledTick = {
   window_key: string;
   tasks: ScheduledTask[];
@@ -60,6 +75,140 @@ export async function createDiscordSyncTask(input: {
   if (error) throw error;
   if (!data || typeof data !== "object") throw new Error("invalid_created_task");
   return data as Database["public"]["Tables"]["sync_tasks"]["Row"];
+}
+
+export async function createXDemoFixedWindowTaskForWorker(input: {
+  sourceId: string;
+  cutoffAt: string;
+  workerId: string;
+  accountId: string;
+}): Promise<DemoFixedWindowTask> {
+  if (![input.sourceId, input.cutoffAt, input.workerId, input.accountId].every((value) => typeof value === "string" && value.length > 0)) {
+    throw new TaskScopeError("invalid_fixed_window_request");
+  }
+  const client = createSupabaseAdminClient() as unknown as {
+    rpc(name: string, args: Record<string, string>): Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+  const { data, error } = await client.rpc("create_x_demo_fixed_window_task_for_worker", {
+    p_source_id: input.sourceId,
+    p_cutoff_at: input.cutoffAt,
+    p_worker_id: input.workerId,
+    p_account_id: input.accountId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_created_fixed_window");
+  const value = data as Record<string, unknown>;
+  if (typeof value.id !== "string" || value.source_id !== input.sourceId || typeof value.idempotent !== "boolean" || !value.demo_fixed_window || typeof value.demo_fixed_window !== "object") {
+    throw new TaskScopeError("invalid_created_fixed_window");
+  }
+  return {
+    id: value.id,
+    source_id: value.source_id as string,
+    idempotent: value.idempotent,
+    demo_fixed_window: value.demo_fixed_window as Json,
+  };
+}
+
+export async function createXDemoFixedWindowTaskForRun(input: {
+  runId: string;
+  sourceId: string;
+  cutoffAt: string;
+  workerId: string;
+  accountId: string;
+}): Promise<DemoFixedWindowTask> {
+  if (![input.runId, input.sourceId, input.cutoffAt, input.workerId, input.accountId].every((value) => typeof value === "string" && value.length > 0)) {
+    throw new TaskScopeError("invalid_x_demo_fixed_window_task");
+  }
+  const { data, error } = await createSupabaseAdminClient().rpc("create_x_demo_fixed_window_task_for_run", {
+    p_run_id: input.runId, p_source_id: input.sourceId, p_cutoff_at: input.cutoffAt,
+    p_worker_id: input.workerId, p_account_id: input.accountId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_x_demo_fixed_window_task");
+  const value = data as Record<string, unknown>;
+  if (typeof value.id !== "string" || value.source_id !== input.sourceId || typeof value.idempotent !== "boolean" || !value.demo_fixed_window || typeof value.demo_fixed_window !== "object") {
+    throw new TaskScopeError("invalid_x_demo_fixed_window_task");
+  }
+  return { id: value.id, source_id: value.source_id as string, idempotent: value.idempotent, demo_fixed_window: value.demo_fixed_window as Json };
+}
+
+export async function terminalizeXDemoFixedWindowJudgement(input: {
+  demoRunId: string;
+  judgementRunId: string;
+  workerId: string;
+}): Promise<Record<string, unknown>> {
+  if (![input.demoRunId, input.judgementRunId, input.workerId].every((value) => typeof value === "string" && value.length > 0)) {
+    throw new TaskScopeError("invalid_x_demo_fixed_window_judgement");
+  }
+  const { data, error } = await createSupabaseAdminClient().rpc("terminalize_x_demo_fixed_window_judgement", {
+    p_demo_run_id: input.demoRunId,
+    p_judgement_run_id: input.judgementRunId,
+    p_worker_id: input.workerId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data) || (data as Record<string, unknown>).status !== "failed") {
+    throw new TaskScopeError("invalid_x_demo_fixed_window_judgement");
+  }
+  return data as Record<string, unknown>;
+}
+
+function parseDemoFixedWindowRun(value: unknown): DemoFixedWindowRun {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new TaskScopeError("invalid_x_demo_fixed_window_run");
+  const row = value as Record<string, unknown>;
+  if (typeof row.run_id !== "string" || typeof row.status !== "string" || typeof row.idempotent !== "boolean"
+    || typeof row.cutoff_at !== "string" || !Array.isArray(row.sources)) throw new TaskScopeError("invalid_x_demo_fixed_window_run");
+  return { run_id: row.run_id, status: row.status, idempotent: row.idempotent, cutoff_at: row.cutoff_at, sources: row.sources as Array<Record<string, unknown>> };
+}
+
+export async function beginXDemoFixedWindowRun(cutoffAt: string, workerId: string): Promise<DemoFixedWindowRun> {
+  if (![cutoffAt, workerId].every((value) => typeof value === "string" && value.length > 0)) throw new TaskScopeError("invalid_x_demo_fixed_window_run");
+  const { data, error } = await createSupabaseAdminClient().rpc("start_x_demo_fixed_window_run", { p_cutoff_at: cutoffAt, p_worker_id: workerId });
+  if (error) throw error;
+  return parseDemoFixedWindowRun(data);
+}
+
+export async function bindXDemoFixedWindowTask(input: { runId: string; sourceId: string; taskId: string; workerId: string }) {
+  if (![input.runId, input.sourceId, input.taskId, input.workerId].every((value) => typeof value === "string" && value.length > 0)) throw new TaskScopeError("invalid_x_demo_fixed_window_task_binding");
+  const { data, error } = await createSupabaseAdminClient().rpc("bind_x_demo_fixed_window_task", {
+    p_run_id: input.runId, p_source_id: input.sourceId, p_task_id: input.taskId, p_worker_id: input.workerId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_x_demo_fixed_window_task_binding");
+  return data as Record<string, unknown>;
+}
+
+export async function failXDemoFixedWindowSource(input: { runId: string; sourceId: string; reason: string; workerId: string }) {
+  if (![input.runId, input.sourceId, input.reason, input.workerId].every((value) => typeof value === "string" && value.length > 0)) throw new TaskScopeError("invalid_x_demo_fixed_window_source_failure");
+  const { data, error } = await createSupabaseAdminClient().rpc("fail_x_demo_fixed_window_source", {
+    p_run_id: input.runId, p_source_id: input.sourceId, p_reason: input.reason, p_worker_id: input.workerId,
+  });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_x_demo_fixed_window_source_failure");
+  return data as Record<string, unknown>;
+}
+
+export async function settleXDemoFixedWindowRun(runId: string, workerId: string) {
+  if (![runId, workerId].every((value) => typeof value === "string" && value.length > 0)) throw new TaskScopeError("invalid_x_demo_fixed_window_settlement");
+  const { data, error } = await createSupabaseAdminClient().rpc("settle_x_demo_fixed_window_run", { p_run_id: runId, p_worker_id: workerId });
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_x_demo_fixed_window_settlement");
+  return data as Record<string, unknown>;
+}
+
+export async function claimXDemoFixedWindowTask(taskId: string, workerId: string, now = new Date().toISOString()) {
+  if (![taskId, workerId, now].every((value) => typeof value === "string" && value.length > 0)) {
+    throw new TaskScopeError("invalid_fixed_window_claim_request");
+  }
+  const client = createSupabaseAdminClient() as unknown as {
+    rpc(name: string, args: Record<string, string>): Promise<{ data: unknown; error: { message?: string } | null }>;
+  };
+  const { data, error } = await client.rpc("claim_x_demo_fixed_window_task", {
+    p_task_id: taskId, p_worker_id: workerId, p_now: now,
+  });
+  if (error) throw error;
+  if (data === null) return null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new TaskScopeError("invalid_fixed_window_claim");
+  return data as Record<string, unknown>;
 }
 
 export async function scheduleDiscordSyncTasks(workerId: string, windowKey: string): Promise<ScheduledTick> {

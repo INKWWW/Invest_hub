@@ -64,6 +64,45 @@ def due_x_windows(now_utc: datetime, coverage_through_at: datetime) -> tuple[str
     return _due_windows(now_utc, coverage_through_at, _X_WINDOW_TIMES)
 
 
+def fixed_x_window(cutoff: str | datetime) -> dict[str, str]:
+    """Return the exact independent range immediately before one X cutoff."""
+
+    cutoff_at = _parse_x_cutoff(cutoff)
+    local_cutoff = cutoff_at.astimezone(_SHANGHAI)
+    if (local_cutoff.hour, local_cutoff.minute) not in _X_WINDOW_TIMES or local_cutoff.second != 0 or local_cutoff.microsecond != 0:
+        raise ValueError("cutoff must be an approved Shanghai X boundary")
+
+    previous_hour = {0: 20, 8: 0, 12: 8, 16: 12, 20: 16}[local_cutoff.hour]
+    previous_day = local_cutoff.date() - timedelta(days=1) if local_cutoff.hour == 0 else local_cutoff.date()
+    start_local = datetime(
+        previous_day.year, previous_day.month, previous_day.day, previous_hour, tzinfo=_SHANGHAI,
+    )
+    return {
+        "start_at": start_local.astimezone(ZoneInfo("UTC")).isoformat(),
+        "end_at": cutoff_at.astimezone(ZoneInfo("UTC")).isoformat(),
+        "scheduled_window_key": local_cutoff.strftime("%Y-%m-%dT%H:%M+08:00"),
+        "natural_date": (local_cutoff.date() - timedelta(days=1) if local_cutoff.hour == 0 else local_cutoff.date()).isoformat(),
+    }
+
+
+def _parse_x_cutoff(value: str | datetime) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("cutoff must be an ISO timestamp") from exc
+    else:
+        raise ValueError("cutoff must be an ISO timestamp")
+    if parsed.tzinfo is None:
+        raise ValueError("cutoff must be timezone-aware")
+    local = parsed.astimezone(_SHANGHAI)
+    if local.utcoffset() != _SHANGHAI.utcoffset(local) or parsed.isoformat().endswith("+08:00") is False:
+        raise ValueError("cutoff must use the Shanghai offset")
+    return parsed
+
+
 def _due_windows(
     now_utc: datetime,
     coverage_through_at: datetime,

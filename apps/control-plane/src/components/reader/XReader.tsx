@@ -103,6 +103,28 @@ function hasVisibleJudgementContent(revision: JudgementRevisionView) {
   return viewpoints.stock.length > 0 || viewpoints.market.length > 0 || viewpoints.strategy.length > 0;
 }
 
+function initialDate(value: string | undefined, days: XReaderDate[]) {
+  const values = dates(days);
+  if (value === ALL) return ALL;
+  if (value && values.includes(value)) return value;
+  return days.find((day) => day.bloggers.some((blogger) => blogger.status === "succeeded" && blogger.segments.length > 0))?.naturalDate ?? ALL;
+}
+
+function currentRunText(status: NonNullable<XReaderDate["currentRun"]>["status"]) {
+  if (status === "not_run") return "当前应运行窗口尚未运行。";
+  if (status === "processing") return "当前应运行窗口处理中。";
+  if (status === "failed") return "当前应运行窗口失败，未生成新的可读内容。";
+  return "当前应运行窗口已完成。";
+}
+
+function cutoffLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(date);
+}
+
 function JudgementList({ batches }: { batches: XReaderDate["judgement"]["batches"] }) {
   if (!batches.length) return <p className="summary-empty">本时段没有形成新的跨博主判断。</p>;
   return <div className="x-reader-judgements">{batches.flatMap((batch, index) => [<details className="x-reader-judgement" key={batch.cutoffAt} open={index === 0}>
@@ -372,10 +394,13 @@ function XReaderBloggerCard({ blogger }: { blogger: XReaderBlogger }) {
     {!blogger.segments.length ? <p className="summary-empty">{blogger.timedOut ? "本批次未纳入该博主的完整信息。" : blogger.status === "partial_failure" ? "本批次未纳入该博主的完整信息。" : "本批次没有可展示的博主观点。"}</p> : null}
     {blogger.segments.map((segment, index) => <details className="x-reader-segment" key={segment.occurredThroughAt} open={index === 0}>
       <summary>截止 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(segment.occurredThroughAt))} · 博主观点</summary>
+      {segment.securityIndustryViewpoints?.length ? <ViewpointModule title="个股与产业观点" tone="security"><div className="x-reader-viewpoint-list">{segment.securityIndustryViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`security-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</div></ViewpointModule> : null}
+      {segment.marketStructureViewpoints?.length ? <ViewpointModule title="市场结构观点" tone="market"><div className="x-reader-viewpoint-list">{segment.marketStructureViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`market-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</div></ViewpointModule> : null}
+      {segment.strategyMindsetViewpoints?.length ? <ViewpointModule title="投资策略与心态" tone="strategy"><div className="x-reader-viewpoint-list">{segment.strategyMindsetViewpoints.map((judgement, judgementIndex) => <JudgementCard key={`strategy-${judgementIndex}`} judgement={judgement} index={judgementIndex} />)}</div></ViewpointModule> : null}
       {segment.viewpoints.length ? <div className="x-reader-unlinked-viewpoints"><p className="x-reader-unlinked-viewpoints-label">未关联帖子的博主观点</p><ul className="x-viewpoints">{segment.viewpoints.map((viewpoint, viewpointIndex) => <li key={viewpointIndex}>{viewpoint}</li>)}</ul></div> : null}
       {!segment.viewpoints.length && !segment.analyses.length ? <p className="summary-empty">本窗口没有形成新的博主观点。</p> : null}
       {segment.uncertainties.length ? <p className="topic-uncertainty">不确定性：{segment.uncertainties.join("；")}</p> : null}
-      {segment.analyses.map((analysis, analysisIndex) => <details className="x-analysis" key={analysisIndex} open>
+      {segment.analyses.map((analysis, analysisIndex) => <details className="x-analysis" key={analysisIndex}>
         <summary><a href={analysis.postLink} target="_blank" rel="noreferrer">{analysisLabel(analysis)}</a></summary>
         <div className="x-analysis-body">
           <p><strong>博主观点：</strong>{analysis.bloggerViewpoint ?? "未表达（例如普通 repost）"}</p>
@@ -409,12 +434,11 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
   if (!days.length) return <p>尚无可阅读的 X 信息。</p>;
   const sourceOptions = useMemo(() => sources(days), [days]);
   const dateOptions = useMemo(() => {
-    const availableDates = dates(days);
-    if (initialNaturalDate && initialNaturalDate !== ALL && !availableDates.includes(initialNaturalDate)) return [initialNaturalDate, ...availableDates];
-    return availableDates;
+    return dates(days);
   }, [days, initialNaturalDate]);
   const [sourceKey, setSourceKey] = useState(() => validOrAll(initialSourceKey, sourceOptions.map((source) => source.sourceKey)));
-  const [naturalDate, setNaturalDate] = useState(() => validOrAll(initialNaturalDate, dateOptions));
+  const [naturalDate, setNaturalDate] = useState(() => initialDate(initialNaturalDate, days));
+  const currentRuns = days.flatMap((day) => day.currentRun ? [{ naturalDate: day.naturalDate, ...day.currentRun }] : []);
   const visibleDays = useMemo(() => days.filter((day) =>
     (naturalDate === ALL || day.naturalDate === naturalDate) && (sourceKey === ALL || day.bloggers.some((blogger) => blogger.source.sourceKey === sourceKey) || (day.collectionGaps ?? []).some((notice) => notice.source.sourceKey === sourceKey)),
   ), [days, naturalDate, sourceKey]);
@@ -443,6 +467,7 @@ export function XReader({ days, initialSourceKey, initialNaturalDate }: {
       </label>
     </aside>
     <article className="reader-content">
+      {currentRuns.length ? <div className="reader-status reader-current-run-status">{currentRuns.map((run) => <p role="status" key={`${run.naturalDate}:${run.cutoffAt}`}>截止 {cutoffLabel(run.cutoffAt)}：{currentRunText(run.status)}</p>)}</div> : null}
       {visibleDays.length ? <div className="reader-result-list">{visibleDays.map((day) => <XReaderDateCard key={day.naturalDate} day={day} sourceKey={sourceKey} />)}</div> : <p className="summary-empty">没有找到符合当前博主和日期筛选的 X 信息。</p>}
     </article>
   </section>;

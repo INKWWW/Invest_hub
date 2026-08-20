@@ -6,6 +6,14 @@ const READER_QUERY_PAGE_SIZE = 1000;
 
 type ReaderQueryPage<Row> = { data: Row[] | null; error: unknown };
 
+type DemoTaskRow = { task_id: string; source_id: string; cutoff_at: string; natural_date: string };
+type DemoTaskQuery = {
+  select(columns: string): DemoTaskQuery;
+  in(field: string, values: string[]): DemoTaskQuery;
+  order(field: string, options?: { ascending?: boolean }): DemoTaskQuery;
+  range(from: number, to: number): PromiseLike<ReaderQueryPage<DemoTaskRow>>;
+};
+
 function chunkValues<Value>(values: Value[], size: number): Value[][] {
   const chunks: Value[][] = [];
   for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
@@ -156,6 +164,10 @@ export type XReaderJudgementRevision = {
 
 export type XReaderDate = {
   naturalDate: string;
+  currentRun?: {
+    cutoffAt: string;
+    status: "not_run" | "processing" | "failed" | "succeeded";
+  };
   judgement: {
     visible: boolean;
     batches: Array<{
@@ -556,6 +568,13 @@ function batchSourceReaderStatus(
   return readerStatus(task, false, result);
 }
 
+function demoRunStatus(status: string): NonNullable<XReaderDate["currentRun"]>["status"] {
+  if (status === "succeeded") return "succeeded";
+  if (status === "queued") return "not_run";
+  if (status === "leased" || status === "running") return "processing";
+  return "failed";
+}
+
 /** Reader-safe X projection: no raw body, cookie, local reference, or prompt. */
 export async function readXDay(input: { sourceKey?: string; date?: string } = {}): Promise<XReaderDate[]> {
   const supabase = createSupabaseAdminClient();
@@ -570,6 +589,15 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const sourceIdChunks = chunkValues(sourceIds, READER_QUERY_BATCH_SIZE);
   const sourceIdSet = new Set(sourceIds);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
+  const selectedSourceId = input.sourceKey ? sources.find((source) => source.source_key === input.sourceKey)?.id : undefined;
+  const demoTaskClient = supabase as unknown as { from(table: string): DemoTaskQuery };
+  const demoTasks = await readAllChunkPages(sourceIdChunks, (ids, from, to) => demoTaskClient.from("x_demo_fixed_window_tasks")
+    .select("task_id,source_id,cutoff_at,natural_date")
+    .in("source_id", ids)
+    .order("cutoff_at", { ascending: false })
+    .order("task_id", { ascending: true })
+    .range(from, to));
+  const demoTaskIds = demoTasks.map((task) => task.task_id);
   const segments = await readAllChunkPages(sourceIdChunks, (ids, from, to) => {
     let query = supabase.from("x_daily_viewpoint_segments")
       .select("source_id,natural_date,range_task_id,created_at,occurred_from_at,occurred_through_at,schema_version,prompt_version,segment_output,window_viewpoints,post_analysis_refs")
@@ -657,6 +685,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const taskIds = [...new Set([
     ...batchSources.flatMap((row) => typeof row.x_sync_task_id === "string" ? [row.x_sync_task_id] : []),
     ...segments.flatMap((segment) => typeof segment.range_task_id === "string" ? [segment.range_task_id] : []),
+    ...demoTaskIds,
   ])];
   const taskIdChunks = chunkValues(taskIds, READER_QUERY_BATCH_SIZE);
   const [taskRows, attemptRows] = await Promise.all([
@@ -673,6 +702,14 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   const attemptResultByTaskId = new Map<string, unknown>();
   for (const attempt of attemptRows) {
     if (taskIdSet.has(attempt.task_id) && !attemptResultByTaskId.has(attempt.task_id)) attemptResultByTaskId.set(attempt.task_id, attempt.result);
+  }
+
+  const demoTaskByDateAndSource = new Map<string, { cutoff_at: string; status: string }>();
+  for (const demoTask of demoTasks) {
+    const task = taskById.get(demoTask.task_id);
+    if (!task) continue;
+    const key = `${demoTask.natural_date}:${demoTask.source_id}`;
+    if (!demoTaskByDateAndSource.has(key)) demoTaskByDateAndSource.set(key, { cutoff_at: demoTask.cutoff_at, status: task.status });
   }
 
   const segmentGroups = new Map<string, typeof segments>();
@@ -780,6 +817,9 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
     const sourceId = key.slice(0, separator);
     sourceIdsByDate.set(naturalDate, new Set([...(sourceIdsByDate.get(naturalDate) ?? []), sourceId]));
   }
+  for (const demoTask of demoTasks) {
+    sourceIdsByDate.set(demoTask.natural_date, new Set([...(sourceIdsByDate.get(demoTask.natural_date) ?? []), demoTask.source_id]));
+  }
 
   const bloggersByDate = new Map<string, XReaderBlogger[]>();
   for (const [naturalDate, dateSourceIds] of sourceIdsByDate) {
@@ -787,6 +827,7 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       const source = sourceById.get(sourceId);
       if (!source) return [];
       const batchSource = latestBatchSourceByDateAndSource.get(`${naturalDate}:${sourceId}`);
+      const demoTask = demoTaskByDateAndSource.get(`${naturalDate}:${sourceId}`);
       const taskId = typeof batchSource?.x_sync_task_id === "string" ? batchSource.x_sync_task_id : undefined;
       const daySegments = [...(segmentGroups.get(`${sourceId}:${naturalDate}`) ?? [])]
         .sort((left, right) => right.occurred_through_at.localeCompare(left.occurred_through_at));
@@ -843,7 +884,9 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
       });
       return [{
         source: { sourceKey: source.source_key, displayName: batchSource?.source_display_name ?? source.display_name },
-        status: batchSource
+        status: demoTask
+          ? demoTask.status === "succeeded" ? "succeeded" : demoTask.status === "queued" || demoTask.status === "leased" || demoTask.status === "running" ? "processing" : "failed"
+          : batchSource
           ? batchSourceReaderStatus(batchSource, taskId ? taskById.get(taskId) : undefined, taskId ? attemptResultByTaskId.get(taskId) : undefined)
           : "succeeded" as const,
         timedOut: batchSource?.settlement_status === "excluded" && batchSource.exclusion_code === "settlement_deadline_exceeded",
@@ -861,6 +904,12 @@ export async function readXDay(input: { sourceKey?: string; date?: string } = {}
   ]);
   return [...dates].map((naturalDate) => ({
     naturalDate,
+    currentRun: (() => {
+      const candidates = demoTasks.filter((task) => task.natural_date === naturalDate && (!selectedSourceId || task.source_id === selectedSourceId));
+      const latest = candidates[0];
+      const task = latest ? taskById.get(latest.task_id) : undefined;
+      return latest && task ? { cutoffAt: latest.cutoff_at, status: demoRunStatus(task.status) } : undefined;
+    })(),
     judgement: input.sourceKey
       ? { visible: false, batches: [] }
       : { visible: true, batches: (batchesByDate.get(naturalDate) ?? []).sort((left, right) => right.cutoffAt.localeCompare(left.cutoffAt)) },
