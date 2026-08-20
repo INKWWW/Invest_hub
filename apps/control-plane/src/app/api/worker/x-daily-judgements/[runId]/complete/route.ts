@@ -177,7 +177,9 @@ export async function POST(request: Request, context: { params: Promise<{ runId:
     if (code === "PT409" || code === "40001") return NextResponse.json({ error: "lease_mismatch" }, { status: 409 });
     return NextResponse.json({ error: "x_daily_judgement_context_failed" }, { status: 503 });
   }
-  if (judgementContext.prompt_version !== completion.prompt_version) {
+  if (completion.run_id !== judgementContext.run_id
+    || completion.attempt !== judgementContext.attempt
+    || judgementContext.prompt_version !== completion.prompt_version) {
     return NextResponse.json({ error: "invalid_x_daily_judgement_completion" }, { status: 422 });
   }
   if (completion.schema_version === "v4-x-cross-blogger" && !referencesFrozenContext(completion, judgementContext)) {

@@ -120,13 +120,32 @@ describe("POST /api/worker/x-daily-judgements/[runId]/complete", () => {
     expect(judgementMocks.completeXDailyJudgement).toHaveBeenCalledWith(v5Completion, "worker-1");
   });
 
-  it("keeps malformed or unknown V5 envelopes fail-closed before the database call", async () => {
-    const malformed = { ...v5Completion, unexpected: true };
+  it.each([
+    ["unknown schema version", { ...v5Completion, schema_version: "v6-x-cross-blogger" }],
+    ["unknown prompt version", { ...v5Completion, prompt_version: "v6-x-cross-blogger-1" }],
+    ["extra field", { ...v5Completion, unexpected: true }],
+    ["unsafe model telemetry", { ...v5Completion, model_reported: "file:fixture/output.json" }],
+    ["URL run identity mismatch", { ...v5Completion, run_id: "run-2" }],
+  ])("keeps $0 fail-closed before the database call", async (_name, malformed) => {
     const response = await POST(request(malformed), params());
 
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({ error: "invalid_x_daily_judgement_completion" });
     expect(judgementMocks.getXDailyJudgementContext).not.toHaveBeenCalled();
+    expect(judgementMocks.completeXDailyJudgement).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["context run identity mismatch", { ...v5Context, run_id: "run-2" }],
+    ["context attempt identity mismatch", { ...v5Context, attempt: 2 }],
+    ["context prompt version mismatch", { ...v5Context, prompt_version: "v4-x-cross-blogger-1" }],
+  ])("rejects $0 before database completion", async (_name, mismatchedContext) => {
+    judgementMocks.getXDailyJudgementContext.mockResolvedValue(mismatchedContext);
+
+    const response = await POST(request(v5Completion), params());
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "invalid_x_daily_judgement_completion" });
     expect(judgementMocks.completeXDailyJudgement).not.toHaveBeenCalled();
   });
 
