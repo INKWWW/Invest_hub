@@ -1234,7 +1234,7 @@ describe("v0 control-plane API authorization", () => {
     xDailyJudgementMocks.getXDailyJudgementContext.mockResolvedValue({
       run_id: "11111111-1111-4111-8111-111111111111", attempt: 1,
       batch_id: "22222222-2222-4222-8222-222222222222",
-      prompt_version: "v3-x-cross-blogger-1",
+      prompt_version: "v4-x-cross-blogger-1",
       sources: [{
         source_id: "33333333-3333-4333-8333-333333333333", display_name: "Fixture researcher",
         window_segments: [{
@@ -1595,7 +1595,7 @@ describe("v0 control-plane API authorization", () => {
       run_id: "11111111-1111-4111-8111-111111111111",
       batch_id: "abcdefab-cdef-4abc-8def-abcdefabcdef",
       attempt: 1,
-      prompt_version: "v2-x-cross-blogger-1",
+      prompt_version: "v4-x-cross-blogger-1",
       sources: [{ source_id: "source-a", display_name: "A", window_segments: [] }],
       excluded_sources: [],
     });
