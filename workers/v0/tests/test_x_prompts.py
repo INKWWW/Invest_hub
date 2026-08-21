@@ -57,6 +57,12 @@ class XPromptContractTests(unittest.TestCase):
         self.assertNotIn("not_applicable", daily)
         self.assertIn("未明确标的", daily)
 
+    def test_v5_prompt_uses_market_token_safe_judgement_example(self) -> None:
+        daily = (PROMPT_ROOT / "v5_x_cross_blogger.md").read_text(encoding="utf-8")
+
+        self.assertNotIn('"judgement": "AI judgment"', daily)
+        self.assertIn('"judgement": "人工智能判断"', daily)
+
     def test_chunk_prompt_names_every_required_analysis_field(self) -> None:
         prompt = (PROMPT_ROOT / "v2_x_chunk.md").read_text(encoding="utf-8")
 

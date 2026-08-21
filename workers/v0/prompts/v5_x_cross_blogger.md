@@ -54,7 +54,7 @@
     "ai_assessments": [{
       "assessment_id": "assessment-01",
       "headline": "重要 thesis 标题",
-      "judgement": "AI judgment",
+      "judgement": "人工智能判断",
       "importance_reason": "为什么重要",
       "reasoning": "推理过程",
       "key_assumptions": ["关键假设"],
